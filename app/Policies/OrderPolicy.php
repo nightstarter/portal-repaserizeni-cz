@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\OrderType;
 use App\Enums\OrganizationCode;
 use App\Models\Order;
 use App\Models\User;
@@ -21,6 +22,13 @@ class OrderPolicy
 
         if ($user->organization->code === OrganizationCode::AUTOKLUBY) {
             return true;
+        }
+
+        if ($order->order_type === OrderType::CUSTOM_REBUILD) {
+            return Order::query()
+                ->customRebuildVisibleTo($user)
+                ->whereKey($order->id)
+                ->exists();
         }
 
         return $order->processThreads()

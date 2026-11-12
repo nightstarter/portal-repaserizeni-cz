@@ -5,6 +5,7 @@ namespace App\Application\Orders;
 use App\Enums\CustomRebuildAction;
 use App\Enums\CustomRebuildState;
 use App\Exceptions\WorkflowConflictException;
+use Illuminate\Container\Container;
 
 final class CustomRebuildStateMachine
 {
@@ -27,7 +28,12 @@ final class CustomRebuildStateMachine
         };
 
         if ($next === null) {
-            throw new WorkflowConflictException("Action {$action->value} is not allowed from {$current->value}.");
+            $parameters = ['action' => $action->value, 'state' => $current->value];
+            $message = Container::getInstance()->bound('translator')
+                ? __('app.workflow_errors.invalid_transition', $parameters)
+                : "Action {$action->value} is not allowed from state {$current->value}.";
+
+            throw new WorkflowConflictException($message);
         }
 
         return $next;

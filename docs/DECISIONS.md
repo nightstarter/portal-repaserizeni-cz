@@ -125,3 +125,31 @@
 - Stav: přijato pro Fázi 2A
 - Rozhodnutí: Idempotency key je unikátní v rámci procesní větve a událost ukládá hash akce, aktéra, dat a očekávané verze.
 - Dopad: Shodné opakování vrací původní událost. Opětovné použití klíče pro jiný příkaz je konflikt; nevznikne druhá událost ani audit.
+
+## D-019: Čtecí projekce a zápis používají společný guard
+
+- Datum: 2026-11-12
+- Stav: přijato pro Fázi 2B
+- Rozhodnutí: Povolené UI akce odvozuje `CustomRebuildPresentation` přes stejný `CustomRebuildActionGuard`, který před zápisem používá `CustomRebuildWorkflow`.
+- Dopad: Kontroler ani Blade šablona nemají paralelní tabulku přechodů. Skryté tlačítko nelze zpřístupnit změnou HTTP payloadu a změna doménových pravidel se promítne do čtení i zápisu.
+
+## D-020: Polské oprávnění vzniká historií přiřazení CUSTOM_REBUILD
+
+- Datum: 2026-11-12
+- Stav: přijato pro Fázi 2B
+- Rozhodnutí: Polsko smí číst jen zakázky s `CUSTOM_REBUILD` větví, která má nebo historicky měla polskou odpovědnou organizaci. Přístup se vynucuje společným query scopem a policy.
+- Dopad: Seznam, přímý detail i QR používají stejnou row-level hranici. Polské projekce nenačítají zákaznický vztah a nezobrazují kontaktní PII ani interní poznámky AUTOKLUBY.
+
+## D-021: QR token identifikuje kus, ale neuděluje oprávnění
+
+- Datum: 2026-11-12
+- Stav: přijato pro Fázi 2B
+- Rozhodnutí: Veřejná cesta používá bezpečný náhodný token místo sekvenčního ID, vždy vyžaduje přihlášení a následně standardní oprávnění k zakázce.
+- Dopad: Po loginu se uživatel vrátí na QR detail. Neplatný i existující cizí token odpovídá shodným `404`, takže nelze ověřovat existenci zakázky.
+
+## D-022: Polská časová osa je explicitní bezpečná projekce
+
+- Datum: 2026-11-12
+- Stav: přijato pro Fázi 2B
+- Rozhodnutí: Časová osa se skládá z neměnných `thread_events`; metadata se zveřejňují podle allowlistu. Polsko nevidí admin důvody, interní auditní hodnoty, volné interní poznámky ani zákaznické PII.
+- Dopad: Přidání nového metadata klíče jej samo nezveřejní. AUTOKLUBY může vidět širší provozní kontext a informaci, že událost má audit.

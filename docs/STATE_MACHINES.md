@@ -1,6 +1,6 @@
 # Stavové automaty
 
-## CUSTOM_REBUILD — fáze 2A
+## CUSTOM_REBUILD — fáze 2A a UI projekce 2B
 
 Uživatel neposílá cílový stav. Posílá pouze stabilní kód akce a povinný idempotency key. Cílový stav, odpovědnost a dokončení odvozuje serverová aplikační služba.
 
@@ -51,6 +51,14 @@ Routing se mění pouze ve snapshotu konkrétní objednávky a její větve. Pro
 
 Všechny ostatní kombinace stavu a akce jsou zakázané.
 
-## Mimo fázi 2A
+### UI projekce Fáze 2B
+
+Dashboard, detail a QR stránka neukládají další univerzální status. `CustomRebuildPresentation` vždy odvodí stav, odpovědnost, poslední událost a další povolenou akci z větve a její historie. Čtecí projekce i zápisový příkaz používají stejný `CustomRebuildActionGuard`; samotné skrytí tlačítka proto není autorizační mechanismus.
+
+Formuláře předávají pouze stabilní kód akce, idempotency key, očekávanou `lock_version` a data dané akce. Cílový stav běžné akce se v UI neposílá. `ADMIN_OVERRIDE` je zvláštní auditovaný příkaz dostupný pouze `AK_ADMIN`; UI navíc vyžaduje explicitní potvrzení, ale autoritou zůstává command služba.
+
+Polsko získá row-level přístup až historickým přiřazením konkrétní `CUSTOM_REBUILD` větve své organizaci. Tento serverový scope je společný pro dashboard, detail a QR. QR token je pouze náhodný vyhledávací identifikátor, nikoli oprávnění.
+
+## Mimo fáze 2A–2B
 
 Stavové automaty skladových větví, zásilek, vratek, financí, dokumentů, diskuse, notifikací, reklamací a výkupů zde nejsou implementované. Budou specifikovány až v příslušných dalších fázích.

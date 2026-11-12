@@ -261,6 +261,7 @@ class CustomRebuildWorkflowTest extends TestCase
             ->postJson($this->actionUrl($order, CustomRebuildAction::ADMIN_OVERRIDE), [
                 'target_state' => CustomRebuildState::SENT_TO_PL->value,
                 'reason' => '   ',
+                'override_confirmed' => '1',
             ], ['Idempotency-Key' => 'override-no-reason'])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('reason');

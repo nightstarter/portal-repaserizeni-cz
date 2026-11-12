@@ -1,0 +1,35 @@
+<?php
+
+return [
+    'accepted' => 'Pole :attribute musi zostać potwierdzone.',
+    'boolean' => 'Pole :attribute musi mieć wartość tak/nie.',
+    'confirmed' => 'Potwierdzenie pola :attribute nie jest zgodne.',
+    'current_password' => 'Podane aktualne hasło jest nieprawidłowe.',
+    'email' => 'Pole :attribute musi zawierać poprawny adres e-mail.',
+    'enum' => 'Wybrana wartość pola :attribute jest nieprawidłowa.',
+    'exists' => 'Wybrana wartość pola :attribute jest nieprawidłowa.',
+    'in' => 'Wybrana wartość pola :attribute jest nieprawidłowa.',
+    'integer' => 'Pole :attribute musi być liczbą całkowitą.',
+    'max' => ['string' => 'Pole :attribute może mieć maksymalnie :max znaków.'],
+    'min' => ['numeric' => 'Pole :attribute musi wynosić co najmniej :min.'],
+    'required' => 'Pole :attribute jest wymagane.',
+    'string' => 'Pole :attribute musi być tekstem.',
+    'unique' => 'Wartość pola :attribute jest już używana.',
+    'password' => [
+        'letters' => 'Pole :attribute musi zawierać co najmniej jedną literę.',
+        'mixed' => 'Pole :attribute musi zawierać małą i wielką literę.',
+        'numbers' => 'Pole :attribute musi zawierać co najmniej jedną cyfrę.',
+        'symbols' => 'Pole :attribute musi zawierać co najmniej jeden symbol.',
+        'uncompromised' => 'To hasło pojawiło się w wycieku danych. Wybierz inne hasło.',
+    ],
+    'attributes' => [
+        'idempotency_key' => 'klucz idempotencji', 'expected_lock_version' => 'wersja gałęzi',
+        'inspection_result' => 'dostarczona część', 'condition_description' => 'opis stanu',
+        'routing' => 'routing', 'fault_code' => 'usterka', 'fault_note' => 'uwagi',
+        'axial_rods' => 'drążki osiowe', 'target_state' => 'status docelowy', 'reason' => 'powód',
+        'override_confirmed' => 'potwierdzenie nadpisania',
+        'organization_id' => 'organizacja', 'name' => 'imię i nazwisko', 'email' => 'e-mail',
+        'role' => 'rola', 'preferred_locale' => 'język', 'active' => 'status aktywności',
+        'password' => 'hasło', 'current_password' => 'aktualne hasło', 'locale' => 'język',
+    ],
+];

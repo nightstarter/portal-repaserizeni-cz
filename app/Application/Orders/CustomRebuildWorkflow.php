@@ -12,14 +12,12 @@ use App\Enums\ProcessThreadType;
 use App\Enums\RebuildFaultCode;
 use App\Enums\ResponsibleParty;
 use App\Enums\RoutingCode;
-use App\Enums\UserRole;
 use App\Exceptions\WorkflowConflictException;
 use App\Models\Item;
 use App\Models\Order;
 use App\Models\Organization;
 use App\Models\ProcessThread;
 use App\Models\ThreadEvent;
-use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -28,23 +26,8 @@ use Illuminate\Validation\ValidationException;
 
 final class CustomRebuildWorkflow
 {
-    private const AK_ACTIONS = [
-        CustomRebuildAction::CONFIRM_AK_RECEIPT,
-        CustomRebuildAction::SEND_TO_POLAND,
-        CustomRebuildAction::CONFIRM_AK_RETURN_RECEIPT,
-        CustomRebuildAction::SEND_TO_CUSTOMER,
-        CustomRebuildAction::MARK_READY_PICKUP,
-        CustomRebuildAction::CONFIRM_CUSTOMER_PICKUP,
-    ];
-
-    private const PL_ACTIONS = [
-        CustomRebuildAction::CONFIRM_PL_RECEIPT,
-        CustomRebuildAction::MARK_REPAIRED_PL,
-        CustomRebuildAction::SEND_TO_AUTOKLUBY,
-    ];
-
     public function __construct(
-        private readonly CustomRebuildStateMachine $stateMachine,
+        private readonly CustomRebuildActionGuard $actionGuard,
         private readonly AuditLogger $auditLogger,
     ) {}
 
@@ -53,13 +36,13 @@ final class CustomRebuildWorkflow
         Validator::make(['idempotency_key' => $command->idempotencyKey], [
             'idempotency_key' => ['required', 'string', 'max:128', function (string $attribute, mixed $value, \Closure $fail): void {
                 if (trim((string) $value) === '') {
-                    $fail('The idempotency key field is required.');
+                    $fail(__('validation.required', ['attribute' => __('validation.attributes.idempotency_key')]));
                 }
             }],
         ])->validate();
 
         if ($command->expectedLockVersion !== null && $command->expectedLockVersion < 0) {
-            throw ValidationException::withMessages(['expected_lock_version' => 'The expected lock version must be non-negative.']);
+            throw ValidationException::withMessages(['expected_lock_version' => __('app.workflow_errors.invalid_version')]);
         }
 
         return DB::transaction(function () use ($order, $command): ThreadEvent {
@@ -70,13 +53,13 @@ final class CustomRebuildWorkflow
                 ->lockForUpdate()
                 ->sole();
 
-            $this->authorize($command);
+            $this->actionGuard->assertActorMayPerform($command->actor, $command->action);
             $requestHash = $this->requestHash($command);
             $existing = $thread->events()->where('idempotency_key', $command->idempotencyKey)->first();
 
             if ($existing !== null) {
                 if ($existing->request_hash !== $requestHash) {
-                    throw new WorkflowConflictException('The idempotency key was already used for a different command.');
+                    throw new WorkflowConflictException(__('app.workflow_errors.idempotency_reused'));
                 }
 
                 return $existing;
@@ -85,15 +68,14 @@ final class CustomRebuildWorkflow
             $this->rejectStateInjection($command);
 
             if ($command->expectedLockVersion !== null && $command->expectedLockVersion !== $thread->lock_version) {
-                throw new WorkflowConflictException('The process thread was changed by another request.');
+                throw new WorkflowConflictException(__('app.workflow_errors.version_conflict'));
             }
 
             $current = $thread->customRebuildState();
             $next = $command->action === CustomRebuildAction::ADMIN_OVERRIDE
                 ? $this->overrideTarget($command)
-                : $this->normalTarget($thread, $current, $command);
+                : $this->actionGuard->nextState($lockedOrder, $thread, $command->action);
 
-            $this->assertHandover($lockedOrder, $command->action);
             $oldValues = $this->auditSnapshot($lockedOrder, $thread);
             $receiptMetadata = $command->action === CustomRebuildAction::CONFIRM_AK_RECEIPT
                 ? $this->recordReceipt($lockedOrder, $thread, $command->data)
@@ -114,7 +96,7 @@ final class CustomRebuildWorkflow
                 ]);
 
             if ($updated !== 1) {
-                throw new WorkflowConflictException('The process thread was changed by another request.');
+                throw new WorkflowConflictException(__('app.workflow_errors.version_conflict'));
             }
 
             $lockedOrder->forceFill(['closed_at' => $next->isTerminal() ? $now : null])->save();
@@ -156,58 +138,13 @@ final class CustomRebuildWorkflow
         }, 3);
     }
 
-    private function authorize(CustomRebuildCommand $command): void
-    {
-        $actor = $command->actor;
-
-        if (! $actor->active || ! $actor->organization->active || $actor->role === UserRole::READ_ONLY) {
-            throw new AuthorizationException;
-        }
-
-        if ($command->action === CustomRebuildAction::ADMIN_OVERRIDE) {
-            if ($actor->organization->code !== OrganizationCode::AUTOKLUBY || $actor->role !== UserRole::AK_ADMIN) {
-                throw new AuthorizationException;
-            }
-
-            return;
-        }
-
-        if (in_array($command->action, self::AK_ACTIONS, true)) {
-            $allowed = $actor->organization->code === OrganizationCode::AUTOKLUBY
-                && in_array($actor->role, [UserRole::AK_ADMIN, UserRole::AK_OPERATOR], true);
-        } else {
-            $allowed = in_array($command->action, self::PL_ACTIONS, true)
-                && $actor->organization->code === OrganizationCode::POLAND
-                && in_array($actor->role, [UserRole::PL_MANAGER, UserRole::PL_OPERATOR], true);
-        }
-
-        if (! $allowed) {
-            throw new AuthorizationException;
-        }
-    }
-
-    private function normalTarget(
-        ProcessThread $thread,
-        CustomRebuildState $current,
-        CustomRebuildCommand $command,
-    ): CustomRebuildState {
-        $entryAction = null;
-
-        if ($current === CustomRebuildState::RECEIVED_AK) {
-            $lastAction = $thread->events()->latest('id')->value('action');
-            $entryAction = is_string($lastAction) ? CustomRebuildAction::tryFrom($lastAction) : null;
-        }
-
-        return $this->stateMachine->nextState($current, $command->action, $entryAction);
-    }
-
     private function overrideTarget(CustomRebuildCommand $command): CustomRebuildState
     {
         $validated = Validator::make($command->data, [
             'target_state' => ['required', Rule::enum(CustomRebuildState::class)],
             'reason' => ['required', 'string', 'max:2000', function (string $attribute, mixed $value, \Closure $fail): void {
                 if (trim((string) $value) === '') {
-                    $fail('The reason field is required.');
+                    $fail(__('validation.required', ['attribute' => __('validation.attributes.reason')]));
                 }
             }],
         ])->validate();
@@ -219,18 +156,7 @@ final class CustomRebuildWorkflow
     {
         if ($command->action !== CustomRebuildAction::ADMIN_OVERRIDE
             && Arr::hasAny($command->data, ['state', 'to_state', 'target_state'])) {
-            throw ValidationException::withMessages(['state' => 'A target state cannot be supplied for this action.']);
-        }
-    }
-
-    private function assertHandover(Order $order, CustomRebuildAction $action): void
-    {
-        if ($action === CustomRebuildAction::SEND_TO_CUSTOMER && $order->customer_handover !== 'GLS') {
-            throw new WorkflowConflictException('SEND_TO_CUSTOMER requires GLS handover.');
-        }
-
-        if ($action === CustomRebuildAction::MARK_READY_PICKUP && $order->customer_handover !== 'PERSONAL_PICKUP') {
-            throw new WorkflowConflictException('MARK_READY_PICKUP requires personal pickup.');
+            throw ValidationException::withMessages(['state' => __('app.workflow_errors.target_state_forbidden')]);
         }
     }
 

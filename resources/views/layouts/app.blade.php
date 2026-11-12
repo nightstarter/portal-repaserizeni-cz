@@ -6,14 +6,15 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ config('app.name') }}</title>
     <style>
-        :root { color-scheme: light; font-family: system-ui, sans-serif; --blue:#174b78; --red:#a21d2b; }
+        :root { color-scheme: light; font-family: Inter,system-ui,sans-serif; --blue:#174b78; --blue-dark:#103653; --red:#a21d2b; --green:#187443; --ink:#1d2935; }
         * { box-sizing:border-box } body { margin:0; background:#f3f5f7; color:#1d2935 }
         nav { background:var(--blue); color:white; padding:.8rem 1.2rem; display:flex; align-items:center; gap:1rem; flex-wrap:wrap }
         nav a { color:white } nav .spacer { flex:1 }
         main { max-width:1100px; margin:2rem auto; padding:0 1rem }
         .card { background:white; border-radius:.5rem; padding:1.25rem; box-shadow:0 1px 5px #0002; margin-bottom:1rem }
-        label { display:block; font-weight:600; margin-top:.8rem } input, select { width:100%; padding:.6rem; border:1px solid #adb5bd; border-radius:.3rem }
-        input[type=checkbox] { width:auto } button,.button { display:inline-block; background:var(--blue); color:white; border:0; border-radius:.3rem; padding:.65rem 1rem; cursor:pointer; text-decoration:none; margin-top:1rem }
+        label { display:block; font-weight:600; margin-top:.8rem } input, select, textarea { width:100%; padding:.7rem; border:1px solid #adb5bd; border-radius:.35rem; font:inherit; background:white }
+        textarea { min-height:6rem; resize:vertical } input[type=checkbox],input[type=radio] { width:auto } button,.button { display:inline-block; background:var(--blue); color:white; border:0; border-radius:.35rem; padding:.7rem 1rem; cursor:pointer; text-decoration:none; margin-top:1rem; font-weight:650 }
+        button:hover,.button:hover { background:var(--blue-dark) }
         .danger { background:var(--red) } .error { color:var(--red) } .status { background:#d9f2df; padding:.75rem; border-radius:.3rem }
         table { width:100%; border-collapse:collapse } th,td { padding:.6rem; border-bottom:1px solid #ddd; text-align:left; vertical-align:top }
         .inline { display:inline } .inline button { margin:0 } .narrow { max-width:30rem; margin:auto }
@@ -22,7 +23,24 @@
         .badge { display:inline-block; border-radius:999px; background:#e4edf5; padding:.25rem .55rem; margin:.1rem; font-size:.86rem }
         .badge.waiting { background:#fff0c2 } .badge.done { background:#d9f2df }
         .meta { display:flex; gap:1rem; flex-wrap:wrap } .meta span { min-width:10rem }
-        @media (max-width:700px) { table.responsive thead { display:none } table.responsive tr { display:block; margin-bottom:1rem; border:1px solid #ddd; border-radius:.4rem } table.responsive td { display:block; border:0 } }
+        .action-card { border:2px solid #b7cee1; background:#f8fbfe } .action-card h2 { margin-top:0 }
+        .primary-action button { width:100%; min-height:3.25rem; font-size:1.05rem }
+        .choice-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(11rem,1fr)); gap:.55rem }
+        .choice { display:flex; gap:.5rem; align-items:center; padding:.7rem; border:1px solid #ccd5dc; border-radius:.4rem; margin:0; background:white }
+        .choice input { flex:0 0 auto } .choice span { flex:1 }
+        .timeline { list-style:none; padding:0; margin:0 } .timeline li { position:relative; padding:0 0 1.3rem 1.5rem; border-left:2px solid #c7d6e2; margin-left:.35rem }
+        .timeline li::before { content:""; position:absolute; width:.7rem; height:.7rem; border-radius:50%; background:var(--blue); left:-.42rem; top:.25rem }
+        .timeline li:last-child { border-left-color:transparent } .timeline h3 { margin:.1rem 0 .3rem; font-size:1rem }
+        .timeline-meta { display:flex; gap:.5rem; flex-wrap:wrap; margin-top:.4rem } .timeline-meta span { background:#edf2f6; border-radius:.25rem; padding:.2rem .4rem; font-size:.84rem }
+        .mobile-hero { background:linear-gradient(145deg,var(--blue),#276c9e); color:white } .mobile-hero .badge { color:var(--ink); background:white }
+        .split { display:grid; grid-template-columns:repeat(auto-fit,minmax(18rem,1fr)); gap:1rem }
+        .table-scroll { overflow-x:auto }
+        @media (max-width:700px) {
+            main { margin:1rem auto; padding:0 .7rem } .card { padding:1rem }
+            table.responsive thead { display:none } table.responsive tr { display:block; margin-bottom:1rem; border:1px solid #ddd; border-radius:.4rem; padding:.35rem }
+            table.responsive td { display:block; border:0; padding:.35rem .45rem } table.responsive td::before { content:attr(data-label); display:block; color:#627180; font-size:.75rem; text-transform:uppercase; font-weight:700 }
+            .mobile-primary { order:-1 } .primary-action button { min-height:3.8rem; font-size:1.1rem }
+        }
     </style>
 </head>
 <body>

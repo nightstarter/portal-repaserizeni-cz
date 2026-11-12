@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Application\Orders\CustomRebuildCommand;
 use App\Application\Orders\CustomRebuildWorkflow;
 use App\Enums\CustomRebuildAction;
+use App\Enums\ProcessThreadType;
+use App\Exceptions\WorkflowConflictException;
 use App\Models\Order;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -23,7 +25,11 @@ class CustomRebuildActionController extends Controller
         $workflowAction = CustomRebuildAction::tryFrom($action);
 
         if ($workflowAction === null) {
-            throw ValidationException::withMessages(['action' => 'Unknown custom rebuild action.']);
+            throw ValidationException::withMessages(['action' => __('app.workflow_errors.unknown_action')]);
+        }
+
+        if ($workflowAction === CustomRebuildAction::ADMIN_OVERRIDE) {
+            $request->validate(['override_confirmed' => ['accepted']]);
         }
 
         $idempotencyKey = (string) ($request->header('Idempotency-Key') ?: $request->input('idempotency_key', ''));
@@ -35,13 +41,28 @@ class CustomRebuildActionController extends Controller
             'fault_note', 'axial_rods', 'target_state', 'state', 'to_state', 'reason',
         ]);
 
-        $event = $workflow->execute($order, new CustomRebuildCommand(
-            $workflowAction,
-            $request->user(),
-            $idempotencyKey,
-            $data,
-            $expectedVersion === null ? null : (int) $expectedVersion,
-        ));
+        try {
+            $event = $workflow->execute($order, new CustomRebuildCommand(
+                $workflowAction,
+                $request->user(),
+                $idempotencyKey,
+                $data,
+                $expectedVersion === null ? null : (int) $expectedVersion,
+            ));
+        } catch (WorkflowConflictException $exception) {
+            if ($request->expectsJson()) {
+                throw $exception;
+            }
+
+            $state = $order->processThreads()
+                ->where('type', ProcessThreadType::CUSTOM_REBUILD)
+                ->value('state');
+
+            return $this->redirectTarget($request, $order)
+                ->withErrors(['workflow' => __('app.workflow_conflict_current', [
+                    'state' => $state === null ? '—' : __('app.thread_states.'.$state),
+                ])]);
+        }
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -50,6 +71,18 @@ class CustomRebuildActionController extends Controller
                 'state' => $event->to_state,
                 'lock_version' => $event->processThread->fresh()->lock_version,
             ]);
+        }
+
+        return $this->redirectTarget($request, $order)
+            ->with('status', __('app.action_completed'));
+    }
+
+    private function redirectTarget(Request $request, Order $order): RedirectResponse
+    {
+        $qrToken = $request->string('return_qr_token')->toString();
+
+        if ($qrToken !== '' && $order->items()->where('qr_token', $qrToken)->exists()) {
+            return redirect()->route('items.qr', $qrToken);
         }
 
         return redirect()->route('orders.show', $order);

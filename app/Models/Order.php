@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\OrderSource;
 use App\Enums\OrderType;
 use App\Enums\OrganizationCode;
+use App\Enums\ProcessThreadType;
 use App\Enums\RoutingCode;
 use App\Enums\TechnicalType;
 use Illuminate\Database\Eloquent\Builder;
@@ -81,6 +82,29 @@ class Order extends Model
                         ->where('responsible_organization_id', $user->organization_id)
                         ->orWhere('actor_organization_id', $user->organization_id);
                 }));
+        });
+    }
+
+    public function scopeCustomRebuildVisibleTo(Builder $query, User $user): Builder
+    {
+        $query->where('order_type', OrderType::CUSTOM_REBUILD);
+
+        if ($user->organization->code === OrganizationCode::AUTOKLUBY) {
+            return $query;
+        }
+
+        return $query->whereHas('processThreads', function (Builder $threads) use ($user): void {
+            $threads
+                ->where('type', ProcessThreadType::CUSTOM_REBUILD)
+                ->where(function (Builder $access) use ($user): void {
+                    $access
+                        ->where('responsible_organization_id', $user->organization_id)
+                        ->orWhereHas('events', fn (Builder $events) => $events->where(function (Builder $history) use ($user): void {
+                            $history
+                                ->where('responsible_organization_id', $user->organization_id)
+                                ->orWhere('actor_organization_id', $user->organization_id);
+                        }));
+                });
         });
     }
 }

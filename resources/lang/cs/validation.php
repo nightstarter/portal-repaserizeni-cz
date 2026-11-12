@@ -1,0 +1,35 @@
+<?php
+
+return [
+    'accepted' => 'Pole :attribute musí být potvrzeno.',
+    'boolean' => 'Pole :attribute musí být ano/ne.',
+    'confirmed' => 'Potvrzení pole :attribute se neshoduje.',
+    'current_password' => 'Zadané současné heslo není správné.',
+    'email' => 'Pole :attribute musí být platný e-mail.',
+    'enum' => 'Vybraná hodnota pole :attribute není platná.',
+    'exists' => 'Vybraná hodnota pole :attribute není platná.',
+    'in' => 'Vybraná hodnota pole :attribute není platná.',
+    'integer' => 'Pole :attribute musí být celé číslo.',
+    'max' => ['string' => 'Pole :attribute může mít nejvýše :max znaků.'],
+    'min' => ['numeric' => 'Pole :attribute musí být alespoň :min.'],
+    'required' => 'Pole :attribute je povinné.',
+    'string' => 'Pole :attribute musí být text.',
+    'unique' => 'Hodnota pole :attribute už je používána.',
+    'password' => [
+        'letters' => 'Pole :attribute musí obsahovat alespoň jedno písmeno.',
+        'mixed' => 'Pole :attribute musí obsahovat malé i velké písmeno.',
+        'numbers' => 'Pole :attribute musí obsahovat alespoň jednu číslici.',
+        'symbols' => 'Pole :attribute musí obsahovat alespoň jeden symbol.',
+        'uncompromised' => 'Zadané heslo se objevilo v úniku dat. Zvolte jiné heslo.',
+    ],
+    'attributes' => [
+        'idempotency_key' => 'idempotency klíč', 'expected_lock_version' => 'verze větve',
+        'inspection_result' => 'doručený kus', 'condition_description' => 'popis stavu',
+        'routing' => 'routing', 'fault_code' => 'závada', 'fault_note' => 'poznámka',
+        'axial_rods' => 'axiální táhla', 'target_state' => 'cílový stav', 'reason' => 'důvod',
+        'override_confirmed' => 'potvrzení override',
+        'organization_id' => 'organizace', 'name' => 'jméno', 'email' => 'e-mail',
+        'role' => 'role', 'preferred_locale' => 'jazyk', 'active' => 'aktivní stav',
+        'password' => 'heslo', 'current_password' => 'současné heslo', 'locale' => 'jazyk',
+    ],
+];

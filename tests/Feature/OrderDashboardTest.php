@@ -61,10 +61,15 @@ class OrderDashboardTest extends TestCase
             'role' => UserRole::PL_OPERATOR,
             'preferred_locale' => 'pl',
         ]);
-        $visible = Order::factory()->stockRebuild()->create(['order_no' => 'VISIBLE-PL']);
+        $visible = Order::factory()->create(['order_no' => 'VISIBLE-PL']);
         $hidden = Order::factory()->create(['order_no' => 'HIDDEN-AK']);
         OrderCustomer::factory()->for($visible)->create(['email' => 'private@example.test']);
-        $this->threadFactory->createFor($visible, WorkflowScenario::STOCK_POLAND);
+        $visibleThread = $this->threadFactory->createFor($visible, WorkflowScenario::CUSTOM_REBUILD)->sole();
+        $visibleThread->update([
+            'state' => 'SENT_TO_PL',
+            'responsible_party' => 'POLAND',
+            'responsible_organization_id' => $this->poland->id,
+        ]);
         $this->threadFactory->createFor($hidden, WorkflowScenario::CUSTOM_REBUILD);
 
         $this->actingAs($user)->get(route('dashboard'))
@@ -90,9 +95,17 @@ class OrderDashboardTest extends TestCase
             'organization_id' => $this->poland->id,
             'role' => UserRole::PL_OPERATOR,
         ]);
-        $order = Order::factory()->stockRebuild()->create(['order_no' => 'HISTORIC-PL']);
-        $threads = $this->threadFactory->createFor($order, WorkflowScenario::STOCK_POLAND);
-        $threads->each->update([
+        $order = Order::factory()->create(['order_no' => 'HISTORIC-PL']);
+        $thread = $this->threadFactory->createFor($order, WorkflowScenario::CUSTOM_REBUILD)->sole();
+        $thread->events()->create([
+            'order_id' => $order->id,
+            'action' => 'SEND_TO_POLAND',
+            'from_state' => 'RECEIVED_AK',
+            'to_state' => 'SENT_TO_PL',
+            'actor_type' => 'AUTOKLUBY',
+            'responsible_organization_id' => $this->poland->id,
+        ]);
+        $thread->update([
             'responsible_organization_id' => $this->autokluby->id,
         ]);
 
