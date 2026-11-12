@@ -3,9 +3,9 @@
 namespace App\Integrations\LegacyShop;
 
 use App\Enums\OrderType;
-use App\Enums\RoutingCode;
-use App\Enums\TechnicalType;
+use App\Enums\ProductConfigurationStatus;
 use App\Enums\WorkflowScenario;
+use App\Models\LegacyProductConfiguration;
 use Carbon\CarbonImmutable;
 use Throwable;
 
@@ -16,7 +16,7 @@ class LegacyOrderMapper
     public function map(PrestaShop14OrderCandidate $candidate): LegacyOrderData
     {
         $missing = $candidate->validationIssues;
-        $classification = $this->mapping->classificationFor($candidate->productCode);
+        $configuration = $this->productConfiguration($candidate->productCode);
         $customerName = $candidate->customer['name'] ?? null;
         if ($customerName === null) {
             $missing[] = 'CUSTOMER_NAME_MISSING';
@@ -26,11 +26,23 @@ class LegacyOrderMapper
         }
 
         $orderType = $this->orderType($candidate, $missing);
-        $technicalType = $this->enum($classification, 'technical_type', TechnicalType::class, $missing);
-        $routing = $this->enum($classification, 'routing', RoutingCode::class, $missing);
+        if ($configuration === null
+            || $configuration->verification_status !== ProductConfigurationStatus::VERIFIED
+            || $configuration->technical_type === null
+            || $configuration->default_routing === null
+        ) {
+            $missing[] = 'PRODUCT_CONFIGURATION_REQUIRED';
+        }
+        $technicalType = $configuration?->technical_type;
+        $routing = $configuration?->default_routing;
         $workflowScenario = $candidate->repairBranch === OrderType::CUSTOM_REBUILD->value
             ? WorkflowScenario::CUSTOM_REBUILD
-            : $this->enum($classification, 'workflow_scenario', WorkflowScenario::class, $missing);
+            : ($candidate->repairBranch === OrderType::STOCK_REBUILD->value
+                ? WorkflowScenario::PENDING_STOCK_CHECK
+                : null);
+        if ($workflowScenario === null) {
+            $missing[] = 'WORKFLOW_SCENARIO_UNCONFIRMED';
+        }
 
         if ($missing !== []) {
             throw new IncompleteLegacyOrderException(array_values(array_unique($missing)));
@@ -53,6 +65,7 @@ class LegacyOrderMapper
             'external_order_no' => $candidate->externalOrderNo,
             'product_code' => $candidate->productCode,
             'latest_state_id' => $candidate->latestStateId,
+            'payment_accepted_history' => $candidate->paymentAcceptedHistory,
             'valid' => $candidate->valid,
             'approval_value' => $candidate->approvalValue,
             'repair_branch' => $candidate->repairBranch,
@@ -88,20 +101,20 @@ class LegacyOrderMapper
         );
     }
 
-    /**
-     * @param  array<string, string>  $classification
-     * @param  class-string<\BackedEnum>  $enum
-     * @param  array<int, string>  $missing
-     */
-    private function enum(array $classification, string $key, string $enum, array &$missing): ?\BackedEnum
+    public function productConfiguration(?string $productCode): ?LegacyProductConfiguration
     {
-        $raw = $classification[$key] ?? null;
-        $value = is_string($raw) ? $enum::tryFrom($raw) : null;
-        if ($value === null) {
-            $missing[] = strtoupper($key).'_UNCONFIRMED';
+        if ($productCode === null || trim($productCode) === '') {
+            return null;
         }
 
-        return $value;
+        try {
+            return LegacyProductConfiguration::query()
+                ->where('product_reference', $productCode)
+                ->first();
+        } catch (Throwable) {
+            // A dry-run must remain usable before the Phase 1D portal migration is deployed.
+            return null;
+        }
     }
 
     /** @param array<int, string> $missing */

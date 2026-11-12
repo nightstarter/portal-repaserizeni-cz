@@ -48,3 +48,31 @@
 - Stav: přijato pro Fázi 1B
 - Rozhodnutí: Zápisový import vyžaduje `LEGACY_SHOP_IMPORT_ENABLED=true`, povinnou startovní hranici a ověřené mapování. Fáze 1B nezapíná produkční připojení, cron ani scheduler a končí před živým ověřením.
 - Dopad: Kód lze ověřit na fixture databázi a později spustit v dry-run režimu, ale v aktuálním výchozím nastavení nemůže vytvářet objednávky.
+
+## D-008: Portál nepřebírá zákaznické schvalování
+
+- Datum: 2026-11-12
+- Stav: potvrzeno provozovatelem pro Fázi 1D
+- Rozhodnutí: Původní `objednavky.php` nadále spravuje vztah zákazník–e-shop, platbu a klasifikaci. Nový portál je most AUTOKLUBY CZ–Polsko. `schvaleno=0` čeká, `1` znamená `STOCK_REBUILD` a `2` znamená `CUSTOM_REBUILD`.
+- Dopad: Portál nevytváří zákaznický schvalovací krok. Čekající nula se znovu kontroluje a checkpoint ji nesmí přeskočit.
+
+## D-009: Autoritou úhrady je historický stav 2
+
+- Datum: 2026-11-12
+- Stav: potvrzeno provozovatelem pro Fázi 1D
+- Rozhodnutí: Objednávka je uhrazena právě tehdy, když její `ps_order_history` obsahuje alespoň jeden záznam `id_order_state=2` (`Payment accepted`). Nemusí jít o poslední stav.
+- Dopad: `total_paid`, `total_paid_real`, `ps_orders.valid`, poslední stav a pomocné platební tabulky jsou pouze diagnostické signály. Bez historického stavu 2 importér vrátí `PAYMENT_NOT_ACCEPTED`.
+
+## D-010: Technický typ a routing spravuje produktový registr portálu
+
+- Datum: 2026-11-12
+- Stav: přijato pro Fázi 1D
+- Rozhodnutí: Legacy schéma neposkytuje jednoznačný zdroj `WORM/HYDRAULIC/EPS` ani `KRAFT/ARGO`. Portál je eviduje podle přesné `product_reference`, včetně stavu ověření a osoby/času potvrzení. Z názvu ani kódu produktu se nic neodhaduje.
+- Dopad: Chybějící nebo neověřená konfigurace vrací `PRODUCT_CONFIGURATION_REQUIRED` ve viditelné integrační frontě AUTOKLUBY a nesmí pokračovat do Polska.
+
+## D-011: Skladový scénář určuje Pohoda
+
+- Datum: 2026-11-12
+- Stav: potvrzeno provozovatelem pro Fázi 1D
+- Rozhodnutí: PrestaShop nerozhoduje, zda je skladový kus v Děčíně nebo v Polsku. Autoritou je aktuální Pohoda snapshot.
+- Dopad: Bez snapshotu vzniká pouze AUTOKLUBY stav `PENDING_STOCK_CHECK`; polská větev se nevytvoří ani nezobrazí.

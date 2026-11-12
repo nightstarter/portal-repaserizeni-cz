@@ -60,7 +60,7 @@ class ImportLegacyShopOrders extends Command
         $this->table(['Metric', 'Count'], collect($result->toArray())->map(fn (int|bool $value, string $key): array => [$key, is_bool($value) ? ($value ? 'yes' : 'no') : $value])->values()->all());
 
         foreach ($result->validation as $validation) {
-            $this->warn('Order '.$validation['order'].': '.implode(', ', array_merge($validation['issues'], $validation['warnings'])));
+            $this->line(json_encode($validation, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
         }
 
         return $result->errors === 0 ? self::SUCCESS : self::FAILURE;

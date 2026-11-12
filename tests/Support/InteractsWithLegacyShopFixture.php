@@ -2,6 +2,10 @@
 
 namespace Tests\Support;
 
+use App\Enums\ProductConfigurationStatus;
+use App\Enums\RoutingCode;
+use App\Enums\TechnicalType;
+use App\Models\LegacyProductConfiguration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -72,6 +76,11 @@ trait InteractsWithLegacyShopFixture
             $t->unsignedInteger('id_order_state');
             $t->dateTime('date_add');
         });
+        $schema->create('ps_order_state_lang', function (Blueprint $t): void {
+            $t->unsignedInteger('id_order_state');
+            $t->unsignedInteger('id_lang');
+            $t->string('name');
+        });
         $schema->create('ps_order_detail', function (Blueprint $t): void {
             $t->unsignedInteger('id_order_detail')->primary();
             $t->unsignedInteger('id_order');
@@ -98,6 +107,10 @@ trait InteractsWithLegacyShopFixture
             ['id_carrier' => 20, 'name' => 'Osobní odběr v Děčíně'],
             ['id_carrier' => 30, 'name' => 'GLS'],
         ]);
+        DB::connection('legacy_shop')->table('ps_order_state_lang')->insert([
+            ['id_order_state' => 2, 'id_lang' => 1, 'name' => 'Payment accepted'],
+            ['id_order_state' => 10, 'id_lang' => 1, 'name' => 'Awaiting bank wire payment'],
+        ]);
 
         $base = [
             'enabled' => true,
@@ -109,7 +122,7 @@ trait InteractsWithLegacyShopFixture
                 'paid_state_ids' => [2],
                 'carrier_handover_map' => ['19' => 'PERSONAL_PICKUP', '20' => 'PERSONAL_PICKUP', '30' => 'GLS'],
             ],
-            'mapping' => ['verified' => true, 'product_classifications' => []],
+            'mapping' => ['verified' => true],
         ];
         config()->set('integrations.legacy_shop', array_replace_recursive($base, $overrides));
     }
@@ -154,16 +167,19 @@ trait InteractsWithLegacyShopFixture
                 'id_product' => $detail['product_id'],
                 'deposit_amount' => $detail['product_id'] === 91173 ? null : '200.00',
             ]);
-            if ($detail['product_id'] !== 91173 && ! empty($detail['product_reference'])) {
-                $classifications = (array) config('integrations.legacy_shop.mapping.product_classifications', []);
-                $classifications[$detail['product_reference']] = [
-                    'technical_type' => 'EPS',
-                    'routing' => 'ARGO',
-                ];
-                if ((int) $order['schvaleno'] === 1) {
-                    $classifications[$detail['product_reference']]['workflow_scenario'] = 'STOCK_DECIN';
-                }
-                config()->set('integrations.legacy_shop.mapping.product_classifications', $classifications);
+            if (($overrides['configure_product'] ?? true)
+                && $detail['product_id'] !== 91173
+                && ! empty($detail['product_reference'])
+            ) {
+                LegacyProductConfiguration::query()->updateOrCreate(
+                    ['product_reference' => $detail['product_reference']],
+                    [
+                        'technical_type' => TechnicalType::EPS,
+                        'default_routing' => RoutingCode::ARGO,
+                        'verification_status' => ProductConfigurationStatus::VERIFIED,
+                        'confirmed_at' => now(),
+                    ],
+                );
             }
         }
     }

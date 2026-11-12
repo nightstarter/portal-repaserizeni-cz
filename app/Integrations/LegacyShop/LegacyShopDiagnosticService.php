@@ -25,7 +25,7 @@ class LegacyShopDiagnosticService
         }
 
         $prefix = (string) config('integrations.legacy_shop.prestashop14.table_prefix', 'ps_');
-        $required = ['orders', 'customer', 'address', 'country', 'carrier', 'cart_vehicle_data', 'order_history', 'order_detail', 'product'];
+        $required = ['orders', 'customer', 'address', 'country', 'carrier', 'cart_vehicle_data', 'order_history', 'order_state_lang', 'order_detail', 'product'];
 
         return [
             'generated_at' => now()->utc()->toIso8601String(),
@@ -45,6 +45,7 @@ class LegacyShopDiagnosticService
                 ], $required),
                 'deposit_product_id' => PrestaShop14OrderReader::DEPOSIT_PRODUCT_ID,
                 'pohoda_order_offset' => PrestaShop14OrderReader::POHODA_ORDER_OFFSET,
+                'payment_authority' => 'order_history_state_2',
                 'poptavky_used' => false,
             ],
         ];

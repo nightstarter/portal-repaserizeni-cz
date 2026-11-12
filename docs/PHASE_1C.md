@@ -39,7 +39,7 @@ Importér žádnou položku nevybírá odhadem.
 
 ## Úhrada
 
-`total_paid` není samostatným důkazem úhrady. Kandidát porovnává:
+`total_paid` není samostatným důkazem úhrady. Provozovatel ve Fázi 1D potvrdil jedinou autoritativní podmínku: v historii objednávky musí existovat alespoň jeden stav `id_order_state=2` (`Payment accepted`). Stav 2 nemusí být poslední. Kandidát navíc diagnosticky reportuje:
 
 - `o.valid`,
 - poslední stav objednávky,
@@ -47,7 +47,7 @@ Importér žádnou položku nevybírá odhadem.
 - přítomnost karetního záznamu,
 - přítomnost PayPal stavu.
 
-Aktuálně diagnostikovaný stav `2` je `Payment accepted`, ale produkční import zůstává blokován, dokud není celé mapování explicitně potvrzené. Nesoulad `valid` a posledního stavu vrací `PAYMENT_AMBIGUOUS`; částka sama tento výsledek nezmění.
+Chybějící historický stav 2 vrací `PAYMENT_NOT_ACCEPTED`. Ostatní signály tuto chybu nemohou přebít.
 
 ## Potvrzené mapování `schvaleno`
 
@@ -59,7 +59,7 @@ Vlastník 2026-11-12 potvrdil podle produkčních `update.php`, `objednavky.php`
 
 `NULL` a jiné hodnoty než `0/1/2` jsou neznámá klasifikace a končí viditelnou integrační chybou `LEGACY_APPROVAL_UNCONFIRMED`.
 
-Samotné `schvaleno=1` neurčuje, zda jde o `STOCK_DECIN`, nebo `STOCK_POLAND`. Skladový workflow proto stále vyžaduje další explicitně potvrzenou klasifikaci.
+Samotné `schvaleno=1` neurčuje, zda jde o `STOCK_DECIN`, nebo `STOCK_POLAND`. Do dostupnosti Pohoda snapshotu proto používá výhradně `PENDING_STOCK_CHECK` odpovědný AUTOKLUBY a nevytváří polskou větev.
 
 `catalog_repair` je podtyp zakázkové repase „na vlastním řízení“ a stejně jako `custom_repair` používá `schvaleno=2`. Proto se hlavní zakázková větev vytvořit může, ale `repair_subtype` zůstává `null` a dry-run hlásí `REPAIR_SUBTYPE_UNCONFIRMED`, dokud nebude nalezen jednoznačný zdroj podtypu.
 
@@ -74,13 +74,11 @@ Oba kódy se proto mapují na `PERSONAL_PICKUP`. Další dopravci musí být př
 
 ## Klasifikace produktu
 
-Hlavní typ zakázky se mapuje z potvrzeného `schvaleno`. Technický typ a routing se nadále nedoplňují z názvu produktu, kategorie, `shop` ani jinou heuristikou. Skladový scénář Děčín/Polsko se rovněž nesmí odvodit ze `schvaleno` samotného. Budoucí ostrý import vyžaduje explicitní mapu zbývajících atributů podle přesného produktového kódu v `LEGACY_SHOP_PRODUCT_CLASSIFICATIONS_JSON` a současně `LEGACY_SHOP_MAPPING_VERIFIED=true`.
+Hlavní typ zakázky se mapuje z potvrzeného `schvaleno`. Technický typ a routing se nadále nedoplňují z názvu produktu, kategorie, `shop` ani jinou heuristikou. Fáze 1D nahrazuje konfigurační JSON portálovým registrem `legacy_product_configurations` podle přesné `product_reference`. Záznam obsahuje technický typ, výchozí routing, stav ověření a kdo/kdy jej potvrdil.
 
 Dokud mapa chybí, dry-run vrací:
 
-- `TECHNICAL_TYPE_UNCONFIRMED`,
-- `ROUTING_UNCONFIRMED`,
-- u skladové repase `WORKFLOW_SCENARIO_UNCONFIRMED`.
+- `PRODUCT_CONFIGURATION_REQUIRED`.
 
 `ORDER_TYPE_UNCONFIRMED` se nepoužije pro čekající `schvaleno=0`; zůstává pouze součástí chyby pro `NULL` nebo jinou neznámou hodnotu.
 
@@ -119,7 +117,7 @@ php artisan legacy-shop:import --dry-run --order-id=<source-id> --limit=1
 
 `--order-id` je při zápisovém běhu odmítnuto. Dry-run sestaví kanonického kandidáta, používá pouze anonymní otisk objednávky a vrací kódy validačních chyb a důkazních příznaků. Nezapisuje objednávku, integrační event ani checkpoint.
 
-Opakovaný živý dry-run nad kandidátem `d0b1b3ae75b2` po potvrzení `schvaleno` již nehlásí neznámý hlavní typ. Kandidát má `schvaleno=1`, takže je rozpoznán jako skladová repase; bezpečně zůstávají `TECHNICAL_TYPE_UNCONFIRMED`, `ROUTING_UNCONFIRMED` a `WORKFLOW_SCENARIO_UNCONFIRMED`. Počty portálových objednávek, eventů a checkpointů zůstaly před i po běhu `0|0|0`.
+Fáze 1D provedla nové živé dry-runy se stavem 2 v historii a nahradila původní obecné kódy jediným `PRODUCT_CONFIGURATION_REQUIRED`; skladová větev používá `PENDING_STOCK_CHECK`. Podrobnosti a aktuální hashe jsou v `docs/PHASE_1D.md`.
 
 ## Testovací pokrytí
 

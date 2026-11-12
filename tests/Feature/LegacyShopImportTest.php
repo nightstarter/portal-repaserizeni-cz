@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Contracts\CreatesInitialProcessThreads;
 use App\Enums\OrderType;
 use App\Enums\OrganizationCode;
+use App\Enums\ResponsibleParty;
 use App\Integrations\LegacyShop\LegacySchemaInspector;
 use App\Integrations\LegacyShop\LegacyShopConfigurationException;
 use App\Integrations\LegacyShop\LegacyShopImportService;
@@ -93,7 +94,100 @@ class LegacyShopImportTest extends TestCase
         $result = app(LegacyShopImportService::class)->run(dryRun: true, sourceOrderId: 100);
 
         self::assertSame(1, $result->errors);
-        self::assertContains('PAYMENT_AMBIGUOUS', $result->validation[0]['issues']);
+        self::assertContains('PAYMENT_NOT_ACCEPTED', $result->validation[0]['issues']);
+    }
+
+    public function test_payment_is_accepted_from_historical_state_two_even_after_later_state(): void
+    {
+        $this->insertLegacyOrder(100);
+        DB::connection('legacy_shop')->table('ps_order_history')->insert([
+            'id_order_history' => 1001,
+            'id_order' => 100,
+            'id_order_state' => 10,
+            'date_add' => '2026-11-10 12:10:00',
+        ]);
+
+        $result = app(LegacyShopImportService::class)->run(dryRun: true, sourceOrderId: 100);
+
+        self::assertSame(0, $result->errors);
+        self::assertTrue($result->validation[0]['payment_accepted']);
+        self::assertSame(10, $result->validation[0]['latest_state']['id']);
+    }
+
+    public function test_unknown_product_requires_visible_configuration(): void
+    {
+        $this->insertLegacyOrder(100, ['configure_product' => false]);
+
+        $result = app(LegacyShopImportService::class)->run(dryRun: true, sourceOrderId: 100);
+
+        self::assertSame(1, $result->errors);
+        self::assertContains('PRODUCT_CONFIGURATION_REQUIRED', $result->validation[0]['issues']);
+        self::assertSame('PRODUCT_CONFIGURATION_REQUIRED', $result->validation[0]['product_configuration_status']);
+        self::assertSame('PRODUCT_CONFIGURATION_REQUIRED', $result->validation[0]['configuration_queue']);
+        self::assertSame('AUTOKLUBY', $result->validation[0]['configuration_queue_owner']);
+        self::assertNull($result->validation[0]['technical_type']);
+        self::assertNull($result->validation[0]['routing']);
+    }
+
+    public function test_unknown_product_creates_visible_autokluby_integration_queue_on_writing_run(): void
+    {
+        $this->insertLegacyOrder(100, ['configure_product' => false]);
+
+        $result = app(LegacyShopImportService::class)->run(dryRun: false);
+
+        self::assertSame(1, $result->errors);
+        $this->assertDatabaseHas('integration_events', [
+            'external_event_id' => 'order:100',
+            'type' => 'PRODUCT_CONFIGURATION_REQUIRED',
+            'status' => 'FAILED',
+        ]);
+        $this->assertDatabaseCount('orders', 0);
+    }
+
+    public function test_missing_pohoda_snapshot_keeps_stock_order_out_of_polish_branch(): void
+    {
+        $this->insertLegacyOrder(100);
+
+        $result = app(LegacyShopImportService::class)->run(dryRun: false);
+        $order = Order::query()->firstOrFail();
+
+        self::assertSame(1, $result->imported);
+        self::assertSame('PENDING_STOCK_CHECK', $order->processThreads()->sole()->state);
+        self::assertSame(ResponsibleParty::AUTOKLUBY, $order->processThreads()->sole()->responsible_party);
+        self::assertFalse($order->processThreads()->where('responsible_party', ResponsibleParty::POLAND)->exists());
+    }
+
+    public function test_diagnostic_output_contains_no_personal_data(): void
+    {
+        $this->insertLegacyOrder(100, [
+            'customer' => ['firstname' => 'SecretName', 'email' => 'secret@example.test'],
+            'address' => ['address1' => 'Secret Street 123'],
+            'vehicle' => ['vin' => 'SECRET-VIN-123'],
+        ]);
+
+        $result = app(LegacyShopImportService::class)->run(dryRun: true, sourceOrderId: 100);
+        $output = json_encode($result->validation, JSON_THROW_ON_ERROR);
+
+        self::assertStringNotContainsString('SecretName', $output);
+        self::assertStringNotContainsString('secret@example.test', $output);
+        self::assertStringNotContainsString('Secret Street 123', $output);
+        self::assertStringNotContainsString('SECRET-VIN-123', $output);
+        self::assertSame('100', $result->validation[0]['source_order_id']);
+        self::assertSame(64, strlen($result->validation[0]['candidate_hash']));
+    }
+
+    public function test_dry_run_executes_no_legacy_writes(): void
+    {
+        $this->insertLegacyOrder(100);
+        $legacy = DB::connection('legacy_shop');
+        $legacy->flushQueryLog();
+        $legacy->enableQueryLog();
+
+        app(LegacyShopImportService::class)->run(dryRun: true, sourceOrderId: 100);
+
+        foreach ($legacy->getQueryLog() as $query) {
+            self::assertDoesNotMatchRegularExpression('/^\s*(insert|update|delete|replace|alter|create|drop|truncate)\b/i', $query['query']);
+        }
     }
 
     public function test_dry_run_performs_no_portal_writes_even_when_mapping_is_unverified(): void
@@ -124,7 +218,8 @@ class LegacyShopImportTest extends TestCase
         self::assertSame('4101', Order::first()->order_no);
         self::assertSame('100', Order::first()->source_order_id);
         self::assertSame(OrderType::STOCK_REBUILD, Order::first()->order_type);
-        self::assertSame(3, Order::first()->processThreads()->count());
+        self::assertSame(1, Order::first()->processThreads()->count());
+        self::assertSame('PENDING_STOCK_CHECK', Order::first()->processThreads()->first()->state);
     }
 
     public function test_approval_two_maps_custom_branch_but_keeps_repair_subtype_unknown(): void
@@ -174,10 +269,6 @@ class LegacyShopImportTest extends TestCase
         $this->assertDatabaseMissing('integration_events', ['external_event_id' => 'order:100']);
 
         DB::connection('legacy_shop')->table('ps_orders')->where('id_order', 100)->update(['schvaleno' => 1]);
-        $classifications = config('integrations.legacy_shop.mapping.product_classifications');
-        $classifications['REP-100']['workflow_scenario'] = 'STOCK_DECIN';
-        config()->set('integrations.legacy_shop.mapping.product_classifications', $classifications);
-
         $second = app(LegacyShopImportService::class)->run(dryRun: false);
         $checkpoint->refresh();
 

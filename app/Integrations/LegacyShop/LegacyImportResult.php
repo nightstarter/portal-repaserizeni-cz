@@ -16,19 +16,32 @@ class LegacyImportResult
 
     public int $errors = 0;
 
-    /** @var array<int, array{order: string, issues: array<int, string>, warnings: array<int, string>}> */
+    /** @var array<int, array<string, mixed>> */
     public array $validation = [];
 
     public function __construct(public readonly bool $dryRun) {}
 
     /** @param array<int, string> $issues @param array<int, string> $warnings */
-    public function addValidation(PrestaShop14OrderCandidate $candidate, array $issues, array $warnings = []): void
+    public function addValidation(PrestaShop14OrderCandidate $candidate, array $issues, array $warnings = [], array $context = []): void
     {
-        $this->validation[] = [
-            'order' => $candidate->fingerprint(),
+        $blockingWarnings = array_values(array_intersect($warnings, [
+            'MAPPING_NOT_VERIFIED', 'ORDER_CLASSIFICATION_PENDING',
+        ]));
+        $this->validation[] = array_merge([
+            'source_order_id' => $candidate->sourceOrderId,
+            'candidate_hash' => $candidate->candidateHash(),
+            'import_eligible' => $issues === [] && $blockingWarnings === [],
+            'eligibility_reasons' => array_values(array_unique(array_merge($issues, $blockingWarnings))),
+            'repair_type' => $candidate->repairBranch,
+            'product_reference' => $candidate->productCode,
+            'latest_state' => $candidate->latestStateId === null ? null : [
+                'id' => $candidate->latestStateId,
+                'name' => $candidate->latestStateName,
+            ],
+            'payment_accepted' => $candidate->paymentAcceptedHistory,
             'issues' => array_values(array_unique($issues)),
             'warnings' => array_values(array_unique($warnings)),
-        ];
+        ], $context);
     }
 
     /**

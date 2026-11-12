@@ -52,7 +52,7 @@ class LegacyShopImportService
 
             if ($row->approvalValue === 0) {
                 $result->pending++;
-                $result->addValidation($row, [], $this->warnings($row));
+                $result->addValidation($row, [], $this->warnings($row), $this->validationContext($row));
                 if (! $dryRun) {
                     $this->deferPending($row->sourceOrderId);
                 }
@@ -65,7 +65,7 @@ class LegacyShopImportService
                 $warnings = $this->warnings($row);
 
                 if ($dryRun) {
-                    $result->addValidation($row, [], $warnings);
+                    $result->addValidation($row, [], $warnings, $this->validationContext($row));
                     if ($this->orderExists($data->sourceOrderId)) {
                         $result->skipped++;
                     } else {
@@ -82,7 +82,7 @@ class LegacyShopImportService
                 }
             } catch (IncompleteLegacyOrderException $exception) {
                 $result->errors++;
-                $result->addValidation($row, $exception->fields, $this->warnings($row));
+                $result->addValidation($row, $exception->fields, $this->warnings($row), $this->validationContext($row));
 
                 if (! $dryRun) {
                     $this->recordFailure($row, $exception);
@@ -93,7 +93,7 @@ class LegacyShopImportService
                 }
             } catch (Throwable $exception) {
                 $result->errors++;
-                $result->addValidation($row, ['UNEXPECTED_VALIDATION_FAILURE'], $this->warnings($row));
+                $result->addValidation($row, ['UNEXPECTED_VALIDATION_FAILURE'], $this->warnings($row), $this->validationContext($row));
                 if (! $dryRun) {
                     $this->recordFailure($row, $exception);
                     break;
@@ -220,7 +220,10 @@ class LegacyShopImportService
             'external_event_id' => 'order:'.$row->sourceOrderId,
         ]);
         $event->fill([
-            'type' => 'ORDER_IMPORT',
+            'type' => $exception instanceof IncompleteLegacyOrderException
+                && in_array('PRODUCT_CONFIGURATION_REQUIRED', $exception->fields, true)
+                    ? 'PRODUCT_CONFIGURATION_REQUIRED'
+                    : 'ORDER_IMPORT',
             'payload_hash' => $this->payloadHash($row),
             'payload' => null,
             'status' => 'FAILED',
@@ -262,6 +265,27 @@ class LegacyShopImportService
         }
 
         return array_values(array_unique($warnings));
+    }
+
+    /** @return array<string, mixed> */
+    private function validationContext(PrestaShop14OrderCandidate $candidate): array
+    {
+        $configuration = $this->mapper->productConfiguration($candidate->productCode);
+        $configured = $configuration !== null
+            && $configuration->verification_status?->value === 'VERIFIED'
+            && $configuration->technical_type !== null
+            && $configuration->default_routing !== null;
+
+        return [
+            'technical_type' => $configured ? $configuration->technical_type->value : null,
+            'routing' => $configured ? $configuration->default_routing->value : null,
+            'product_configuration_status' => $configured ? 'VERIFIED' : 'PRODUCT_CONFIGURATION_REQUIRED',
+            'configuration_queue' => $configured ? null : 'PRODUCT_CONFIGURATION_REQUIRED',
+            'configuration_queue_owner' => $configured ? null : 'AUTOKLUBY',
+            'stock_decision_status' => $candidate->repairBranch === 'STOCK_REBUILD'
+                ? 'PENDING_STOCK_CHECK'
+                : 'NOT_APPLICABLE',
+        ];
     }
 
     /** @return array<int, string> */

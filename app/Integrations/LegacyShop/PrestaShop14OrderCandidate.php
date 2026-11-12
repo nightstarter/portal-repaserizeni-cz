@@ -25,7 +25,9 @@ class PrestaShop14OrderCandidate
         public readonly ?string $customerHandover,
         public readonly bool $valid,
         public readonly ?int $latestStateId,
+        public readonly ?string $latestStateName,
         public readonly ?string $latestStateAt,
+        public readonly bool $paymentAcceptedHistory,
         public readonly ?string $paymentMethod,
         public readonly bool $totalPaidCovered,
         public readonly bool $hasCardPayment,
@@ -43,6 +45,19 @@ class PrestaShop14OrderCandidate
     public function fingerprint(): string
     {
         return substr(hash('sha256', 'legacy-order:'.$this->sourceOrderId), 0, 12);
+    }
+
+    public function candidateHash(): string
+    {
+        return hash('sha256', json_encode([
+            'source_order_id' => $this->sourceOrderId,
+            'external_order_no' => $this->externalOrderNo,
+            'product_reference' => $this->productCode,
+            'approval' => $this->approvalValue,
+            'latest_state_id' => $this->latestStateId,
+            'payment_accepted_history' => $this->paymentAcceptedHistory,
+            'steering_item_count' => $this->steeringItemCount,
+        ], JSON_THROW_ON_ERROR));
     }
 
     public function asLegacyRow(): stdClass

@@ -84,6 +84,9 @@ class InitialProcessThreadFactory implements CreatesInitialProcessThreads
             WorkflowScenario::CUSTOM_REBUILD => [
                 $this->definition(ProcessThreadType::CUSTOM_REBUILD, 'WAITING_CUSTOMER_ITEM', ResponsibleParty::CUSTOMER),
             ],
+            WorkflowScenario::PENDING_STOCK_CHECK => [
+                $this->definition(ProcessThreadType::STOCK_REQUEST, 'PENDING_STOCK_CHECK', ResponsibleParty::AUTOKLUBY, OrganizationCode::AUTOKLUBY),
+            ],
             WorkflowScenario::STOCK_DECIN => [
                 $this->definition(ProcessThreadType::STOCK_REQUEST, 'READY_AK_DISPATCH', ResponsibleParty::AUTOKLUBY, OrganizationCode::AUTOKLUBY),
                 $this->definition(ProcessThreadType::STOCK_REPLENISHMENT, 'WAITING_PL_STOCK', ResponsibleParty::POLAND, OrganizationCode::POLAND),
@@ -115,7 +118,7 @@ class InitialProcessThreadFactory implements CreatesInitialProcessThreads
     {
         $expected = match ($scenario) {
             WorkflowScenario::CUSTOM_REBUILD => OrderType::CUSTOM_REBUILD,
-            WorkflowScenario::STOCK_DECIN, WorkflowScenario::STOCK_POLAND => OrderType::STOCK_REBUILD,
+            WorkflowScenario::PENDING_STOCK_CHECK, WorkflowScenario::STOCK_DECIN, WorkflowScenario::STOCK_POLAND => OrderType::STOCK_REBUILD,
             WorkflowScenario::BUYOUT => OrderType::BUYOUT,
         };
 

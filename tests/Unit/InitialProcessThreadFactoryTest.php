@@ -60,6 +60,19 @@ class InitialProcessThreadFactoryTest extends TestCase
         self::assertSame(3, $order->threadEvents()->count());
     }
 
+    public function test_stock_order_waits_for_pohoda_without_polish_thread(): void
+    {
+        $order = Order::factory()->stockRebuild()->create();
+
+        $threads = $this->factory->createFor($order, WorkflowScenario::PENDING_STOCK_CHECK);
+
+        self::assertCount(1, $threads);
+        self::assertSame(ProcessThreadType::STOCK_REQUEST, $threads->sole()->type);
+        self::assertSame('PENDING_STOCK_CHECK', $threads->sole()->state);
+        self::assertSame(ResponsibleParty::AUTOKLUBY, $threads->sole()->responsible_party);
+        self::assertFalse($order->processThreads()->where('responsible_party', ResponsibleParty::POLAND)->exists());
+    }
+
     public function test_creating_initial_threads_is_idempotent(): void
     {
         $order = Order::factory()->stockRebuild()->create();

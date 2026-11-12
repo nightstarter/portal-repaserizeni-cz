@@ -91,6 +91,10 @@ class PrestaShop14OrderReader
             ->leftJoin($prefix.'carrier as carrier', 'carrier.id_carrier', '=', 'o.id_carrier')
             ->leftJoinSub($latest, 'latest', fn ($join) => $join->on('latest.id_order', '=', 'o.id_order'))
             ->leftJoin($prefix.'order_history as history', 'history.id_order_history', '=', 'latest.id_order_history')
+            ->leftJoin($prefix.'order_state_lang as state_lang', function ($join): void {
+                $join->on('state_lang.id_order_state', '=', 'history.id_order_state')
+                    ->whereRaw('state_lang.id_lang = (SELECT MIN(state_name.id_lang) FROM '.$this->prefix().'order_state_lang AS state_name WHERE state_name.id_order_state = history.id_order_state)');
+            })
             ->select([
                 'o.id_order', 'o.id_cart', 'o.id_carrier', 'o.date_add', 'o.payment',
                 'o.total_paid', 'o.total_paid_real', 'o.valid', 'o.schvaleno',
@@ -98,7 +102,8 @@ class PrestaShop14OrderReader
                 'a.firstname as address_firstname', 'a.lastname as address_lastname', 'a.company as customer_company',
                 'a.address1 as customer_street', 'a.city as customer_city', 'a.postcode as customer_postal_code',
                 'a.phone as customer_phone', 'a.phone_mobile as customer_mobile', 'country.iso_code as customer_country_code',
-                'carrier.name as carrier_name', 'history.id_order_state as latest_state_id', 'history.date_add as latest_state_at',
+                'carrier.name as carrier_name', 'history.id_order_state as latest_state_id',
+                'state_lang.name as latest_state_name', 'history.date_add as latest_state_at',
             ]);
     }
 
@@ -129,13 +134,14 @@ class PrestaShop14OrderReader
         $valid = (int) $order->valid === 1;
         $latestStateId = $order->latest_state_id === null ? null : (int) $order->latest_state_id;
         $paidStateIds = array_map('intval', (array) config('integrations.legacy_shop.prestashop14.paid_state_ids', [2]));
-        if (! $valid || ! in_array($latestStateId, $paidStateIds, true)) {
-            $issues[] = 'PAYMENT_AMBIGUOUS';
+        $paymentAcceptedHistory = $this->connection->table($prefix.'order_history')
+            ->where('id_order', $order->id_order)
+            ->whereIn('id_order_state', $paidStateIds)
+            ->exists();
+        if (! $paymentAcceptedHistory) {
+            $issues[] = 'PAYMENT_NOT_ACCEPTED';
         }
         $totalCovered = (float) $order->total_paid > 0 && (float) $order->total_paid_real >= (float) $order->total_paid;
-        if (! $totalCovered) {
-            $issues[] = 'PAYMENT_AMOUNT_MISMATCH';
-        }
 
         $carrierId = $order->id_carrier === null ? null : (int) $order->id_carrier;
         $handoverMap = (array) config('integrations.legacy_shop.prestashop14.carrier_handover_map', []);
@@ -148,6 +154,7 @@ class PrestaShop14OrderReader
         $warnings = [];
         $warnings[] = $valid ? 'PAYMENT_EVIDENCE_VALID_TRUE' : 'PAYMENT_EVIDENCE_VALID_FALSE';
         $warnings[] = $latestStateId === null ? 'PAYMENT_EVIDENCE_STATE_MISSING' : 'PAYMENT_EVIDENCE_STATE_'.$latestStateId;
+        $warnings[] = $paymentAcceptedHistory ? 'PAYMENT_ACCEPTED_HISTORY_STATE_2' : 'PAYMENT_ACCEPTED_HISTORY_STATE_2_ABSENT';
         $warnings[] = $hasCardPayment ? 'PAYMENT_EVIDENCE_CARD_PRESENT' : 'PAYMENT_EVIDENCE_CARD_ABSENT';
         $warnings[] = $paypalStatus === null ? 'PAYMENT_EVIDENCE_PAYPAL_ABSENT' : 'PAYMENT_EVIDENCE_PAYPAL_PRESENT';
         $warnings[] = $totalCovered ? 'PAYMENT_TOTAL_COVERED_NOT_STANDALONE_PROOF' : 'PAYMENT_TOTAL_NOT_COVERED';
@@ -197,7 +204,9 @@ class PrestaShop14OrderReader
             customerHandover: $handover,
             valid: $valid,
             latestStateId: $latestStateId,
+            latestStateName: $this->clean($order->latest_state_name),
             latestStateAt: $this->clean($order->latest_state_at),
+            paymentAcceptedHistory: $paymentAcceptedHistory,
             paymentMethod: $this->clean($order->payment),
             totalPaidCovered: $totalCovered,
             hasCardPayment: $hasCardPayment,
@@ -224,6 +233,7 @@ class PrestaShop14OrderReader
             'carrier' => ['id_carrier', 'name'],
             'cart_vehicle_data' => ['id_cart', 'vin'],
             'order_history' => ['id_order_history', 'id_order', 'id_order_state'],
+            'order_state_lang' => ['id_order_state', 'id_lang', 'name'],
             'order_detail' => ['id_order', 'product_id', 'product_reference', 'product_name'],
             'product' => ['id_product', 'deposit_amount'],
         ];

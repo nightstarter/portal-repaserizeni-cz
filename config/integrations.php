@@ -13,7 +13,6 @@ return [
         ],
         'mapping' => [
             'verified' => (bool) env('LEGACY_SHOP_MAPPING_VERIFIED', false),
-            'product_classifications' => json_decode((string) env('LEGACY_SHOP_PRODUCT_CLASSIFICATIONS_JSON', '[]'), true) ?: [],
         ],
     ],
     'pohoda_bridge' => [

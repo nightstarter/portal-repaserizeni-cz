@@ -42,15 +42,15 @@ Vestavěný příkaz `legacy-shop:diagnose` navázal spojení, ale nedokončil i
 | `source_order_id` | `ps_orders.id_order` | dostupné; v reportu záměrně nepublikováno |
 | `order_no` | `ps_orders.id_order` nebo `invoice_number` | nejasné, vlastník musí určit obchodní číslo objednávky |
 | `created_at` | `ps_orders.date_add` | dostupné; musí se potvrdit časové pásmo |
-| `payment_status` | historie `ps_order_history.id_order_state=2` (`Payment accepted`) společně s `ps_orders.valid=1` a kontrolou zaplacené částky | více polí; vlastník musí potvrdit přesnou autoritu a pravidlo |
+| `payment_status` | existence libovolného `ps_order_history.id_order_state=2` (`Payment accepted`) | potvrzená jediná autorita úhrady; poslední stav, `valid` a částky jsou jen diagnostické |
 | zákazník | `ps_customer` + fakturační/dodací `ps_address` + `ps_country.iso_code` | dostupné přes join a skládání jména; importer umí jen jeden přímý sloupec |
 | `product_code`, `product_name` | `ps_order_detail.product_reference`, `product_name` | dostupné; je nutné rozhodnout objednávky s více položkami |
 | `vin` | `ps_order_vin_check.vin`, záložně `ps_cart_vehicle_data.vin` | dostupné volitelně; priorita zdrojů není potvrzena |
 | `vehicle` | složenina polí `ps_cart_vehicle_data` | dostupné volitelně; formát není potvrzen |
 | `order_type` | `ps_orders.schvaleno` | potvrzeno: `0` čeká na klasifikaci bez erroru, `1` skladová repase, `2` zakázková repase; `NULL`/jiná hodnota je chyba |
-| `technical_type` | nenalezen jednoznačný zdroj | chybí |
-| `routing` | nenalezen jednoznačný zdroj | chybí; `ps_product.shop` označuje web, nikoli potvrzený routing |
-| `workflow_scenario` | `schvaleno=2` potvrzuje společný scénář zakázkové repase | pro `schvaleno=1` stále chybí rozlišení `STOCK_DECIN` / `STOCK_POLAND` |
+| `technical_type` | portálový registr podle přesné `product_reference` | legacy zdroj nenalezen; bez ověřené konfigurace `PRODUCT_CONFIGURATION_REQUIRED` |
+| `routing` | portálový registr podle přesné `product_reference` | legacy zdroj nenalezen; bez ověřené konfigurace `PRODUCT_CONFIGURATION_REQUIRED` |
+| `workflow_scenario` | `schvaleno=2` → `CUSTOM_REBUILD`; `schvaleno=1` → `PENDING_STOCK_CHECK` | Děčín/Polsko později určí výhradně Pohoda snapshot |
 | `customer_handover` | `ps_carrier.name` | nalezeny hodnoty `DPD`, `GLS`, `Česká pošta`, `Osobní odběr v Děčíně`; cílové hodnoty musí potvrdit vlastník |
 | `price` | `ps_orders.total_paid` nebo položkové hodnoty v `ps_order_detail` | nejasná obchodní definice a DPH |
 | `deposit` | `ps_product.deposit_amount` | sloupec existuje, ale musí se potvrdit, zda jde o historický snapshot objednávky |
@@ -76,11 +76,9 @@ Dry-run Fáze 1B byl podle tehdejšího bezpečnostního návrhu odmítnut hlá�
 ### Nejasné nebo chybějící atributy a blokátory
 
 - potvrdit obchodní význam `order_no` (`id_order` versus `invoice_number`),
-- potvrdit autoritativní pravidlo „uhrazeno“; stav 2 se v historii může objevit vícekrát a u vybraného kandidáta následoval po dřívějším stornu,
 - potvrdit legacy časové pásmo; mapper nyní parsuje zdrojové datum jako UTC,
-- určit zdroj a mapu `technical_type` → `WORM` / `HYDRAULIC` / `EPS`,
-- určit zdroj a mapu `routing` → `KRAFT` / `ARGO`,
-- určit zdroj pro skladový `workflow_scenario` → `STOCK_DECIN` / `STOCK_POLAND`,
+- naplnit a provozně ověřit portálový produktový registr (`technical_type`, routing, potvrzující osoba a čas),
+- dodat aktuální Pohoda snapshot a potvrdit jeho kontrakt pro rozhodnutí skladového scénáře,
 - určit jednoznačný zdroj podtypu `custom_repair` / `catalog_repair`; do té doby zůstává `repair_subtype=null`,
 - potvrdit úplnou mapu dopravců/předání a cílové řetězce `customer_handover`,
 - potvrdit prioritu VIN a formát složeného vozidla,
@@ -101,14 +99,18 @@ Aktuální implementace již nepoužívá `LEGACY_SHOP_ORDERS_TABLE` ani mapu p�
 - `product_id=91173` je záloha a nevstupuje do výběru řízení.
 - Po vyloučení zálohy musí existovat právě jedna položka řízení.
 - Dopravci 19 a 20 byli živě potvrzeni jako `Osobní odběr v Děčíně` a mapují se na `PERSONAL_PICKUP`.
-- `total_paid` není samostatný důkaz úhrady; porovnává se `valid`, poslední stav, částkový příznak a dostupné platební záznamy.
+- Úhrada je potvrzena výhradně existencí stavu 2 kdykoli v `ps_order_history`; `total_paid`, `valid`, poslední stav a platební tabulky zůstávají jen v diagnostice.
 - `schvaleno=0` znamená čekání na klasifikaci ve starém `objednavky.php`; nevzniká portálová objednávka ani integrační error. `1` znamená skladovou a `2` zakázkovou repasi. `NULL` a jiné hodnoty jsou viditelná integrační chyba. Zakázkový podtyp `custom_repair` / `catalog_repair` se z této hodnoty neurčuje.
 - Čekající zdrojová ID jsou bezpečně vedena v `integration_checkpoints.metadata.pending_source_order_ids` a při každém běhu znovu načtena, takže je vyšší checkpoint po změně `0 → 1/2` nepřeskočí.
 - Živý dry-run kandidáta `b88ed8beba19` se `schvaleno=0` vrátil `pending=1`, `errors=0` a zachoval portálové počty `0|0|0`.
-- Technický typ a routing zůstávají bez explicitní produktové klasifikace nepotvrzené; u skladové repase zůstává nepotvrzené také Děčín/Polsko.
+- Technický typ a routing poskytuje pouze ověřený produktový registr portálu. Skladová repase bez Pohoda snapshotu zůstává `PENDING_STOCK_CHECK` u AUTOKLUBY a nemá polskou větev.
 - Diagnostika používá `LegacySchemaInspector` s `SHOW TABLES`, `SHOW COLUMNS` a `SELECT VERSION()`; Laravel Schema introspekce není pro legacy MySQL použita.
 
 Živý dry-run přes `--dry-run --order-id=<id> --limit=1` sestavil kandidáta `d0b1b3ae75b2`. Po potvrzení `schvaleno=1` již rozpoznal skladovou repasi a vrátil jen zbývající anonymizované blokátory technického typu, routingu a skladového scénáře. Počty portálových objednávek, eventů a checkpointů zůstaly `0|0|0`.
+
+### Fáze 1D – uzavřená integrační smlouva
+
+Aktuální smlouva, anonymizovaný produkční report, produktový registr, skladový stop stav a dva živé dry-runy jsou popsány v `docs/PHASE_1D.md`. Produkční `LEGACY_SHOP_IMPORT_ENABLED=false` a `LEGACY_SHOP_MAPPING_VERIFIED=false` zůstávají beze změny.
 
 ## Pohoda
 
