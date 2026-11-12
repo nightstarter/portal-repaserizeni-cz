@@ -202,3 +202,10 @@
 - Stav: přijato pro Fázi 2D
 - Rozhodnutí: `SET_PL_STOCK_ETA` validuje datum a čas v doménové command službě a odmítá minulost. HTML `min` je pouze uživatelská pomůcka.
 - Dopad: Přímý HTTP požadavek nemůže obejít pravidlo a každá platná změna ETA vytváří novou událost a audit.
+
+## D-030: Fáze 2 je přijata s explicitním deployment gate
+
+- Datum: 2026-11-12
+- Stav: přijato ve Fázi 2E
+- Rozhodnutí: Automatizovaná funkční a bezpečnostní akceptace Fází 1–2 je zelená. Produkční otevření zápisů Fáze 2C/2D je však podmíněno zálohou, nastavením `APP_ENV=production` a aplikací jediné auditované migrace `2026_11_12_000005_add_phase_2c_domain_guards` v servisním okně.
+- Dopad: Akceptace sama nemění produkční data ani konfiguraci. Import, scheduler a Pohoda bridge zůstávají vypnuté a Fáze 3 nezačíná.

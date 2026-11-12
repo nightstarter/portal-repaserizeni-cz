@@ -6,11 +6,12 @@ Samostatný transakční portál AUTOKLUBY ↔ POLSKO. Procesní pravidla určuj
 
 - [x] Fáze 0 – bootstrap a bezpečný základ (viz `docs/PHASE_0.md`)
 - [x] Fáze 1 – import a doménové jádro (Fáze 1A–1F dokončeny; závěrečná akceptace viz `docs/PHASE_1_ACCEPTANCE.md`)
-- [ ] Fáze 2 – základní workflow repase
+- [x] Fáze 2 – základní workflow repase (závěrečná akceptace a audit nasazení viz `docs/PHASE_2_ACCEPTANCE.md` a `docs/PHASE_2_DEPLOYMENT.md`)
   - [x] Fáze 2A – doménový stavový automat `CUSTOM_REBUILD` (viz `docs/PHASE_2A.md` a `docs/STATE_MACHINES.md`)
   - [x] Fáze 2B – UI `CUSTOM_REBUILD`, časová osa a mobilní QR detail (viz `docs/PHASE_2B.md`)
   - [x] Fáze 2C – skladová repase a paralelní větve (viz `docs/PHASE_2C.md`)
   - [x] Fáze 2D – UI skladové repase a paralelních větví (viz `docs/PHASE_2D.md`)
+  - [x] Fáze 2E – závěrečná akceptace Fáze 2 a audit pending migrací
 - [ ] Fáze 3 – zásilky a hromadné skenování
 - [ ] Fáze 4 – vratky a finance
 - [ ] Fáze 5 – diskuse a notifikace
@@ -18,7 +19,7 @@ Samostatný transakční portál AUTOKLUBY ↔ POLSKO. Procesní pravidla určuj
 - [ ] Fáze 7 – Pohoda bridge a přecenění
 - [ ] Fáze 8 – produkční připravenost
 
-Legacy mapování bylo ověřeno proti živé databázi a přijato ve Fázi 1F. Fáze 2A–2B implementovaly doménu a UI zakázkové repase. Fáze 2C–2D přidaly doménové skladové rozhodnutí, paralelní větve `STOCK_REQUEST`, `STOCK_REPLENISHMENT`, čekající `CORE_RETURN`, oddělené fyzické kusy a jejich bezpečné dashboardy, detail, časovou osu a mobilní QR obsluhu. Produkční import, Pohoda bridge, cron ani scheduler nebyly aktivovány; `LEGACY_SHOP_IMPORT_ENABLED=false` zůstává bezpečná provozní i výchozí hodnota. Zásilky, finance, detailní vratky, dokumenty, diskuse a notifikace budou řešeny až v dalších fázích.
+Legacy mapování bylo ověřeno proti živé databázi a přijato ve Fázi 1F. Fáze 2A–2B implementovaly doménu a UI zakázkové repase. Fáze 2C–2D přidaly doménové skladové rozhodnutí, paralelní větve `STOCK_REQUEST`, `STOCK_REPLENISHMENT`, čekající `CORE_RETURN`, oddělené fyzické kusy a jejich bezpečné dashboardy, detail, časovou osu a mobilní QR obsluhu. Fáze 2E celý rozsah automatizovaně přijala a zdokumentovala jednu čekající rozšiřující produkční migraci; migrace nebyla spuštěna. Produkční import, Pohoda bridge, cron ani scheduler nebyly aktivovány; `LEGACY_SHOP_IMPORT_ENABLED=false` zůstává bezpečná provozní i výchozí hodnota. Zásilky, finance, detailní vratky, dokumenty, diskuse a notifikace budou řešeny až v dalších fázích.
 
 ## Instalace z čistého klonu
 
