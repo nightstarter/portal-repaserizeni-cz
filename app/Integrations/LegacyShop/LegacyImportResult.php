@@ -12,6 +12,8 @@ class LegacyImportResult
 
     public int $skipped = 0;
 
+    public int $pending = 0;
+
     public int $errors = 0;
 
     /** @var array<int, array{order: string, issues: array<int, string>, warnings: array<int, string>}> */
@@ -40,6 +42,7 @@ class LegacyImportResult
             'imported' => $this->imported,
             'would_import' => $this->wouldImport,
             'skipped' => $this->skipped,
+            'pending' => $this->pending,
             'errors' => $this->errors,
         ];
     }

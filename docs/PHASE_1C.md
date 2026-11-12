@@ -53,9 +53,11 @@ Aktuálně diagnostikovaný stav `2` je `Payment accepted`, ale produkční impo
 
 Vlastník 2026-11-12 potvrdil podle produkčních `update.php`, `objednavky.php` a `offer_approval_service.php`:
 
-- `schvaleno=0` – objednávka dosud není zařazena; kandidát je odmítnut kódem `ORDER_NOT_CLASSIFIED`,
+- `schvaleno=0` – objednávka dosud není zařazena; kandidát se odloží jako `ORDER_CLASSIFICATION_PENDING` bez portálové objednávky a bez integračního erroru,
 - `schvaleno=1` – skladová repase; mapuje se na `OrderType::STOCK_REBUILD`,
 - `schvaleno=2` – zakázková repase; mapuje se na `OrderType::CUSTOM_REBUILD` a společný scénář `WorkflowScenario::CUSTOM_REBUILD`.
+
+`NULL` a jiné hodnoty než `0/1/2` jsou neznámá klasifikace a končí viditelnou integrační chybou `LEGACY_APPROVAL_UNCONFIRMED`.
 
 Samotné `schvaleno=1` neurčuje, zda jde o `STOCK_DECIN`, nebo `STOCK_POLAND`. Skladový workflow proto stále vyžaduje další explicitně potvrzenou klasifikaci.
 
@@ -80,7 +82,23 @@ Dokud mapa chybí, dry-run vrací:
 - `ROUTING_UNCONFIRMED`,
 - u skladové repase `WORKFLOW_SCENARIO_UNCONFIRMED`.
 
-`ORDER_TYPE_UNCONFIRMED` zůstává pouze pro nezařazenou nebo neznámou hodnotu `schvaleno`.
+`ORDER_TYPE_UNCONFIRMED` se nepoužije pro čekající `schvaleno=0`; zůstává pouze součástí chyby pro `NULL` nebo jinou neznámou hodnotu.
+
+## Čekající klasifikace a checkpoint
+
+Nový portál během přechodu nepřebírá schvalování zákaznických objednávek. Klasifikace zůstává ve starém `objednavky.php`.
+
+Při zápisovém importním běhu se zdrojové ID objednávky se `schvaleno=0` uloží pouze do bezpečného pole `integration_checkpoints.metadata.pending_source_order_ids`. Nevznikne:
+
+- portálová objednávka,
+- integrační event,
+- integrační chyba.
+
+Checkpoint může pokračovat k novějším objednávkám, ale při každém dalším běhu reader načte také všechna čekající ID. Změna `0 → 1` nebo `0 → 2` se proto neztratí ani tehdy, když je číselný checkpoint už vyšší. Po úspěšném importu se ID z čekajícího seznamu odstraní a číselný checkpoint se neposouvá zpět.
+
+Dry-run checkpoint ani čekající seznam nezapisuje; výsledek pouze zvýší metriku `pending`.
+
+Živý anonymizovaný dry-run nad kandidátem `b88ed8beba19` se `schvaleno=0` skončil `pending=1`, `errors=0` a nezměnil počty portálových objednávek, eventů ani checkpointů (`0|0|0`).
 
 ## Kompatibilita starého MySQL
 
@@ -113,7 +131,9 @@ SQLite fixture modeluje normalizované tabulky PrestaShopu. Testy pokrývají:
 - chybějící a vícenásobné řízení,
 - nejasnou platbu i při pokryté částce,
 - mapování `schvaleno=1` na skladovou a `schvaleno=2` na zakázkovou repasi,
-- odmítnutí `schvaleno=0`,
+- odložení `schvaleno=0` bez objednávky a integračního erroru,
+- opětovné načtení a import po změnách `0 → 1` i `0 → 2` přes již posunutý checkpoint,
+- viditelnou integrační chybu pro `NULL` a neznámou hodnotu `schvaleno`,
 - neznámý podtyp `custom_repair` versus `catalog_repair`,
 - idempotentní import při explicitně ověřené testovací klasifikaci,
 - nulové portálové zápisy při dry-runu,

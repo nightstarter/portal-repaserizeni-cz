@@ -40,12 +40,25 @@ class LegacyShopImportService
         } else {
             $boundary = LegacyImportBoundary::fromConfig();
             $checkpoint = IntegrationCheckpoint::query()->where('integration', self::INTEGRATION)->first();
-            $rows = $this->reader->read($boundary, $checkpoint?->last_processed_id, $limit);
+            $rows = $this->mergeCandidates(
+                $this->reader->readPending($this->pendingSourceOrderIds($checkpoint)),
+                $this->reader->read($boundary, $checkpoint?->last_processed_id, $limit),
+            );
         }
         $result = new LegacyImportResult($dryRun);
 
         foreach ($rows as $row) {
             $result->scanned++;
+
+            if ($row->approvalValue === 0) {
+                $result->pending++;
+                $result->addValidation($row, [], $this->warnings($row));
+                if (! $dryRun) {
+                    $this->deferPending($row->sourceOrderId);
+                }
+
+                continue;
+            }
 
             try {
                 $data = $this->mapper->map($row);
@@ -161,15 +174,43 @@ class LegacyShopImportService
 
     private function advanceCheckpoint(string $sourceOrderId): void
     {
-        IntegrationCheckpoint::query()->updateOrCreate(
-            ['integration' => self::INTEGRATION],
-            [
-                'cursor' => $sourceOrderId,
-                'last_processed_id' => $sourceOrderId,
-                'last_processed_at' => now(),
-                'metadata' => ['source' => OrderSource::ESHOP->value],
+        $this->updateCheckpoint($sourceOrderId, pending: false);
+    }
+
+    private function deferPending(string $sourceOrderId): void
+    {
+        DB::transaction(fn () => $this->updateCheckpoint($sourceOrderId, pending: true));
+    }
+
+    private function updateCheckpoint(string $sourceOrderId, bool $pending): void
+    {
+        $checkpoint = IntegrationCheckpoint::query()
+            ->where('integration', self::INTEGRATION)
+            ->lockForUpdate()
+            ->first() ?? new IntegrationCheckpoint(['integration' => self::INTEGRATION]);
+        $metadata = (array) $checkpoint->metadata;
+        $pendingIds = array_values(array_unique(array_map('strval', (array) ($metadata['pending_source_order_ids'] ?? []))));
+        if ($pending) {
+            $pendingIds[] = $sourceOrderId;
+            $pendingIds = array_values(array_unique($pendingIds));
+        } else {
+            $pendingIds = array_values(array_filter($pendingIds, fn (string $id): bool => $id !== $sourceOrderId));
+        }
+        sort($pendingIds, SORT_NUMERIC);
+
+        $current = filter_var($checkpoint->last_processed_id, FILTER_VALIDATE_INT) === false
+            ? 0
+            : (int) $checkpoint->last_processed_id;
+        $cursor = (string) max($current, (int) $sourceOrderId);
+        $checkpoint->fill([
+            'cursor' => $cursor,
+            'last_processed_id' => $cursor,
+            'last_processed_at' => now(),
+            'metadata' => [
+                'source' => OrderSource::ESHOP->value,
+                'pending_source_order_ids' => $pendingIds,
             ],
-        );
+        ])->save();
     }
 
     private function recordFailure(PrestaShop14OrderCandidate $row, Throwable $exception): void
@@ -221,5 +262,28 @@ class LegacyShopImportService
         }
 
         return array_values(array_unique($warnings));
+    }
+
+    /** @return array<int, string> */
+    private function pendingSourceOrderIds(?IntegrationCheckpoint $checkpoint): array
+    {
+        return array_values(array_map('strval', (array) ($checkpoint?->metadata['pending_source_order_ids'] ?? [])));
+    }
+
+    /**
+     * @param  array<int, PrestaShop14OrderCandidate>  ...$candidateSets
+     * @return array<int, PrestaShop14OrderCandidate>
+     */
+    private function mergeCandidates(array ...$candidateSets): array
+    {
+        $candidates = [];
+        foreach ($candidateSets as $set) {
+            foreach ($set as $candidate) {
+                $candidates[$candidate->sourceOrderId] = $candidate;
+            }
+        }
+        uksort($candidates, fn (string $left, string $right): int => (int) $left <=> (int) $right);
+
+        return array_values($candidates);
     }
 }

@@ -48,6 +48,33 @@ class PrestaShop14OrderReader
         return $row === null ? null : $this->candidate($row);
     }
 
+    /**
+     * @param  array<int, string>  $sourceOrderIds
+     * @return array<int, PrestaShop14OrderCandidate>
+     */
+    public function readPending(array $sourceOrderIds): array
+    {
+        $ids = array_values(array_unique(array_map(function (string $id): int {
+            if (filter_var($id, FILTER_VALIDATE_INT) === false || (int) $id < 1) {
+                throw new LegacyShopConfigurationException('Stored pending legacy order ID is not a positive integer.');
+            }
+
+            return (int) $id;
+        }, $sourceOrderIds)));
+        if ($ids === []) {
+            return [];
+        }
+
+        $candidates = [];
+        foreach (array_chunk($ids, 500) as $chunk) {
+            foreach ($this->baseQuery()->whereIn('o.id_order', $chunk)->orderBy('o.id_order')->get() as $row) {
+                $candidates[] = $this->candidate($row);
+            }
+        }
+
+        return $candidates;
+    }
+
     private function baseQuery(): Builder
     {
         $this->assertRequiredSchema();
@@ -131,7 +158,7 @@ class PrestaShop14OrderReader
             default => null,
         };
         if ($approval === 0) {
-            $issues[] = 'ORDER_NOT_CLASSIFIED';
+            $warnings[] = 'ORDER_CLASSIFICATION_PENDING';
         } elseif ($repairBranch === null) {
             $issues[] = 'LEGACY_APPROVAL_UNCONFIRMED';
         }

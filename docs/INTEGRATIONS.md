@@ -47,7 +47,7 @@ Vestavěný příkaz `legacy-shop:diagnose` navázal spojení, ale nedokončil i
 | `product_code`, `product_name` | `ps_order_detail.product_reference`, `product_name` | dostupné; je nutné rozhodnout objednávky s více položkami |
 | `vin` | `ps_order_vin_check.vin`, záložně `ps_cart_vehicle_data.vin` | dostupné volitelně; priorita zdrojů není potvrzena |
 | `vehicle` | složenina polí `ps_cart_vehicle_data` | dostupné volitelně; formát není potvrzen |
-| `order_type` | `ps_orders.schvaleno` | potvrzeno: `0` nezařazeno, `1` skladová repase, `2` zakázková repase |
+| `order_type` | `ps_orders.schvaleno` | potvrzeno: `0` čeká na klasifikaci bez erroru, `1` skladová repase, `2` zakázková repase; `NULL`/jiná hodnota je chyba |
 | `technical_type` | nenalezen jednoznačný zdroj | chybí |
 | `routing` | nenalezen jednoznačný zdroj | chybí; `ps_product.shop` označuje web, nikoli potvrzený routing |
 | `workflow_scenario` | `schvaleno=2` potvrzuje společný scénář zakázkové repase | pro `schvaleno=1` stále chybí rozlišení `STOCK_DECIN` / `STOCK_POLAND` |
@@ -102,7 +102,9 @@ Aktuální implementace již nepoužívá `LEGACY_SHOP_ORDERS_TABLE` ani mapu p�
 - Po vyloučení zálohy musí existovat právě jedna položka řízení.
 - Dopravci 19 a 20 byli živě potvrzeni jako `Osobní odběr v Děčíně` a mapují se na `PERSONAL_PICKUP`.
 - `total_paid` není samostatný důkaz úhrady; porovnává se `valid`, poslední stav, částkový příznak a dostupné platební záznamy.
-- `schvaleno=0` znamená nezařazenou objednávku, `1` skladovou repasi a `2` zakázkovou repasi. Zakázkový podtyp `custom_repair` / `catalog_repair` se z této hodnoty neurčuje.
+- `schvaleno=0` znamená čekání na klasifikaci ve starém `objednavky.php`; nevzniká portálová objednávka ani integrační error. `1` znamená skladovou a `2` zakázkovou repasi. `NULL` a jiné hodnoty jsou viditelná integrační chyba. Zakázkový podtyp `custom_repair` / `catalog_repair` se z této hodnoty neurčuje.
+- Čekající zdrojová ID jsou bezpečně vedena v `integration_checkpoints.metadata.pending_source_order_ids` a při každém běhu znovu načtena, takže je vyšší checkpoint po změně `0 → 1/2` nepřeskočí.
+- Živý dry-run kandidáta `b88ed8beba19` se `schvaleno=0` vrátil `pending=1`, `errors=0` a zachoval portálové počty `0|0|0`.
 - Technický typ a routing zůstávají bez explicitní produktové klasifikace nepotvrzené; u skladové repase zůstává nepotvrzené také Děčín/Polsko.
 - Diagnostika používá `LegacySchemaInspector` s `SHOW TABLES`, `SHOW COLUMNS` a `SELECT VERSION()`; Laravel Schema introspekce není pro legacy MySQL použita.
 

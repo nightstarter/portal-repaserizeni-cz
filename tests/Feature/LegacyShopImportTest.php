@@ -13,6 +13,7 @@ use App\Models\IntegrationCheckpoint;
 use App\Models\Order;
 use App\Models\Organization;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Mockery;
 use RuntimeException;
 use Tests\Support\InteractsWithLegacyShopFixture;
@@ -142,16 +143,92 @@ class LegacyShopImportTest extends TestCase
         self::assertSame(1, Order::first()->processThreads()->count());
     }
 
-    public function test_approval_zero_is_rejected_as_not_classified(): void
+    public function test_approval_zero_is_pending_without_portal_writes_in_dry_run(): void
     {
         $this->insertLegacyOrder(100, ['order' => ['schvaleno' => 0]]);
 
         $result = app(LegacyShopImportService::class)->run(dryRun: true, sourceOrderId: 100);
 
-        self::assertSame(1, $result->errors);
-        self::assertContains('ORDER_NOT_CLASSIFIED', $result->validation[0]['issues']);
-        self::assertContains('ORDER_TYPE_UNCONFIRMED', $result->validation[0]['issues']);
+        self::assertSame(1, $result->pending);
+        self::assertSame(0, $result->errors);
+        self::assertSame([], $result->validation[0]['issues']);
+        self::assertContains('ORDER_CLASSIFICATION_PENDING', $result->validation[0]['warnings']);
         $this->assertDatabaseCount('orders', 0);
+        $this->assertDatabaseCount('integration_events', 0);
+        $this->assertDatabaseCount('integration_checkpoints', 0);
+    }
+
+    public function test_pending_approval_is_rechecked_and_imported_after_change_to_stock(): void
+    {
+        $this->insertLegacyOrder(100, ['order' => ['schvaleno' => 0]]);
+        $this->insertLegacyOrder(101, ['order' => ['schvaleno' => 1]]);
+
+        $first = app(LegacyShopImportService::class)->run(dryRun: false);
+        $checkpoint = IntegrationCheckpoint::query()->firstOrFail();
+
+        self::assertSame(1, $first->pending);
+        self::assertSame(1, $first->imported);
+        self::assertSame('101', $checkpoint->last_processed_id);
+        self::assertSame(['100'], $checkpoint->metadata['pending_source_order_ids']);
+        $this->assertDatabaseMissing('orders', ['source_order_id' => '100']);
+        $this->assertDatabaseMissing('integration_events', ['external_event_id' => 'order:100']);
+
+        DB::connection('legacy_shop')->table('ps_orders')->where('id_order', 100)->update(['schvaleno' => 1]);
+        $classifications = config('integrations.legacy_shop.mapping.product_classifications');
+        $classifications['REP-100']['workflow_scenario'] = 'STOCK_DECIN';
+        config()->set('integrations.legacy_shop.mapping.product_classifications', $classifications);
+
+        $second = app(LegacyShopImportService::class)->run(dryRun: false);
+        $checkpoint->refresh();
+
+        self::assertSame(1, $second->imported);
+        $this->assertDatabaseHas('orders', ['source_order_id' => '100', 'order_type' => OrderType::STOCK_REBUILD->value]);
+        self::assertSame([], $checkpoint->metadata['pending_source_order_ids']);
+        self::assertSame('101', $checkpoint->last_processed_id);
+    }
+
+    public function test_pending_approval_is_rechecked_and_imported_after_change_to_custom(): void
+    {
+        $this->insertLegacyOrder(100, ['order' => ['schvaleno' => 0]]);
+        $this->insertLegacyOrder(101, ['order' => ['schvaleno' => 1]]);
+        app(LegacyShopImportService::class)->run(dryRun: false);
+
+        DB::connection('legacy_shop')->table('ps_orders')->where('id_order', 100)->update(['schvaleno' => 2]);
+
+        $result = app(LegacyShopImportService::class)->run(dryRun: false);
+        $checkpoint = IntegrationCheckpoint::query()->firstOrFail();
+
+        self::assertSame(1, $result->imported);
+        $this->assertDatabaseHas('orders', ['source_order_id' => '100', 'order_type' => OrderType::CUSTOM_REBUILD->value]);
+        self::assertSame([], $checkpoint->metadata['pending_source_order_ids']);
+        self::assertSame('101', $checkpoint->last_processed_id);
+    }
+
+    public function test_null_approval_becomes_visible_integration_error(): void
+    {
+        $this->insertLegacyOrder(100, ['order' => ['schvaleno' => null]]);
+
+        $result = app(LegacyShopImportService::class)->run(dryRun: false);
+
+        self::assertSame(1, $result->errors);
+        $this->assertDatabaseHas('integration_events', [
+            'external_event_id' => 'order:100',
+            'status' => 'FAILED',
+            'error' => 'INCOMPLETE_ORDER:LEGACY_APPROVAL_UNCONFIRMED,ORDER_TYPE_UNCONFIRMED,WORKFLOW_SCENARIO_UNCONFIRMED',
+        ]);
+    }
+
+    public function test_unknown_approval_becomes_visible_integration_error(): void
+    {
+        $this->insertLegacyOrder(100, ['order' => ['schvaleno' => 7]]);
+
+        $result = app(LegacyShopImportService::class)->run(dryRun: false);
+
+        self::assertSame(1, $result->errors);
+        $this->assertDatabaseHas('integration_events', [
+            'external_event_id' => 'order:100',
+            'status' => 'FAILED',
+        ]);
     }
 
     public function test_both_start_boundaries_are_enforced(): void
