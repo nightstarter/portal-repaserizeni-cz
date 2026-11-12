@@ -2,6 +2,7 @@
 
 namespace App\Application\Orders;
 
+use App\Contracts\CreatesInitialProcessThreads;
 use App\Enums\OrderType;
 use App\Enums\OrganizationCode;
 use App\Enums\ProcessThreadType;
@@ -14,7 +15,7 @@ use DomainException;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 
-class InitialProcessThreadFactory
+class InitialProcessThreadFactory implements CreatesInitialProcessThreads
 {
     /**
      * @return Collection<int, ProcessThread>

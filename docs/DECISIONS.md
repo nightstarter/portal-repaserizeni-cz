@@ -34,3 +34,17 @@
 - Stav: přijato pro Fázi 1A
 - Rozhodnutí: Továrna počátečních větví přijímá explicitní scénář `STOCK_DECIN` nebo `STOCK_POLAND`; dostupnost skladu se nehádá a nečte z produkčních systémů.
 - Dopad: Budoucí import/Pohoda adaptér musí scénář určit z ověřených dat před zavoláním továrny.
+
+## D-006: Legacy mapování je pouze explicitní a ověřené
+
+- Datum: 2026-11-12
+- Stav: přijato pro Fázi 1B
+- Rozhodnutí: Schéma a významy legacy e-shopu se nesmí odhadovat. Tabulka, sloupce, uhrazené stavy a všechny procesní mapy se konfigurují přes `.env`; import je odmítne, dokud není mapování ručně označeno jako ověřené.
+- Dopad: Diagnostiku lze použít k získání anonymizovaných podkladů, ale neznámé hodnoty vytvoří viditelnou integrační chybu místo tichého doplnění.
+
+## D-007: Import je bezpečně vypnutý a bez scheduleru
+
+- Datum: 2026-11-12
+- Stav: přijato pro Fázi 1B
+- Rozhodnutí: Zápisový import vyžaduje `LEGACY_SHOP_IMPORT_ENABLED=true`, povinnou startovní hranici a ověřené mapování. Fáze 1B nezapíná produkční připojení, cron ani scheduler a končí před živým ověřením.
+- Dopad: Kód lze ověřit na fixture databázi a později spustit v dry-run režimu, ale v aktuálním výchozím nastavení nemůže vytvářet objednávky.

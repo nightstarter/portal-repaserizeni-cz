@@ -2,6 +2,9 @@
 
 namespace App\Providers;
 
+use App\Application\Orders\InitialProcessThreadFactory;
+use App\Contracts\CreatesInitialProcessThreads;
+use App\Integrations\LegacyShop\LegacyShopMapping;
 use App\Models\Order;
 use App\Models\User;
 use App\Policies\OrderPolicy;
@@ -14,7 +17,11 @@ use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
-    public function register(): void {}
+    public function register(): void
+    {
+        $this->app->bind(CreatesInitialProcessThreads::class, InitialProcessThreadFactory::class);
+        $this->app->bind(LegacyShopMapping::class, fn (): LegacyShopMapping => LegacyShopMapping::fromConfig());
+    }
 
     public function boot(): void
     {

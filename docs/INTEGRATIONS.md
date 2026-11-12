@@ -1,12 +1,15 @@
 # Integrace
 
-Ve Fázi 0 nejsou aktivní žádné produkční integrace.
+Nejsou aktivní žádné produkční integrace.
 
 ## Starý e-shop
 
 - `LEGACY_SHOP_IMPORT_ENABLED=false` je povinný výchozí stav.
-- Připojení, read-only mapování, diagnostika a import patří do Fáze 1.
+- Fáze 1B obsahuje bezpečně vypnuté připojení, read-only diagnostiku a importní službu; podrobnosti jsou v `docs/PHASE_1B.md`.
 - Import se nesmí zapnout bez ověřeného mapování a výslovně potvrzeného `LEGACY_SHOP_IMPORT_FROM` nebo `LEGACY_SHOP_MIN_ORDER_ID`.
+- Legacy databázový účet musí mít pouze oprávnění `SELECT`; aplikace do PrestaShopu nikdy nezapisuje.
+- Názvy tabulek, sloupců, stavů úhrady ani procesních hodnot se nesmí odhadovat. Všechny mapy musí být ručně ověřeny a nakonfigurovány přes `.env`.
+- Produkční připojení, živé ověření mapování, dry-run nad živými daty, aktivace importu a scheduler jsou po Fázi 1B stále neprovedené.
 
 ## Pohoda
 
