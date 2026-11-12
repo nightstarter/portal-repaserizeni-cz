@@ -56,6 +56,11 @@ class ProcessThread extends Model
         return $this->hasMany(ThreadEvent::class);
     }
 
+    public function shipmentItems(): HasMany
+    {
+        return $this->hasMany(ShipmentItem::class);
+    }
+
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
         if ($user->organization->code === OrganizationCode::AUTOKLUBY) {

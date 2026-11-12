@@ -13,13 +13,15 @@ Samostatný transakční portál AUTOKLUBY ↔ POLSKO. Procesní pravidla určuj
   - [x] Fáze 2D – UI skladové repase a paralelních větví (viz `docs/PHASE_2D.md`)
   - [x] Fáze 2E – závěrečná akceptace Fáze 2 a audit pending migrací
 - [ ] Fáze 3 – zásilky a hromadné skenování
+  - [x] Fáze 3A – doména zásilek AUTOKLUBY ↔ POLSKO (viz `docs/PHASE_3A.md`, `docs/SHIPMENTS.md` a `docs/STATE_MACHINES.md`)
+  - [ ] Fáze 3B – UI zásilek a QR skener
 - [ ] Fáze 4 – vratky a finance
 - [ ] Fáze 5 – diskuse a notifikace
 - [ ] Fáze 6 – reklamace a výkup
 - [ ] Fáze 7 – Pohoda bridge a přecenění
 - [ ] Fáze 8 – produkční připravenost
 
-Legacy mapování bylo ověřeno proti živé databázi a přijato ve Fázi 1F. Fáze 2A–2B implementovaly doménu a UI zakázkové repase. Fáze 2C–2D přidaly doménové skladové rozhodnutí, paralelní větve `STOCK_REQUEST`, `STOCK_REPLENISHMENT`, čekající `CORE_RETURN`, oddělené fyzické kusy a jejich bezpečné dashboardy, detail, časovou osu a mobilní QR obsluhu. Fáze 2E celý rozsah automatizovaně přijala a zdokumentovala jednu čekající rozšiřující produkční migraci; migrace nebyla spuštěna. Produkční import, Pohoda bridge, cron ani scheduler nebyly aktivovány; `LEGACY_SHOP_IMPORT_ENABLED=false` zůstává bezpečná provozní i výchozí hodnota. Zásilky, finance, detailní vratky, dokumenty, diskuse a notifikace budou řešeny až v dalších fázích.
+Legacy mapování bylo ověřeno proti živé databázi a přijato ve Fázi 1F. Fáze 2A–2B implementovaly doménu a UI zakázkové repase. Fáze 2C–2D přidaly doménové skladové rozhodnutí, paralelní větve `STOCK_REQUEST`, `STOCK_REPLENISHMENT`, čekající `CORE_RETURN`, oddělené fyzické kusy a jejich bezpečné dashboardy, detail, časovou osu a mobilní QR obsluhu. Fáze 2E celý rozsah automatizovaně přijala. Fáze 3A přidala atomickou doménu hromadných zásilek AUTOKLUBY ↔ POLSKO s aktivními rezervacemi fyzických kusů; její UI a QR skener zůstávají pro 3B. Produkční migrace nebyly spuštěny. Produkční import, Pohoda bridge, cron ani scheduler nebyly aktivovány; `LEGACY_SHOP_IMPORT_ENABLED=false` zůstává bezpečná provozní i výchozí hodnota. Finance, detailní vratky, zákaznické přepravy, dokumenty, diskuse a notifikace budou řešeny až v dalších fázích.
 
 ## Instalace z čistého klonu
 
@@ -31,6 +33,9 @@ cd portal-repaserizeni-cz
 composer install
 cp .env.example .env
 php artisan key:generate
+cp .env.testing.example .env.testing
+chmod 600 .env.testing
+php artisan key:generate --env=testing
 ```
 
 Vyplňte pouze lokální `.env`, vytvořte prázdnou databázi a pak:
@@ -38,7 +43,7 @@ Vyplňte pouze lokální `.env`, vytvořte prázdnou databázi a pak:
 ```bash
 php artisan migrate --seed
 php artisan portal:create-admin
-php artisan test
+composer test
 ```
 
 Příkaz pro prvního administrátora přijímá heslo skrytě interaktivně, aby se nedostalo do shell historie. Další účty vytváří přihlášený `AK_ADMIN`.
@@ -58,11 +63,13 @@ Webový server musí obsluhovat výhradně adresář `public/`; příklad a prov
 
 ## Kontroly kvality
 
+Testy používají výhradně soukromý `.env.testing` se SQLite `:memory:`. `composer test` před startem fail-fast ověří izolaci připojení; ruční `migrate:fresh`, `migrate:refresh`, `migrate:reset` ani `db:wipe` nejsou součástí testovacího postupu.
+
 ```bash
 composer validate --strict
 vendor/bin/pint --test
 composer analyse
-php artisan test
+composer test
 ```
 
 Stejné kontroly běží v GitHub Actions na PHP 8.5.

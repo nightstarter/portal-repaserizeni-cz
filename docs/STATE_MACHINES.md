@@ -108,6 +108,20 @@ HTTP formuláře posílají pouze akční kód, typ větve, idempotency key, oč
 
 Polský query scope zpřístupní jen historicky přidělený `STOCK_REQUEST` nebo `STOCK_REPLENISHMENT`. Stejná hranice platí pro detail a QR konkrétního kusu. Role kusu se mapuje právě na jednu větev: `STOCK_ITEM → STOCK_REQUEST`, `STOCK_REPLACEMENT → STOCK_REPLENISHMENT`, `CORE_RETURN → CORE_RETURN`.
 
-## Mimo fáze 2A–2D
+## SHIPMENTS — fáze 3A
 
-Detailní vratky, zásilky, tracking, finance, dokumenty, diskuse, notifikace, reklamace a výkupy zde nejsou implementované. Budou specifikovány až v příslušných dalších fázích.
+Zásilka koordinuje stávající thread automaty a nevytváří alternativní přechody. Klient posílá pouze shipment command; akci každého threadu odvodí server z direction, typu a zamčeného stavu.
+
+| Stav zásilky | Shipment command | Nový stav | Dopad na procesní větve |
+|---|---|---|---|
+| — | `CREATE_SHIPMENT` | `PREPARED` | žádný; zásilka začíná prázdná |
+| `PREPARED` | `ADD_SHIPMENT_ITEM`, `REMOVE_SHIPMENT_ITEM` | `PREPARED` | žádný; pouze validace způsobilosti a aktivní rezervace |
+| `PREPARED` | `SEND_SHIPMENT` | `SENT` | atomicky `SEND_TO_POLAND` nebo `SEND_TO_AUTOKLUBY` pro všechny položky |
+| `SENT` | `MARK_TRANSPORT_ERROR` | `TRANSPORT_ERROR` | žádný; rezervace zůstávají aktivní |
+| `SENT`, `TRANSPORT_ERROR` | `CONFIRM_SHIPMENT_DELIVERY` | `DELIVERED` | atomicky serverem vybraná příjmová akce pro všechny položky; poté uvolnění rezervací |
+
+Úplná matice `direction + carrier + thread type + source state + action + target state` je v `docs/SHIPMENTS.md`. `DELIVERED` je koncový stav zásilky; `TRANSPORT_ERROR` není koncový a lze jej později potvrdit jako doručený.
+
+## Mimo fáze 2A–3A
+
+UI zásilek a QR skener, detailní vratky, zákaznické zásilky, carrier integrace, finance, dokumenty, diskuse, notifikace, reklamace a výkupy zde nejsou implementované. Budou specifikovány až v příslušných dalších fázích.

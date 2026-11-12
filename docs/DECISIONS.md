@@ -209,3 +209,24 @@
 - Stav: přijato ve Fázi 2E
 - Rozhodnutí: Automatizovaná funkční a bezpečnostní akceptace Fází 1–2 je zelená. Produkční otevření zápisů Fáze 2C/2D je však podmíněno zálohou, nastavením `APP_ENV=production` a aplikací jediné auditované migrace `2026_11_12_000005_add_phase_2c_domain_guards` v servisním okně.
 - Dopad: Akceptace sama nemění produkční data ani konfiguraci. Import, scheduler a Pohoda bridge zůstávají vypnuté a Fáze 3 nezačíná.
+
+## D-031: Aktivní zásilka je výlučná rezervace na fyzickém kusu
+
+- Datum: 2026-11-12
+- Stav: přijato pro Fázi 3A
+- Rozhodnutí: Historie přeprav zůstává v `shipment_items`, zatímco jedinou aktivní rezervaci nese nullable FK `items.active_shipment_id`. Rezervace se uvolní pouze při odebrání z `PREPARED` nebo po atomickém `DELIVERED`; `TRANSPORT_ERROR` ji zachovává.
+- Dopad: Jeden item nemůže v modelu současně odkazovat na dvě aktivní zásilky a historie jeho dřívějších přeprav se po uvolnění rezervace nemaže.
+
+## D-032: ShipmentService koordinuje existující workflow enginy
+
+- Datum: 2026-11-12
+- Stav: přijato pro Fázi 3A
+- Rozhodnutí: Hromadné odeslání a příjem předem zamknou a validují všechny položky, potom uvnitř jedné vnější transakce volají stávající `CustomRebuildWorkflow` nebo `StockRebuildWorkflow`. Klient neposílá thread action ani cílový stav.
+- Dopad: Thread eventy, audity, idempotence a pravidla stavových automatů nejsou implementované podruhé. Selhání jediného threadu vrátí stav zásilky, všechny přechody i rezervace.
+
+## D-033: Idempotence zásilek je událost s globálním klíčem
+
+- Datum: 2026-11-12
+- Stav: přijato pro Fázi 3A
+- Rozhodnutí: `shipment_events.idempotency_key` je globálně unikátní. Request hash obsahuje shipment command, aktéra, payload, očekávanou verzi a kontext itemu/threadu; interní thread klíč se deterministicky odvodí z shipment commandu.
+- Dopad: Replay stejného commandu vrací původní výsledek a jiný payload se stejným klíčem je konflikt. Zásilka zároveň používá `lock_version` a row locks proti dvojímu odeslání, příjmu nebo souběžné editaci obsahu.
