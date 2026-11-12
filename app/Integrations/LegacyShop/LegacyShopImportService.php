@@ -8,7 +8,6 @@ use App\Models\IntegrationCheckpoint;
 use App\Models\IntegrationEvent;
 use App\Models\Order;
 use Illuminate\Support\Facades\DB;
-use stdClass;
 use Throwable;
 
 class LegacyShopImportService
@@ -17,22 +16,32 @@ class LegacyShopImportService
 
     public function __construct(
         private readonly LegacyShopMapping $mapping,
-        private readonly LegacyOrderReader $reader,
+        private readonly PrestaShop14OrderReader $reader,
         private readonly LegacyOrderMapper $mapper,
         private readonly CreatesInitialProcessThreads $threadCreator,
     ) {}
 
-    public function run(bool $dryRun = true, ?int $limit = null): LegacyImportResult
+    public function run(bool $dryRun = true, ?int $limit = null, ?int $sourceOrderId = null): LegacyImportResult
     {
         if (! $dryRun && ! config('integrations.legacy_shop.enabled')) {
             throw new LegacyShopConfigurationException('Legacy shop import is disabled.');
         }
 
-        $this->mapping->assertImportReady();
-        $boundary = LegacyImportBoundary::fromConfig();
+        if (! $dryRun) {
+            $this->mapping->assertImportReady();
+        }
         $limit ??= (int) config('integrations.legacy_shop.batch_size', 100);
-        $checkpoint = IntegrationCheckpoint::query()->where('integration', self::INTEGRATION)->first();
-        $rows = $this->reader->read($boundary, $checkpoint?->last_processed_id, $limit);
+        if ($sourceOrderId !== null) {
+            $candidate = $this->reader->readOne($sourceOrderId);
+            if ($candidate === null) {
+                throw new LegacyShopConfigurationException('Requested legacy order was not found.');
+            }
+            $rows = [$candidate];
+        } else {
+            $boundary = LegacyImportBoundary::fromConfig();
+            $checkpoint = IntegrationCheckpoint::query()->where('integration', self::INTEGRATION)->first();
+            $rows = $this->reader->read($boundary, $checkpoint?->last_processed_id, $limit);
+        }
         $result = new LegacyImportResult($dryRun);
 
         foreach ($rows as $row) {
@@ -40,8 +49,10 @@ class LegacyShopImportService
 
             try {
                 $data = $this->mapper->map($row);
+                $warnings = $this->warnings($row);
 
                 if ($dryRun) {
+                    $result->addValidation($row, [], $warnings);
                     if ($this->orderExists($data->sourceOrderId)) {
                         $result->skipped++;
                     } else {
@@ -56,14 +67,24 @@ class LegacyShopImportService
                 } else {
                     $result->skipped++;
                 }
-            } catch (Throwable $exception) {
+            } catch (IncompleteLegacyOrderException $exception) {
                 $result->errors++;
+                $result->addValidation($row, $exception->fields, $this->warnings($row));
 
                 if (! $dryRun) {
                     $this->recordFailure($row, $exception);
                 }
 
-                break;
+                if (! $dryRun) {
+                    break;
+                }
+            } catch (Throwable $exception) {
+                $result->errors++;
+                $result->addValidation($row, ['UNEXPECTED_VALIDATION_FAILURE'], $this->warnings($row));
+                if (! $dryRun) {
+                    $this->recordFailure($row, $exception);
+                    break;
+                }
             }
         }
 
@@ -151,12 +172,11 @@ class LegacyShopImportService
         );
     }
 
-    private function recordFailure(stdClass $row, Throwable $exception): void
+    private function recordFailure(PrestaShop14OrderCandidate $row, Throwable $exception): void
     {
-        $sourceId = $this->safeSourceId($row);
         $event = IntegrationEvent::query()->firstOrNew([
             'integration' => self::INTEGRATION,
-            'external_event_id' => $sourceId === null ? 'row:'.$this->payloadHash($row) : 'order:'.$sourceId,
+            'external_event_id' => 'order:'.$row->sourceOrderId,
         ]);
         $event->fill([
             'type' => 'ORDER_IMPORT',
@@ -169,23 +189,14 @@ class LegacyShopImportService
         ])->save();
     }
 
-    private function safeSourceId(stdClass $row): ?string
+    private function payloadHash(PrestaShop14OrderCandidate $row): string
     {
-        $column = $this->mapping->column('source_order_id');
-        $value = $column === null ? null : ($row->{$column} ?? null);
-
-        return is_int($value) || (is_string($value) && ctype_digit($value)) ? (string) $value : null;
-    }
-
-    private function payloadHash(stdClass $row): string
-    {
-        $values = [];
-        foreach ($this->mapping->configuredColumns() as $semantic => $column) {
-            $values[$semantic] = $row->{$column} ?? null;
-        }
-        ksort($values);
-
-        return hash('sha256', json_encode($values, JSON_THROW_ON_ERROR));
+        return hash('sha256', json_encode([
+            'source_order_id' => $row->sourceOrderId,
+            'external_order_no' => $row->externalOrderNo,
+            'product_code' => $row->productCode,
+            'latest_state_id' => $row->latestStateId,
+        ], JSON_THROW_ON_ERROR));
     }
 
     private function safeError(Throwable $exception): string
@@ -199,5 +210,16 @@ class LegacyShopImportService
         }
 
         return 'IMPORT_ROLLBACK:'.class_basename($exception);
+    }
+
+    /** @return array<int, string> */
+    private function warnings(PrestaShop14OrderCandidate $candidate): array
+    {
+        $warnings = $candidate->warnings;
+        if (! $this->mapping->verified()) {
+            $warnings[] = 'MAPPING_NOT_VERIFIED';
+        }
+
+        return array_values(array_unique($warnings));
     }
 }

@@ -12,26 +12,21 @@ class LegacyShopDiagnosticTest extends TestCase
     use InteractsWithLegacyShopFixture;
     use RefreshDatabase;
 
-    public function test_diagnostic_creates_an_anonymized_schema_and_mapping_report(): void
+    public function test_diagnostic_uses_compatible_anonymized_schema_inspection(): void
     {
         $this->configureLegacyShopFixture();
-        $this->insertLegacyOrder(100, [
-            'customer_name' => 'Sensitive Fixture Name',
-            'customer_email' => 'sensitive@example.test',
-            'vin' => 'SENSITIVEVIN123456',
-        ]);
+        $this->insertLegacyOrder(100, ['customer' => ['firstname' => 'Sensitive', 'lastname' => 'Person', 'email' => 'secret@example.test']]);
         $path = storage_path('app/private/legacy-shop-test-report.json');
         File::delete($path);
 
         $this->artisan('legacy-shop:diagnose', ['--output' => $path])->assertSuccessful();
 
         $report = File::get($path);
-        self::assertStringContainsString('fixture_orders', $report);
-        self::assertStringContainsString('customer_email', $report);
-        self::assertStringContainsString('"present": true', $report);
-        self::assertStringNotContainsString('Sensitive Fixture Name', $report);
-        self::assertStringNotContainsString('sensitive@example.test', $report);
-        self::assertStringNotContainsString('SENSITIVEVIN123456', $report);
-        self::assertStringNotContainsString('password', strtolower($report));
+        self::assertStringContainsString('ps_orders', $report);
+        self::assertStringContainsString('server_version', $report);
+        self::assertStringContainsString('poptavky_used', $report);
+        self::assertStringNotContainsString('generation_expression', $report);
+        self::assertStringNotContainsString('Sensitive', $report);
+        self::assertStringNotContainsString('secret@example.test', $report);
     }
 }

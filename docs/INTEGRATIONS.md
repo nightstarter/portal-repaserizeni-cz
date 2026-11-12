@@ -9,7 +9,7 @@ Nejsou aktivní žádné produkční integrace.
 - Import se nesmí zapnout bez ověřeného mapování a výslovně potvrzeného `LEGACY_SHOP_IMPORT_FROM` nebo `LEGACY_SHOP_MIN_ORDER_ID`.
 - Legacy databázový účet musí mít pouze oprávnění `SELECT`; aplikace do PrestaShopu nikdy nezapisuje.
 - Názvy tabulek, sloupců, stavů úhrady ani procesních hodnot se nesmí odhadovat. Všechny mapy musí být ručně ověřeny a nakonfigurovány přes `.env`.
-- Produkční připojení bylo 2026-11-12 ověřeno pouze read-only diagnostikou popsanou níže. Mapování zůstává neověřené, dry-run byl bezpečně odmítnut před čtením objednávky, import zůstává vypnutý a scheduler není aktivován.
+- Produkční připojení bylo 2026-11-12 ověřeno pouze read-only diagnostikou popsanou níže. Původní dry-run Fáze 1B byl odmítnut před čtením; specializovaný dry-run Fáze 1C již sestaví kandidáta přes normalizované JOINy. Mapování zůstává neověřené, import vypnutý a scheduler neaktivovaný.
 
 ### Živá read-only diagnostika 2026-11-12
 
@@ -71,7 +71,7 @@ Spuštěný příkaz:
 php8.4 artisan legacy-shop:import --dry-run --limit=1
 ```
 
-Dry-run byl podle bezpečnostního návrhu odmítnut hláškou `Legacy mapping has not been explicitly verified.` Počty portálových objednávek, integračních eventů a checkpointů byly před i po běhu shodně `0`; nic nebylo importováno ani zapsáno. Příkaz navíc v současné podobě neumí omezit běh na přesně jedno ID a reader neumí spojit normalizované tabulky, proto nelze vybranou objednávku korektně předat mapperu bez předchozí změny integrační vrstvy nebo schváleného read-only zdroje/view.
+Dry-run Fáze 1B byl podle tehdejšího bezpečnostního návrhu odmítnut hláškou `Legacy mapping has not been explicitly verified.` Počty portálových objednávek, integračních eventů a checkpointů byly před i po běhu shodně `0`; nic nebylo importováno ani zapsáno. Omezení jednotabulkového readeru a chybějící přesný výběr objednávky řeší specializovaný reader Fáze 1C níže.
 
 ### Nejasné nebo chybějící atributy a blokátory
 
@@ -87,10 +87,25 @@ Dry-run byl podle bezpečnostního návrhu odmítnut hláškou `Legacy mapping h
 - rozhodnout zacházení s více položkami objednávky; současný cílový model očekává jeden produkt na objednávku,
 - potvrdit význam ceny (objednávka versus položka, s/bez DPH) a zálohy,
 - doplnit explicitní `LEGACY_SHOP_IMPORT_FROM` nebo `LEGACY_SHOP_MIN_ORDER_ID`,
-- upravit diagnostickou introspekci pro legacy MySQL bez `generation_expression`,
-- rozšířit reader o bezpečné joiny/aliasy nebo dodat schválený read-only plochý zdroj; současná konfigurace jedné tabulky a jednoho sloupce na atribut živému schématu neodpovídá.
+- diagnostická introspekce a bezpečné JOINy byly technicky vyřešeny ve Fázi 1C; obchodní mapy uvedené výše zůstávají neuzavřené.
 
 Do vyřešení všech bodů zůstávají `LEGACY_SHOP_MAPPING_VERIFIED=false` a `LEGACY_SHOP_IMPORT_ENABLED=false`.
+
+### Fáze 1C – specializovaný PrestaShop 1.4.11 reader
+
+Aktuální implementace již nepoužívá `LEGACY_SHOP_ORDERS_TABLE` ani mapu přímých sloupců jedné tabulky. `PrestaShop14OrderReader` skládá kanonického kandidáta z `ps_orders`, zákazníka, fakturační adresy, vozidla, poslední historie, položek, produktů a bezpečných platebních příznaků. Podrobný návrh, validační kódy a testy jsou v `docs/PHASE_1C.md`.
+
+- Objednávky pocházejí výhradně z `ps_orders`.
+- `ps_poptavky` obsahuje jen poptávky, nemá potvrzenou objednávkovou vazbu a není součástí readeru; objednávka bez poptávky je platný vstup.
+- `source_order_id = ps_orders.id_order`; `order_no = 4001 + id_order` pro Pohodu.
+- `product_id=91173` je záloha a nevstupuje do výběru řízení.
+- Po vyloučení zálohy musí existovat právě jedna položka řízení.
+- Dopravci 19 a 20 byli živě potvrzeni jako `Osobní odběr v Děčíně` a mapují se na `PERSONAL_PICKUP`.
+- `total_paid` není samostatný důkaz úhrady; porovnává se `valid`, poslední stav, částkový příznak a dostupné platební záznamy.
+- `schvaleno` se pouze reportuje. Technický typ, routing a workflow zůstávají bez explicitní produktové klasifikace nepotvrzené.
+- Diagnostika používá `LegacySchemaInspector` s `SHOW TABLES`, `SHOW COLUMNS` a `SELECT VERSION()`; Laravel Schema introspekce není pro legacy MySQL použita.
+
+Živý dry-run přes `--dry-run --order-id=<id> --limit=1` sestavil kandidáta `d0b1b3ae75b2`, vrátil anonymizované nepotvrzené klasifikace a zachoval počty portálových objednávek, eventů a checkpointů na `0|0|0`.
 
 ## Pohoda
 

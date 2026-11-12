@@ -40,18 +40,14 @@ class LegacyImportBoundary
         return new self($from, $minimum);
     }
 
-    public function apply(Builder $query, LegacyShopMapping $mapping): void
+    public function applyPrestaShop14(Builder $query): void
     {
         if ($this->minimumOrderId !== null) {
-            $query->where($mapping->column('source_order_id'), '>=', $this->minimumOrderId);
+            $query->where('o.id_order', '>=', $this->minimumOrderId);
         }
 
         if ($this->from !== null) {
-            $createdAt = $mapping->column('created_at');
-            if ($createdAt === null) {
-                throw new LegacyShopConfigurationException('created_at mapping is required for LEGACY_SHOP_IMPORT_FROM.');
-            }
-            $query->where($createdAt, '>=', $this->from->format('Y-m-d H:i:s'));
+            $query->where('o.date_add', '>=', $this->from->format('Y-m-d H:i:s'));
         }
     }
 }

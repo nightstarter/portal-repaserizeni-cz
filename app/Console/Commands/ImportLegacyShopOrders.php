@@ -9,7 +9,7 @@ use Throwable;
 
 class ImportLegacyShopOrders extends Command
 {
-    protected $signature = 'legacy-shop:import {--dry-run : Validate and preview without portal writes} {--limit= : Maximum orders to read}';
+    protected $signature = 'legacy-shop:import {--dry-run : Validate and preview without portal writes} {--limit= : Maximum orders to read} {--order-id= : Exact source order ID; dry-run only}';
 
     protected $description = 'Import paid legacy shop orders after the explicit start boundary';
 
@@ -29,8 +29,24 @@ class ImportLegacyShopOrders extends Command
             return self::INVALID;
         }
 
+        $rawOrderId = $this->option('order-id');
+        if ($rawOrderId !== null && (filter_var($rawOrderId, FILTER_VALIDATE_INT) === false || (int) $rawOrderId < 1)) {
+            $this->error('The --order-id option must be a positive integer.');
+
+            return self::INVALID;
+        }
+        if ($rawOrderId !== null && ! $dryRun) {
+            $this->error('The --order-id option is allowed only with --dry-run.');
+
+            return self::INVALID;
+        }
+
         try {
-            $result = $importer->run($dryRun, $rawLimit === null ? null : (int) $rawLimit);
+            $result = $importer->run(
+                $dryRun,
+                $rawLimit === null ? null : (int) $rawLimit,
+                $rawOrderId === null ? null : (int) $rawOrderId,
+            );
         } catch (LegacyShopConfigurationException $exception) {
             $this->error($exception->getMessage());
 
@@ -42,6 +58,10 @@ class ImportLegacyShopOrders extends Command
         }
 
         $this->table(['Metric', 'Count'], collect($result->toArray())->map(fn (int|bool $value, string $key): array => [$key, is_bool($value) ? ($value ? 'yes' : 'no') : $value])->values()->all());
+
+        foreach ($result->validation as $validation) {
+            $this->warn('Order '.$validation['order'].': '.implode(', ', array_merge($validation['issues'], $validation['warnings'])));
+        }
 
         return $result->errors === 0 ? self::SUCCESS : self::FAILURE;
     }
