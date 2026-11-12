@@ -32,7 +32,11 @@
       "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
       "@php artisan package:discover --ansi"
     ],
-    "test": "@php artisan test",
+    "test:guard": "@php scripts/assert-test-database.php",
+    "test": [
+      "@test:guard",
+      "@php artisan test"
+    ],
     "analyse": "@php scripts/lint.php",
     "check": [
       "@composer validate --strict",

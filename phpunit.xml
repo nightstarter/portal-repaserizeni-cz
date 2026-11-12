@@ -18,6 +18,7 @@
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="LEGACY_SHOP_IMPORT_ENABLED" value="false"/>
+        <env name="LEGACY_SHOP_MAPPING_VERIFIED" value="false"/>
         <env name="POHODA_BRIDGE_ENABLED" value="false"/>
     </php>
 </phpunit>

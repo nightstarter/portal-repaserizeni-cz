@@ -4,6 +4,7 @@ use Illuminate\Support\Str;
 
 return [
     'default' => env('DB_CONNECTION', 'mysql'),
+    'allow_destructive_test_database' => (bool) env('ALLOW_DESTRUCTIVE_TEST_DATABASE', false),
     'connections' => [
         'sqlite' => [
             'driver' => 'sqlite',

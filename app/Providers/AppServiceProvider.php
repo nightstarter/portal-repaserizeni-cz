@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Application\Orders\InitialProcessThreadFactory;
+use App\Application\Security\DatabaseCommandGuard;
 use App\Contracts\CreatesInitialProcessThreads;
 use App\Contracts\ResolvesStockAvailability;
 use App\Integrations\LegacyShop\LegacySchemaInspector;
@@ -15,8 +16,10 @@ use App\Models\User;
 use App\Policies\OrderPolicy;
 use App\Policies\UserPolicy;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
@@ -42,6 +45,10 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        Event::listen(CommandStarting::class, function (CommandStarting $event): void {
+            $this->app->make(DatabaseCommandGuard::class)->assertCommandAllowed($event->command);
+        });
+
         Gate::policy(User::class, UserPolicy::class);
         Gate::policy(Order::class, OrderPolicy::class);
         Gate::define('manage-users', fn (User $user): bool => $user->isAdministrator());

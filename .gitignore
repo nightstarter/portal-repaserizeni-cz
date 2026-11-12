@@ -1,6 +1,7 @@
 /.env
 /.env.*
 !/.env.example
+!/.env.testing.example
 /vendor/
 /composer.phar
 /node_modules/
