@@ -5,6 +5,7 @@ return [
     'boolean' => 'Pole :attribute musí být ano/ne.',
     'confirmed' => 'Potvrzení pole :attribute se neshoduje.',
     'current_password' => 'Zadané současné heslo není správné.',
+    'date' => 'Pole :attribute musí být platné datum a čas.',
     'email' => 'Pole :attribute musí být platný e-mail.',
     'enum' => 'Vybraná hodnota pole :attribute není platná.',
     'exists' => 'Vybraná hodnota pole :attribute není platná.',
@@ -31,5 +32,6 @@ return [
         'organization_id' => 'organizace', 'name' => 'jméno', 'email' => 'e-mail',
         'role' => 'role', 'preferred_locale' => 'jazyk', 'active' => 'aktivní stav',
         'password' => 'heslo', 'current_password' => 'současné heslo', 'locale' => 'jazyk',
+        'eta' => 'předpokládaný termín',
     ],
 ];

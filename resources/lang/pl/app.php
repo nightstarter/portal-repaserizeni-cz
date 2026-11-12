@@ -48,6 +48,10 @@ return [
         'CONFIRM_AK_RETURN_RECEIPT' => 'Potwierdź zwrotne przyjęcie w AUTOKLUBY', 'SEND_TO_CUSTOMER' => 'Wyślij klientowi',
         'MARK_READY_PICKUP' => 'Przygotuj do odbioru osobistego', 'CONFIRM_CUSTOMER_PICKUP' => 'Potwierdź odbiór przez klienta',
         'ADMIN_OVERRIDE' => 'Nadpisanie administracyjne',
+        'STOCK_AVAILABILITY_DECIDED' => 'Potwierdzono decyzję magazynową',
+        'CONFIRM_PL_STOCK_AVAILABLE' => 'Potwierdź dostępność w Polsce',
+        'SET_PL_STOCK_ETA' => 'Ustaw przewidywany termin dostępności',
+        'CONFIRM_AK_STOCK_RECEIPT' => 'Potwierdź przyjęcie części magazynowej w AUTOKLUBY',
     ],
     'metadata_labels' => [
         'inspection_result' => 'Dostarczona część', 'fault_code' => 'Usterka', 'axial_rods' => 'Drążki osiowe',
@@ -63,6 +67,9 @@ return [
         'version_conflict' => 'Gałąź procesu została zmieniona przez inne żądanie.',
         'target_state_forbidden' => 'Dla zwykłej czynności nie można podać statusu docelowego.',
         'unknown_action' => 'Nieznana czynność regeneracji indywidualnej.',
+        'invalid_stock_thread' => 'Tej czynności nie można wykonać w tym typie gałęzi magazynowej.',
+        'invalid_stock_order' => 'Akcję magazynową można wykonać tylko dla regeneracji magazynowej.',
+        'stock_decision_conflict' => 'Zaufana decyzja magazynowa jest sprzeczna z wcześniej potwierdzoną decyzją.',
     ],
     'order_types' => ['CUSTOM_REBUILD' => 'Regeneracja indywidualna', 'STOCK_REBUILD' => 'Regeneracja magazynowa', 'BUYOUT' => 'Odkup'],
     'thread_types' => [
@@ -77,6 +84,8 @@ return [
         'RECEIVED_PL_REPAIR' => 'Przyjęte do regeneracji', 'REPAIRED_PL' => 'Zregenerowane w Polsce',
         'SENT_TO_AK' => 'Wysłane do AUTOKLUBY', 'SENT_CUSTOMER' => 'Wysłane do klienta',
         'READY_PICKUP' => 'Gotowe do odbioru osobistego', 'PICKED_UP' => 'Odebrane przez klienta',
+        'PENDING_STOCK_CHECK' => 'Oczekuje na weryfikację magazynu w Děčínie',
+        'PL_SECURING_STOCK' => 'Polska organizuje część magazynową', 'PL_STOCK_AVAILABLE' => 'Część magazynowa dostępna w Polsce',
     ],
     'responsible_parties' => ['CUSTOMER' => 'Klient', 'AUTOKLUBY' => 'AUTOKLUBY', 'POLAND' => 'Polska', 'SYSTEM' => 'System'],
     'item_roles' => [

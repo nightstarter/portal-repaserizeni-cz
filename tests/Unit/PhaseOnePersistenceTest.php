@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Application\Audit\AuditLogger;
+use App\Enums\ItemRole;
 use App\Enums\OrganizationCode;
 use App\Enums\UserRole;
 use App\Models\IntegrationCheckpoint;
@@ -24,7 +25,8 @@ class PhaseOnePersistenceTest extends TestCase
     {
         $order = Order::factory()->create();
         $customer = OrderCustomer::factory()->for($order)->create();
-        Item::factory()->count(2)->for($order)->create();
+        Item::factory()->for($order)->create(['role' => ItemRole::STOCK_ITEM]);
+        Item::factory()->for($order)->create(['role' => ItemRole::CORE_RETURN]);
 
         self::assertTrue($order->customer->is($customer));
         self::assertCount(2, $order->items);

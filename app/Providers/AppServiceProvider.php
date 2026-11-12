@@ -4,10 +4,12 @@ namespace App\Providers;
 
 use App\Application\Orders\InitialProcessThreadFactory;
 use App\Contracts\CreatesInitialProcessThreads;
+use App\Contracts\ResolvesStockAvailability;
 use App\Integrations\LegacyShop\LegacySchemaInspector;
 use App\Integrations\LegacyShop\LegacyShopDiagnosticService;
 use App\Integrations\LegacyShop\LegacyShopMapping;
 use App\Integrations\LegacyShop\PrestaShop14OrderReader;
+use App\Integrations\Stock\PendingStockAvailabilityResolver;
 use App\Models\Order;
 use App\Models\User;
 use App\Policies\OrderPolicy;
@@ -24,6 +26,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(CreatesInitialProcessThreads::class, InitialProcessThreadFactory::class);
+        $this->app->bind(ResolvesStockAvailability::class, PendingStockAvailabilityResolver::class);
         $this->app->bind(LegacyShopMapping::class, fn (): LegacyShopMapping => LegacyShopMapping::fromConfig());
         $this->app->bind(LegacySchemaInspector::class, fn (): LegacySchemaInspector => new LegacySchemaInspector(DB::connection(PrestaShop14OrderReader::CONNECTION)));
         $this->app->bind(PrestaShop14OrderReader::class, fn (): PrestaShop14OrderReader => new PrestaShop14OrderReader(

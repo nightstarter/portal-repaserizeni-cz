@@ -48,6 +48,10 @@ return [
         'CONFIRM_AK_RETURN_RECEIPT' => 'Potvrdit zpětný příjem AUTOKLUBY', 'SEND_TO_CUSTOMER' => 'Odeslat zákazníkovi',
         'MARK_READY_PICKUP' => 'Připravit k osobnímu odběru', 'CONFIRM_CUSTOMER_PICKUP' => 'Potvrdit převzetí zákazníkem',
         'ADMIN_OVERRIDE' => 'Administrátorský override',
+        'STOCK_AVAILABILITY_DECIDED' => 'Potvrzeno rozhodnutí o skladu',
+        'CONFIRM_PL_STOCK_AVAILABLE' => 'Potvrdit dostupnost v Polsku',
+        'SET_PL_STOCK_ETA' => 'Nastavit termín dostupnosti',
+        'CONFIRM_AK_STOCK_RECEIPT' => 'Potvrdit příjem skladového kusu AUTOKLUBY',
     ],
     'metadata_labels' => [
         'inspection_result' => 'Doručený kus', 'fault_code' => 'Závada', 'axial_rods' => 'Axiální táhla',
@@ -63,6 +67,9 @@ return [
         'version_conflict' => 'Procesní větev mezitím změnil jiný požadavek.',
         'target_state_forbidden' => 'Pro běžnou akci nelze zadat cílový stav.',
         'unknown_action' => 'Neznámá akce zakázkové repase.',
+        'invalid_stock_thread' => 'Akci nelze provést na tomto typu skladové větve.',
+        'invalid_stock_order' => 'Skladovou akci lze provést pouze nad skladovou repasí.',
+        'stock_decision_conflict' => 'Důvěryhodné rozhodnutí o skladu je v konfliktu s již potvrzeným rozhodnutím.',
     ],
     'order_types' => ['CUSTOM_REBUILD' => 'Zakázková repase', 'STOCK_REBUILD' => 'Skladová repase', 'BUYOUT' => 'Výkup'],
     'thread_types' => [
@@ -77,6 +84,8 @@ return [
         'RECEIVED_PL_REPAIR' => 'Přijaté k repasi', 'REPAIRED_PL' => 'Opravené v Polsku',
         'SENT_TO_AK' => 'Odeslané k AUTOKLUBY', 'SENT_CUSTOMER' => 'Odeslané zákazníkovi',
         'READY_PICKUP' => 'Připraveno k osobnímu odběru', 'PICKED_UP' => 'Převzato zákazníkem',
+        'PENDING_STOCK_CHECK' => 'Čeká na ověření skladu Děčín',
+        'PL_SECURING_STOCK' => 'Polsko zajišťuje skladový kus', 'PL_STOCK_AVAILABLE' => 'Skladový kus je v Polsku dostupný',
     ],
     'responsible_parties' => ['CUSTOMER' => 'Zákazník', 'AUTOKLUBY' => 'AUTOKLUBY', 'POLAND' => 'Polsko', 'SYSTEM' => 'Systém'],
     'item_roles' => [

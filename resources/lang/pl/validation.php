@@ -5,6 +5,7 @@ return [
     'boolean' => 'Pole :attribute musi mieć wartość tak/nie.',
     'confirmed' => 'Potwierdzenie pola :attribute nie jest zgodne.',
     'current_password' => 'Podane aktualne hasło jest nieprawidłowe.',
+    'date' => 'Pole :attribute musi zawierać prawidłową datę i czas.',
     'email' => 'Pole :attribute musi zawierać poprawny adres e-mail.',
     'enum' => 'Wybrana wartość pola :attribute jest nieprawidłowa.',
     'exists' => 'Wybrana wartość pola :attribute jest nieprawidłowa.',
@@ -31,5 +32,6 @@ return [
         'organization_id' => 'organizacja', 'name' => 'imię i nazwisko', 'email' => 'e-mail',
         'role' => 'rola', 'preferred_locale' => 'język', 'active' => 'status aktywności',
         'password' => 'hasło', 'current_password' => 'aktualne hasło', 'locale' => 'język',
+        'eta' => 'przewidywany termin',
     ],
 ];

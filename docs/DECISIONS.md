@@ -31,9 +31,9 @@
 ## D-005: Scénář skladové zakázky musí být explicitní
 
 - Datum: 2026-11-12
-- Stav: přijato pro Fázi 1A
-- Rozhodnutí: Továrna počátečních větví přijímá explicitní scénář `STOCK_DECIN` nebo `STOCK_POLAND`; dostupnost skladu se nehádá a nečte z produkčních systémů.
-- Dopad: Budoucí import/Pohoda adaptér musí scénář určit z ověřených dat před zavoláním továrny.
+- Stav: nahrazeno rozhodnutím D-024 ve Fázi 2C
+- Rozhodnutí: Ve Fázi 1A používala testovací továrna explicitní scénář `STOCK_DECIN` nebo `STOCK_POLAND`; dostupnost se nikdy nehádala.
+- Dopad: Fáze 2C odstranila tuto obcházející vstupní cestu. Import vytváří pouze `PENDING_STOCK_CHECK` a výsledek materializuje výhradně důvěryhodný resolver přes `StockBranchDecisionService`.
 
 ## D-006: Legacy mapování je pouze explicitní a ověřené
 
@@ -153,3 +153,31 @@
 - Stav: přijato pro Fázi 2B
 - Rozhodnutí: Časová osa se skládá z neměnných `thread_events`; metadata se zveřejňují podle allowlistu. Polsko nevidí admin důvody, interní auditní hodnoty, volné interní poznámky ani zákaznické PII.
 - Dopad: Přidání nového metadata klíče jej samo nezveřejní. AUTOKLUBY může vidět širší provozní kontext a informaci, že událost má audit.
+
+## D-023: Oba typy repase používají společný transakční executor
+
+- Datum: 2026-11-12
+- Stav: přijato pro Fázi 2C
+- Rozhodnutí: `CUSTOM_REBUILD` i skladové větve používají `ThreadWorkflowEngine` pro zamykání, idempotenci, optimistic concurrency, event, audit a přepočet uzavření. Stavové automaty dodávají pouze doménová pravidla.
+- Dopad: Nevzniká druhá infrastruktura přechodů. Regresní testy celé zakázkové repase ověřují, že extrakce společného executor nezměnila chování Fáze 2A.
+
+## D-024: Neprůkazná skladová data nematerializují workflow
+
+- Datum: 2026-11-12
+- Stav: přijato pro Fázi 2C
+- Rozhodnutí: Skladové rozhodnutí přijímá portál pouze přes `ResolvesStockAvailability`. `UNKNOWN` a `STALE` nejsou rozhodnutí a ponechají `PENDING_STOCK_CHECK`. Výchozí implementace bezpečně vrací `UNKNOWN`; fixture resolver existuje pouze v testech.
+- Dopad: Portál se nepřipojuje k Pohodě, neodhaduje dostupnost z PrestaShopu a nevytváří předčasné polské oprávnění. Budoucí Pohoda bridge implementuje stejný kontrakt.
+
+## D-025: Skladové větve a fyzické role jsou databázově instancované
+
+- Datum: 2026-11-12
+- Stav: přijato pro Fázi 2C
+- Rozhodnutí: `process_threads.type_instance` a `items.role_instance` mají výchozí hodnotu 1 a tvoří s objednávkou a typem/rolí unikátní klíč.
+- Dopad: Současné singleton větve a kusy nelze vytvořit dvakrát ani při souběhu. Budoucí opakovatelné cykly mohou použít vyšší instanci bez oslabení ochrany stávajících dat.
+
+## D-026: Uzavření objednávky je odvozené ze všech povinných větví
+
+- Datum: 2026-11-12
+- Stav: přijato pro Fázi 2C
+- Rozhodnutí: `OrderCompletionService` nastaví `closed_at` pouze tehdy, když žádná procesní větev objednávky nemá `completed_at=NULL`.
+- Dopad: Dokončení zákaznického `STOCK_REQUEST` ani doplnění skladu nezavře objednávku s aktivním `CORE_RETURN`. Stejná služba zachovává dosavadní uzavření jednovětvého `CUSTOM_REBUILD`.

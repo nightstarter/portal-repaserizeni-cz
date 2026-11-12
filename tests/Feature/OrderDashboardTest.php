@@ -3,15 +3,20 @@
 namespace Tests\Feature;
 
 use App\Application\Orders\InitialProcessThreadFactory;
+use App\Application\Orders\StockAvailabilityDecision;
+use App\Application\Orders\StockBranchDecisionService;
+use App\Contracts\ResolvesStockAvailability;
 use App\Enums\OrganizationCode;
+use App\Enums\StockAvailabilityStatus;
 use App\Enums\UserRole;
 use App\Enums\WorkflowScenario;
-use App\Models\Item;
 use App\Models\Order;
 use App\Models\OrderCustomer;
 use App\Models\Organization;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\FixtureStockAvailabilityResolver;
 use Tests\TestCase;
 
 class OrderDashboardTest extends TestCase
@@ -38,8 +43,13 @@ class OrderDashboardTest extends TestCase
         $user = User::factory()->create(['organization_id' => $this->autokluby->id, 'role' => UserRole::AK_OPERATOR]);
         $order = Order::factory()->stockRebuild()->create(['order_no' => 'TEST-1001', 'vehicle' => 'VW Passat']);
         OrderCustomer::factory()->for($order)->create(['email' => 'customer@example.test']);
-        Item::factory()->count(2)->for($order)->create();
-        $this->threadFactory->createFor($order, WorkflowScenario::STOCK_DECIN);
+        $this->threadFactory->createFor($order, WorkflowScenario::PENDING_STOCK_CHECK);
+        app()->instance(ResolvesStockAvailability::class, new FixtureStockAvailabilityResolver(new StockAvailabilityDecision(
+            StockAvailabilityStatus::AVAILABLE_IN_AK,
+            'dashboard-fixture',
+            CarbonImmutable::parse('2026-11-12 12:00:00'),
+        )));
+        app(StockBranchDecisionService::class)->decide($order, 'dashboard-stock-decision');
 
         $this->actingAs($user)->get(route('dashboard'))
             ->assertOk()

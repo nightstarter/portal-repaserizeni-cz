@@ -52,21 +52,6 @@ class InitialProcessThreadFactoryTest extends TestCase
         ]);
     }
 
-    public function test_stock_order_in_decín_gets_three_independent_threads(): void
-    {
-        $order = Order::factory()->stockRebuild()->create();
-
-        $threads = $this->factory->createFor($order, WorkflowScenario::STOCK_DECIN);
-
-        self::assertEqualsCanonicalizing([
-            ProcessThreadType::STOCK_REQUEST,
-            ProcessThreadType::STOCK_REPLENISHMENT,
-            ProcessThreadType::CORE_RETURN,
-        ], $threads->pluck('type')->all());
-        self::assertSame(3, $order->processThreads()->count());
-        self::assertSame(3, $order->threadEvents()->count());
-    }
-
     public function test_stock_order_waits_for_pohoda_without_polish_thread(): void
     {
         $order = Order::factory()->stockRebuild()->create();
@@ -84,11 +69,11 @@ class InitialProcessThreadFactoryTest extends TestCase
     {
         $order = Order::factory()->stockRebuild()->create();
 
-        $this->factory->createFor($order, WorkflowScenario::STOCK_POLAND);
-        $this->factory->createFor($order, WorkflowScenario::STOCK_POLAND);
+        $this->factory->createFor($order, WorkflowScenario::PENDING_STOCK_CHECK);
+        $this->factory->createFor($order, WorkflowScenario::PENDING_STOCK_CHECK);
 
-        self::assertSame(2, $order->processThreads()->count());
-        self::assertSame(2, $order->threadEvents()->count());
+        self::assertSame(1, $order->processThreads()->count());
+        self::assertSame(1, $order->threadEvents()->count());
     }
 
     public function test_creating_custom_rebuild_domain_is_idempotent(): void

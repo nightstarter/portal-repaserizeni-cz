@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use App\Enums\CustomRebuildState;
+use App\Enums\OrganizationCode;
 use App\Enums\ProcessThreadType;
 use App\Enums\ResponsibleParty;
 use App\Enums\RoutingCode;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,7 +18,7 @@ class ProcessThread extends Model
     use HasFactory;
 
     protected $fillable = [
-        'order_id', 'type', 'state', 'responsible_party',
+        'order_id', 'type', 'type_instance', 'state', 'responsible_party',
         'responsible_organization_id', 'vendor_routing', 'warranty_cycle', 'eta',
         'completed_at', 'lock_version',
     ];
@@ -30,6 +32,7 @@ class ProcessThread extends Model
             'eta' => 'immutable_datetime',
             'completed_at' => 'immutable_datetime',
             'lock_version' => 'integer',
+            'type_instance' => 'integer',
         ];
     }
 
@@ -51,5 +54,28 @@ class ProcessThread extends Model
     public function events(): HasMany
     {
         return $this->hasMany(ThreadEvent::class);
+    }
+
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        if ($user->organization->code === OrganizationCode::AUTOKLUBY) {
+            return $query;
+        }
+
+        return $query
+            ->whereIn('type', [
+                ProcessThreadType::CUSTOM_REBUILD,
+                ProcessThreadType::STOCK_REQUEST,
+                ProcessThreadType::STOCK_REPLENISHMENT,
+            ])
+            ->where(function (Builder $access) use ($user): void {
+                $access
+                    ->where('responsible_organization_id', $user->organization_id)
+                    ->orWhereHas('events', fn (Builder $events) => $events->where(function (Builder $history) use ($user): void {
+                        $history
+                            ->where('responsible_organization_id', $user->organization_id)
+                            ->orWhere('actor_organization_id', $user->organization_id);
+                    }));
+            });
     }
 }

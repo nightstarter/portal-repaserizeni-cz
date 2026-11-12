@@ -31,15 +31,6 @@ class OrderPolicy
                 ->exists();
         }
 
-        return $order->processThreads()
-            ->where('responsible_organization_id', $user->organization_id)
-            ->exists()
-            || $order->threadEvents()
-                ->where(function ($history) use ($user): void {
-                    $history
-                        ->where('responsible_organization_id', $user->organization_id)
-                        ->orWhere('actor_organization_id', $user->organization_id);
-                })
-                ->exists();
+        return $order->processThreads()->visibleTo($user)->exists();
     }
 }

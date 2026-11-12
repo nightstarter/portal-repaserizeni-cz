@@ -9,7 +9,8 @@ Samostatný transakční portál AUTOKLUBY ↔ POLSKO. Procesní pravidla určuj
 - [ ] Fáze 2 – základní workflow repase
   - [x] Fáze 2A – doménový stavový automat `CUSTOM_REBUILD` (viz `docs/PHASE_2A.md` a `docs/STATE_MACHINES.md`)
   - [x] Fáze 2B – UI `CUSTOM_REBUILD`, časová osa a mobilní QR detail (viz `docs/PHASE_2B.md`)
-  - [ ] Fáze 2C – další workflow mimo zakázkovou repasi
+  - [x] Fáze 2C – skladová repase a paralelní větve (viz `docs/PHASE_2C.md`)
+  - [ ] Fáze 2D – UI skladového workflow
 - [ ] Fáze 3 – zásilky a hromadné skenování
 - [ ] Fáze 4 – vratky a finance
 - [ ] Fáze 5 – diskuse a notifikace
@@ -17,7 +18,7 @@ Samostatný transakční portál AUTOKLUBY ↔ POLSKO. Procesní pravidla určuj
 - [ ] Fáze 7 – Pohoda bridge a přecenění
 - [ ] Fáze 8 – produkční připravenost
 
-Legacy mapování bylo ověřeno proti živé databázi a přijato ve Fázi 1F. Fáze 2A přidala doménové command workflow zakázkové repase a Fáze 2B nad ním bezpečné dashboardy, detail, časovou osu a QR obsluhu pro AUTOKLUBY a POLSKO. Produkční import, cron ani scheduler nebyly aktivovány; `LEGACY_SHOP_IMPORT_ENABLED=false` zůstává bezpečná provozní i výchozí hodnota. Skladové workflow, zásilky, finance, dokumenty, diskuse, notifikace a Fáze 2C nebyly zahájeny.
+Legacy mapování bylo ověřeno proti živé databázi a přijato ve Fázi 1F. Fáze 2A–2B implementovaly doménu a UI zakázkové repase. Fáze 2C přidala doménové skladové rozhodnutí, `STOCK_REQUEST`, `STOCK_REPLENISHMENT`, čekající `CORE_RETURN`, oddělené fyzické kusy a společný transakční workflow executor. Produkční import, Pohoda bridge, cron ani scheduler nebyly aktivovány; `LEGACY_SHOP_IMPORT_ENABLED=false` zůstává bezpečná provozní i výchozí hodnota. UI skladového workflow, zásilky, finance, dokumenty, diskuse a notifikace budou řešeny až v dalších fázích.
 
 ## Instalace z čistého klonu
 

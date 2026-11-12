@@ -59,6 +59,47 @@ Formuláře předávají pouze stabilní kód akce, idempotency key, očekávano
 
 Polsko získá row-level přístup až historickým přiřazením konkrétní `CUSTOM_REBUILD` větve své organizaci. Tento serverový scope je společný pro dashboard, detail a QR. QR token je pouze náhodný vyhledávací identifikátor, nikoli oprávnění.
 
-## Mimo fáze 2A–2B
+## STOCK_REBUILD — fáze 2C
 
-Stavové automaty skladových větví, zásilek, vratek, financí, dokumentů, diskuse, notifikací, reklamací a výkupů zde nejsou implementované. Budou specifikovány až v příslušných dalších fázích.
+Import vytvoří právě jednu větev `STOCK_REQUEST/PENDING_STOCK_CHECK` odpovědnou AUTOKLUBY. Browser nemá akci, kterou by mohl tvrdit dostupnost v Děčíně. Důvěryhodná systémová služba přijímá pouze následující rozhodnutí:
+
+| Výsledek resolveru | Dopad |
+| --- | --- |
+| `UNKNOWN`, `STALE` | Bez změny; zůstává pouze `PENDING_STOCK_CHECK`, bez polské viditelnosti |
+| `AVAILABLE_IN_AK` | `STOCK_REQUEST/READY_AK_DISPATCH`, `STOCK_REPLENISHMENT/WAITING_PL_STOCK`, `CORE_RETURN/WAITING_CORE`; 3 odlišné kusy |
+| `NOT_AVAILABLE_IN_AK` | `STOCK_REQUEST/WAITING_PL_STOCK`, `CORE_RETURN/WAITING_CORE`; 2 odlišné kusy |
+
+Rozhodnutí, všechny nové větve, fyzické kusy, `thread_events` a audit vznikají v jedné transakci.
+
+### Polská skladová část
+
+Stejný automat platí pro `STOCK_REQUEST` i `STOCK_REPLENISHMENT`:
+
+| Výchozí stav | Akce | Organizace / role | Cílový stav | Nová odpovědnost | Podmínka |
+| --- | --- | --- | --- | --- | --- |
+| `WAITING_PL_STOCK` | `CONFIRM_PL_STOCK_AVAILABLE` | POLAND / `PL_MANAGER`, `PL_OPERATOR` | `PL_STOCK_AVAILABLE` | POLAND | — |
+| `WAITING_PL_STOCK` | `SET_PL_STOCK_ETA` | POLAND / `PL_MANAGER`, `PL_OPERATOR` | `PL_SECURING_STOCK` | POLAND | ETA povinné |
+| `PL_SECURING_STOCK` | `SET_PL_STOCK_ETA` | POLAND / `PL_MANAGER`, `PL_OPERATOR` | `PL_SECURING_STOCK` | POLAND | Nové ETA povinné |
+| `PL_SECURING_STOCK` | `CONFIRM_PL_STOCK_AVAILABLE` | POLAND / `PL_MANAGER`, `PL_OPERATOR` | `PL_STOCK_AVAILABLE` | POLAND | — |
+| `PL_STOCK_AVAILABLE` | `SEND_TO_AUTOKLUBY` | POLAND / `PL_MANAGER`, `PL_OPERATOR` | `SENT_TO_AK` | AUTOKLUBY | — |
+| `SENT_TO_AK` | `CONFIRM_AK_STOCK_RECEIPT` | AUTOKLUBY / `AK_ADMIN`, `AK_OPERATOR` | `RECEIVED_AK` | AUTOKLUBY | — |
+
+Akční kód `SEND_TO_AUTOKLUBY` je záměrně společný s `CUSTOM_REBUILD`; jednoznačný význam určuje typ zamčené větve a její stavový automat. U `STOCK_REPLENISHMENT` je `RECEIVED_AK` koncový stav. U `STOCK_REQUEST` pokračuje zákaznické předání.
+
+### Zákaznické předání `STOCK_REQUEST`
+
+| Výchozí stav | Akce | Organizace / role | Cílový stav | Dokončení |
+| --- | --- | --- | --- | --- |
+| `READY_AK_DISPATCH` nebo `RECEIVED_AK` | `SEND_TO_CUSTOMER` | AUTOKLUBY / `AK_ADMIN`, `AK_OPERATOR` | `SENT_CUSTOMER` | větev dokončena; pouze GLS |
+| `READY_AK_DISPATCH` nebo `RECEIVED_AK` | `MARK_READY_PICKUP` | AUTOKLUBY / `AK_ADMIN`, `AK_OPERATOR` | `READY_PICKUP` | ne; pouze osobní odběr |
+| `READY_PICKUP` | `CONFIRM_CUSTOMER_PICKUP` | AUTOKLUBY / `AK_ADMIN`, `AK_OPERATOR` | `PICKED_UP` | větev dokončena |
+
+### `CORE_RETURN` a uzavření objednávky
+
+Fáze 2C pouze zakládá `CORE_RETURN/WAITING_CORE` s odpovědností zákazníka. Nemá žádné běžné přechody; vratkový a finanční automat vznikne ve Fázi 4.
+
+Dokončení jedné větve neuzavírá objednávku. `orders.closed_at` přepočítává společná doménová služba až po dokončení všech povinných větví. Aktivní `CORE_RETURN`, `STOCK_REPLENISHMENT` nebo jiná povinná větev drží objednávku otevřenou.
+
+## Mimo fáze 2A–2C
+
+Detailní vratky, zásilky, tracking, finance, dokumenty, diskuse, notifikace, reklamace, výkupy a UI skladového workflow zde nejsou implementované. Budou specifikovány až v příslušných dalších fázích.

@@ -13,7 +13,7 @@ class Item extends Model
     use HasFactory;
 
     protected $fillable = [
-        'order_id', 'role', 'qr_token', 'current_location', 'inspection_result',
+        'order_id', 'role', 'role_instance', 'qr_token', 'current_location', 'inspection_result',
         'technical_attributes', 'note',
     ];
 
@@ -29,6 +29,7 @@ class Item extends Model
         return [
             'role' => ItemRole::class,
             'technical_attributes' => 'array',
+            'role_instance' => 'integer',
         ];
     }
 

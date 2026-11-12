@@ -74,15 +74,7 @@ class Order extends Model
             return $query;
         }
 
-        return $query->where(function (Builder $visible) use ($user): void {
-            $visible
-                ->whereHas('processThreads', fn (Builder $threads) => $threads->where('responsible_organization_id', $user->organization_id))
-                ->orWhereHas('threadEvents', fn (Builder $events) => $events->where(function (Builder $history) use ($user): void {
-                    $history
-                        ->where('responsible_organization_id', $user->organization_id)
-                        ->orWhere('actor_organization_id', $user->organization_id);
-                }));
-        });
+        return $query->whereHas('processThreads', fn (Builder $threads) => $threads->visibleTo($user));
     }
 
     public function scopeCustomRebuildVisibleTo(Builder $query, User $user): Builder

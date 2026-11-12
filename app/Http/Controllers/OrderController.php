@@ -6,6 +6,7 @@ use App\Application\Orders\CustomRebuildPresentation;
 use App\Application\Orders\CustomRebuildTimeline;
 use App\Enums\CustomRebuildAction;
 use App\Enums\CustomRebuildState;
+use App\Enums\ItemRole;
 use App\Enums\OrderType;
 use App\Enums\OrganizationCode;
 use App\Enums\ProcessThreadType;
@@ -26,8 +27,27 @@ class OrderController extends Controller
         $this->authorize('view', $order);
 
         if ($order->order_type !== OrderType::CUSTOM_REBUILD) {
-            $order->load(['items', 'processThreads.responsibleOrganization', 'processThreads.events']);
-            if ($request->user()->organization->code === OrganizationCode::AUTOKLUBY) {
+            $isAutokluby = $request->user()->organization->code === OrganizationCode::AUTOKLUBY;
+            $order->load([
+                'processThreads' => fn ($threads) => $threads
+                    ->visibleTo($request->user())
+                    ->with(['responsibleOrganization', 'events']),
+                'items' => function ($items) use ($order, $isAutokluby): void {
+                    if ($isAutokluby) {
+                        return;
+                    }
+
+                    $roles = [];
+                    if ($order->processThreads()->visibleTo(auth()->user())->where('type', ProcessThreadType::STOCK_REQUEST)->exists()) {
+                        $roles[] = ItemRole::STOCK_ITEM;
+                    }
+                    if ($order->processThreads()->visibleTo(auth()->user())->where('type', ProcessThreadType::STOCK_REPLENISHMENT)->exists()) {
+                        $roles[] = ItemRole::STOCK_REPLACEMENT;
+                    }
+                    $items->whereIn('role', $roles);
+                },
+            ]);
+            if ($isAutokluby) {
                 $order->load('customer');
             }
 
