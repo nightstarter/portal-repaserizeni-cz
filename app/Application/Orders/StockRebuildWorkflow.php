@@ -127,7 +127,7 @@ final class StockRebuildWorkflow
             return null;
         }
 
-        $validated = Validator::make($command->data, ['eta' => ['required', 'date']])->validate();
+        $validated = Validator::make($command->data, ['eta' => ['required', 'date', 'after:now']])->validate();
 
         return CarbonImmutable::parse($validated['eta']);
     }

@@ -2,6 +2,7 @@
 
 return [
     'accepted' => 'Pole :attribute musi zostać potwierdzone.',
+    'after' => 'Pole :attribute musi zawierać datę i czas w przyszłości.',
     'boolean' => 'Pole :attribute musi mieć wartość tak/nie.',
     'confirmed' => 'Potwierdzenie pola :attribute nie jest zgodne.',
     'current_password' => 'Podane aktualne hasło jest nieprawidłowe.',

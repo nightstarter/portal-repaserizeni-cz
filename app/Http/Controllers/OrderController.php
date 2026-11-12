@@ -4,12 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Application\Orders\CustomRebuildPresentation;
 use App\Application\Orders\CustomRebuildTimeline;
+use App\Application\Orders\StockRebuildPresentation;
+use App\Application\Orders\StockRebuildTimeline;
 use App\Enums\CustomRebuildAction;
 use App\Enums\CustomRebuildState;
 use App\Enums\ItemRole;
 use App\Enums\OrderType;
 use App\Enums\OrganizationCode;
 use App\Enums\ProcessThreadType;
+use App\Enums\StockRebuildAction;
 use App\Enums\UserRole;
 use App\Models\Order;
 use Illuminate\Contracts\View\View;
@@ -23,31 +26,60 @@ class OrderController extends Controller
         Order $order,
         CustomRebuildPresentation $presentation,
         CustomRebuildTimeline $timeline,
+        StockRebuildPresentation $stockPresentation,
+        StockRebuildTimeline $stockTimeline,
     ): View {
         $this->authorize('view', $order);
 
-        if ($order->order_type !== OrderType::CUSTOM_REBUILD) {
+        if ($order->order_type === OrderType::STOCK_REBUILD) {
             $isAutokluby = $request->user()->organization->code === OrganizationCode::AUTOKLUBY;
+            $user = $request->user();
             $order->load([
                 'processThreads' => fn ($threads) => $threads
-                    ->visibleTo($request->user())
-                    ->with(['responsibleOrganization', 'events']),
-                'items' => function ($items) use ($order, $isAutokluby): void {
+                    ->visibleTo($user)
+                    ->with(['responsibleOrganization', 'events.actorUser', 'events.actorOrganization']),
+                'items' => function ($items) use ($order, $isAutokluby, $user): void {
                     if ($isAutokluby) {
                         return;
                     }
 
                     $roles = [];
-                    if ($order->processThreads()->visibleTo(auth()->user())->where('type', ProcessThreadType::STOCK_REQUEST)->exists()) {
+                    if ($order->processThreads()->visibleTo($user)->where('type', ProcessThreadType::STOCK_REQUEST)->exists()) {
                         $roles[] = ItemRole::STOCK_ITEM;
                     }
-                    if ($order->processThreads()->visibleTo(auth()->user())->where('type', ProcessThreadType::STOCK_REPLENISHMENT)->exists()) {
+                    if ($order->processThreads()->visibleTo($user)->where('type', ProcessThreadType::STOCK_REPLENISHMENT)->exists()) {
                         $roles[] = ItemRole::STOCK_REPLACEMENT;
                     }
                     $items->whereIn('role', $roles);
                 },
             ]);
             if ($isAutokluby) {
+                $order->load('customer');
+            }
+
+            $branches = $order->processThreads->mapWithKeys(fn ($thread): array => [
+                $thread->id => $stockPresentation->branch($order, $thread, $user),
+            ]);
+            $actions = $branches->flatMap(fn (array $branch): array => $branch['allowed_actions'])->unique(
+                fn (StockRebuildAction $action): string => $action->value,
+            );
+
+            return view('orders.stock-show', [
+                'order' => $order,
+                'branches' => $branches,
+                'timeline' => $stockTimeline->for($order->processThreads, $user),
+                'stockInformation' => $stockPresentation->stockInformation($order),
+                'actionFormKeys' => $actions->mapWithKeys(
+                    fn (StockRebuildAction $action): array => [$action->value => (string) Str::uuid()],
+                )->all(),
+                'qrMode' => false,
+                'selectedItem' => null,
+            ]);
+        }
+
+        if ($order->order_type !== OrderType::CUSTOM_REBUILD) {
+            $order->load(['processThreads.responsibleOrganization', 'items']);
+            if ($request->user()->organization->code === OrganizationCode::AUTOKLUBY) {
                 $order->load('customer');
             }
 

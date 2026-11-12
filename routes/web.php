@@ -7,6 +7,7 @@ use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PasswordController;
 use App\Http\Controllers\QrItemController;
+use App\Http\Controllers\StockRebuildActionController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -21,6 +22,8 @@ Route::middleware(['auth', 'active', 'password.changed'])->group(function (): vo
     Route::get('/q/{randomToken}', QrItemController::class)->name('items.qr');
     Route::post('/orders/{order}/custom-rebuild/actions/{action}', CustomRebuildActionController::class)
         ->name('orders.custom-rebuild.actions');
+    Route::post('/orders/{order}/stock-rebuild/{threadType}/actions/{action}', StockRebuildActionController::class)
+        ->name('orders.stock-rebuild.actions');
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
     Route::put('/locale', [LocaleController::class, 'update'])->name('locale.update');
     Route::get('/password', [PasswordController::class, 'edit'])->name('password.edit');

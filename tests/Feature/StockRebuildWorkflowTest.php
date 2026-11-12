@@ -179,13 +179,15 @@ class StockRebuildWorkflowTest extends TestCase
             self::assertArrayHasKey('eta', $exception->errors());
         }
 
-        $this->execute($order, ProcessThreadType::STOCK_REQUEST, $this->plOperator, StockRebuildAction::SET_PL_STOCK_ETA, 'eta-one', ['eta' => '2026-12-01 10:00:00']);
+        $firstEta = now()->addDays(10)->setTime(10, 0);
+        $secondEta = now()->addDays(17)->setTime(12, 30);
+        $this->execute($order, ProcessThreadType::STOCK_REQUEST, $this->plOperator, StockRebuildAction::SET_PL_STOCK_ETA, 'eta-one', ['eta' => $firstEta->toDateTimeString()]);
         $thread = $this->thread($order, ProcessThreadType::STOCK_REQUEST);
         self::assertSame(StockRebuildState::PL_SECURING_STOCK->value, $thread->state);
-        self::assertSame('2026-12-01 10:00:00', $thread->eta?->format('Y-m-d H:i:s'));
+        self::assertSame($firstEta->format('Y-m-d H:i:s'), $thread->eta?->format('Y-m-d H:i:s'));
 
-        $this->execute($order, ProcessThreadType::STOCK_REQUEST, $this->plOperator, StockRebuildAction::SET_PL_STOCK_ETA, 'eta-two', ['eta' => '2026-12-08 12:30:00']);
-        self::assertSame('2026-12-08 12:30:00', $thread->fresh()->eta?->format('Y-m-d H:i:s'));
+        $this->execute($order, ProcessThreadType::STOCK_REQUEST, $this->plOperator, StockRebuildAction::SET_PL_STOCK_ETA, 'eta-two', ['eta' => $secondEta->toDateTimeString()]);
+        self::assertSame($secondEta->format('Y-m-d H:i:s'), $thread->fresh()->eta?->format('Y-m-d H:i:s'));
 
         $this->execute($order, ProcessThreadType::STOCK_REQUEST, $this->plOperator, StockRebuildAction::CONFIRM_PL_STOCK_AVAILABLE, 'stock-available');
         self::assertSame(StockRebuildState::PL_STOCK_AVAILABLE->value, $thread->fresh()->state);

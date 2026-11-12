@@ -181,3 +181,24 @@
 - Stav: přijato pro Fázi 2C
 - Rozhodnutí: `OrderCompletionService` nastaví `closed_at` pouze tehdy, když žádná procesní větev objednávky nemá `completed_at=NULL`.
 - Dopad: Dokončení zákaznického `STOCK_REQUEST` ani doplnění skladu nezavře objednávku s aktivním `CORE_RETURN`. Stejná služba zachovává dosavadní uzavření jednovětvého `CUSTOM_REBUILD`.
+
+## D-027: Dashboard skladové repase je projekce větví
+
+- Datum: 2026-11-12
+- Stav: přijato pro Fázi 2D
+- Rozhodnutí: Jeden skladový řádek reprezentuje jednu viditelnou procesní větev. Fronty jsou odvozené klasifikace stejné větve a nevytvářejí další globální status objednávky.
+- Dopad: Jedno `order_no` se může v přehledu objevit vícekrát s různou odpovědností, ETA a další akcí. Uživatel vidí skutečný paralelní průběh místo sloučeného stavu.
+
+## D-028: QR oprávnění se kontroluje také na úrovni fyzického kusu
+
+- Datum: 2026-11-12
+- Stav: přijato pro Fázi 2D
+- Rozhodnutí: Role fyzického kusu určuje související větev a QR controller vyžaduje, aby polský uživatel měl přístup právě k této větvi, nikoli jen k některé větvi stejné objednávky.
+- Dopad: Přístup k `STOCK_REPLENISHMENT` nezpřístupní QR zákaznického `STOCK_ITEM` ani čekajícího `CORE_RETURN`. Cizí a neplatný token zůstávají nerozlišitelné odpovědí 404.
+
+## D-029: ETA je platná pouze jako budoucí provozní termín
+
+- Datum: 2026-11-12
+- Stav: přijato pro Fázi 2D
+- Rozhodnutí: `SET_PL_STOCK_ETA` validuje datum a čas v doménové command službě a odmítá minulost. HTML `min` je pouze uživatelská pomůcka.
+- Dopad: Přímý HTTP požadavek nemůže obejít pravidlo a každá platná změna ETA vytváří novou událost a audit.

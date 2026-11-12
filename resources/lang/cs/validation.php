@@ -2,6 +2,7 @@
 
 return [
     'accepted' => 'Pole :attribute musí být potvrzeno.',
+    'after' => 'Pole :attribute musí být datum a čas v budoucnosti.',
     'boolean' => 'Pole :attribute musí být ano/ne.',
     'confirmed' => 'Potvrzení pole :attribute se neshoduje.',
     'current_password' => 'Zadané současné heslo není správné.',

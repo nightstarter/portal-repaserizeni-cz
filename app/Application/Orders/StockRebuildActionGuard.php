@@ -81,4 +81,22 @@ final class StockRebuildActionGuard
             throw new WorkflowConflictException(__('app.workflow_errors.invalid_stock_thread'));
         }
     }
+
+    /** @return array<int, StockRebuildAction> */
+    public function allowedActions(Order $order, ProcessThread $thread, User $actor): array
+    {
+        $allowed = [];
+
+        foreach ([...self::PL_ACTIONS, ...self::AK_ACTIONS] as $action) {
+            try {
+                $this->assertActorMayPerform($actor, $action);
+                $this->nextState($order, $thread, $action);
+                $allowed[] = $action;
+            } catch (AuthorizationException|WorkflowConflictException) {
+                // The write path uses these same checks; unavailable actions remain hidden.
+            }
+        }
+
+        return $allowed;
+    }
 }

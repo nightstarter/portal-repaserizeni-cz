@@ -35,11 +35,25 @@
         .mobile-hero { background:linear-gradient(145deg,var(--blue),#276c9e); color:white } .mobile-hero .badge { color:var(--ink); background:white }
         .split { display:grid; grid-template-columns:repeat(auto-fit,minmax(18rem,1fr)); gap:1rem }
         .table-scroll { overflow-x:auto }
+        .queue-nav { display:flex; gap:.5rem; overflow-x:auto; padding:.2rem 0 1rem; margin-bottom:.5rem }
+        .queue-link { flex:0 0 auto; color:var(--blue); background:white; border:1px solid #b7cee1; border-radius:999px; padding:.55rem .8rem; text-decoration:none }
+        .queue-link.active { color:white; background:var(--blue); border-color:var(--blue) }
+        .button.compact { padding:.45rem .65rem; margin:0; font-size:.88rem }
+        .branch-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(19rem,1fr)); gap:1rem; align-items:start }
+        .branch-card { border-top:4px solid #d79b19 } .branch-card.completed { border-top-color:var(--green) }
+        .branch-card header { display:flex; justify-content:space-between; gap:.75rem; align-items:start }
+        .branch-card h3 { margin:.1rem 0 .7rem } .branch-facts { margin:.7rem 0 }
+        .branch-facts div { display:grid; grid-template-columns:minmax(8rem,1fr) 1.4fr; gap:.6rem; padding:.4rem 0; border-bottom:1px solid #edf0f2 }
+        .branch-facts dt { color:#627180; font-weight:650 } .branch-facts dd { margin:0 }
+        .branch-actions { border:1px solid #b7cee1; border-radius:.4rem; padding:.85rem; background:#f8fbfe }
+        .branch-actions h3 { font-size:1rem } .notice { background:#fff4d6; border-left:4px solid #d79b19; border-radius:.25rem; padding:.8rem }
+        .closure-card ul { margin-bottom:0 }
         @media (max-width:700px) {
             main { margin:1rem auto; padding:0 .7rem } .card { padding:1rem }
             table.responsive thead { display:none } table.responsive tr { display:block; margin-bottom:1rem; border:1px solid #ddd; border-radius:.4rem; padding:.35rem }
             table.responsive td { display:block; border:0; padding:.35rem .45rem } table.responsive td::before { content:attr(data-label); display:block; color:#627180; font-size:.75rem; text-transform:uppercase; font-weight:700 }
             .mobile-primary { order:-1 } .primary-action button { min-height:3.8rem; font-size:1.1rem }
+            .branch-grid { grid-template-columns:1fr } .branch-card { scroll-margin-top:1rem }
         }
     </style>
 </head>

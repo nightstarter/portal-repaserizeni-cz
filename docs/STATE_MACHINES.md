@@ -78,8 +78,8 @@ Stejný automat platí pro `STOCK_REQUEST` i `STOCK_REPLENISHMENT`:
 | Výchozí stav | Akce | Organizace / role | Cílový stav | Nová odpovědnost | Podmínka |
 | --- | --- | --- | --- | --- | --- |
 | `WAITING_PL_STOCK` | `CONFIRM_PL_STOCK_AVAILABLE` | POLAND / `PL_MANAGER`, `PL_OPERATOR` | `PL_STOCK_AVAILABLE` | POLAND | — |
-| `WAITING_PL_STOCK` | `SET_PL_STOCK_ETA` | POLAND / `PL_MANAGER`, `PL_OPERATOR` | `PL_SECURING_STOCK` | POLAND | ETA povinné |
-| `PL_SECURING_STOCK` | `SET_PL_STOCK_ETA` | POLAND / `PL_MANAGER`, `PL_OPERATOR` | `PL_SECURING_STOCK` | POLAND | Nové ETA povinné |
+| `WAITING_PL_STOCK` | `SET_PL_STOCK_ETA` | POLAND / `PL_MANAGER`, `PL_OPERATOR` | `PL_SECURING_STOCK` | POLAND | Budoucí ETA povinné |
+| `PL_SECURING_STOCK` | `SET_PL_STOCK_ETA` | POLAND / `PL_MANAGER`, `PL_OPERATOR` | `PL_SECURING_STOCK` | POLAND | Nové budoucí ETA povinné |
 | `PL_SECURING_STOCK` | `CONFIRM_PL_STOCK_AVAILABLE` | POLAND / `PL_MANAGER`, `PL_OPERATOR` | `PL_STOCK_AVAILABLE` | POLAND | — |
 | `PL_STOCK_AVAILABLE` | `SEND_TO_AUTOKLUBY` | POLAND / `PL_MANAGER`, `PL_OPERATOR` | `SENT_TO_AK` | AUTOKLUBY | — |
 | `SENT_TO_AK` | `CONFIRM_AK_STOCK_RECEIPT` | AUTOKLUBY / `AK_ADMIN`, `AK_OPERATOR` | `RECEIVED_AK` | AUTOKLUBY | — |
@@ -100,6 +100,14 @@ Fáze 2C pouze zakládá `CORE_RETURN/WAITING_CORE` s odpovědností zákazníka
 
 Dokončení jedné větve neuzavírá objednávku. `orders.closed_at` přepočítává společná doménová služba až po dokončení všech povinných větví. Aktivní `CORE_RETURN`, `STOCK_REPLENISHMENT` nebo jiná povinná větev drží objednávku otevřenou.
 
-## Mimo fáze 2A–2C
+### UI projekce Fáze 2D
 
-Detailní vratky, zásilky, tracking, finance, dokumenty, diskuse, notifikace, reklamace, výkupy a UI skladového workflow zde nejsou implementované. Budou specifikovány až v příslušných dalších fázích.
+Dashboard a detail zobrazují jednotlivé `process_threads` jako samostatné řádky a karty. Fronty, „Kdo je na tahu“, ETA, dokončení a hlavní další akce jsou čtecí projekce větví; žádná z nich není další stav objednávky. Povolené akce odvozuje stejný `StockRebuildActionGuard`, který používá `StockRebuildWorkflow` při zápisu.
+
+HTTP formuláře posílají pouze akční kód, typ větve, idempotency key, očekávanou `lock_version` a data akce. Neexistuje browser route pro skladové rozhodnutí `AVAILABLE_IN_AK` / `NOT_AVAILABLE_IN_AK`. `PENDING_STOCK_CHECK` pouze zobrazuje stav čtecího resolveru a stáří snapshotu.
+
+Polský query scope zpřístupní jen historicky přidělený `STOCK_REQUEST` nebo `STOCK_REPLENISHMENT`. Stejná hranice platí pro detail a QR konkrétního kusu. Role kusu se mapuje právě na jednu větev: `STOCK_ITEM → STOCK_REQUEST`, `STOCK_REPLACEMENT → STOCK_REPLENISHMENT`, `CORE_RETURN → CORE_RETURN`.
+
+## Mimo fáze 2A–2D
+
+Detailní vratky, zásilky, tracking, finance, dokumenty, diskuse, notifikace, reklamace a výkupy zde nejsou implementované. Budou specifikovány až v příslušných dalších fázích.
