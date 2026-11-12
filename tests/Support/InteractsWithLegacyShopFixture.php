@@ -157,9 +157,12 @@ trait InteractsWithLegacyShopFixture
             if ($detail['product_id'] !== 91173 && ! empty($detail['product_reference'])) {
                 $classifications = (array) config('integrations.legacy_shop.mapping.product_classifications', []);
                 $classifications[$detail['product_reference']] = [
-                    'order_type' => 'CUSTOM_REBUILD', 'technical_type' => 'EPS',
-                    'routing' => 'ARGO', 'workflow_scenario' => 'CUSTOM_REBUILD',
+                    'technical_type' => 'EPS',
+                    'routing' => 'ARGO',
                 ];
+                if ((int) $order['schvaleno'] === 1) {
+                    $classifications[$detail['product_reference']]['workflow_scenario'] = 'STOCK_DECIN';
+                }
                 config()->set('integrations.legacy_shop.mapping.product_classifications', $classifications);
             }
         }

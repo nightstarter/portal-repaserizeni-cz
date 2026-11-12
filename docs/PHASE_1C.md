@@ -37,7 +37,7 @@ Položka s `product_id=91173` je záloha a před výběrem řízení se vždy vy
 
 Importér žádnou položku nevybírá odhadem.
 
-## Úhrada a workflow
+## Úhrada
 
 `total_paid` není samostatným důkazem úhrady. Kandidát porovnává:
 
@@ -49,7 +49,17 @@ Importér žádnou položku nevybírá odhadem.
 
 Aktuálně diagnostikovaný stav `2` je `Payment accepted`, ale produkční import zůstává blokován, dokud není celé mapování explicitně potvrzené. Nesoulad `valid` a posledního stavu vrací `PAYMENT_AMBIGUOUS`; částka sama tento výsledek nezmění.
 
-Hodnoty `schvaleno=1` a `schvaleno=2` se ukládají pouze do bezpečného business snapshotu a dry-run je hlásí jako `LEGACY_APPROVAL_REPORTED_NOT_MAPPED`. Neaktivují workflow.
+## Potvrzené mapování `schvaleno`
+
+Vlastník 2026-11-12 potvrdil podle produkčních `update.php`, `objednavky.php` a `offer_approval_service.php`:
+
+- `schvaleno=0` – objednávka dosud není zařazena; kandidát je odmítnut kódem `ORDER_NOT_CLASSIFIED`,
+- `schvaleno=1` – skladová repase; mapuje se na `OrderType::STOCK_REBUILD`,
+- `schvaleno=2` – zakázková repase; mapuje se na `OrderType::CUSTOM_REBUILD` a společný scénář `WorkflowScenario::CUSTOM_REBUILD`.
+
+Samotné `schvaleno=1` neurčuje, zda jde o `STOCK_DECIN`, nebo `STOCK_POLAND`. Skladový workflow proto stále vyžaduje další explicitně potvrzenou klasifikaci.
+
+`catalog_repair` je podtyp zakázkové repase „na vlastním řízení“ a stejně jako `custom_repair` používá `schvaleno=2`. Proto se hlavní zakázková větev vytvořit může, ale `repair_subtype` zůstává `null` a dry-run hlásí `REPAIR_SUBTYPE_UNCONFIRMED`, dokud nebude nalezen jednoznačný zdroj podtypu.
 
 ## Dopravci
 
@@ -62,14 +72,15 @@ Oba kódy se proto mapují na `PERSONAL_PICKUP`. Další dopravci musí být př
 
 ## Klasifikace produktu
 
-Technický typ, routing, typ zakázky a workflow se nedoplňují z názvu produktu, kategorie, `shop`, `schvaleno` ani jinou heuristikou. Budoucí ostrý import vyžaduje explicitní mapu podle přesného produktového kódu v `LEGACY_SHOP_PRODUCT_CLASSIFICATIONS_JSON` a současně `LEGACY_SHOP_MAPPING_VERIFIED=true`.
+Hlavní typ zakázky se mapuje z potvrzeného `schvaleno`. Technický typ a routing se nadále nedoplňují z názvu produktu, kategorie, `shop` ani jinou heuristikou. Skladový scénář Děčín/Polsko se rovněž nesmí odvodit ze `schvaleno` samotného. Budoucí ostrý import vyžaduje explicitní mapu zbývajících atributů podle přesného produktového kódu v `LEGACY_SHOP_PRODUCT_CLASSIFICATIONS_JSON` a současně `LEGACY_SHOP_MAPPING_VERIFIED=true`.
 
 Dokud mapa chybí, dry-run vrací:
 
-- `ORDER_TYPE_UNCONFIRMED`,
 - `TECHNICAL_TYPE_UNCONFIRMED`,
 - `ROUTING_UNCONFIRMED`,
-- `WORKFLOW_SCENARIO_UNCONFIRMED`.
+- u skladové repase `WORKFLOW_SCENARIO_UNCONFIRMED`.
+
+`ORDER_TYPE_UNCONFIRMED` zůstává pouze pro nezařazenou nebo neznámou hodnotu `schvaleno`.
 
 ## Kompatibilita starého MySQL
 
@@ -90,7 +101,7 @@ php artisan legacy-shop:import --dry-run --order-id=<source-id> --limit=1
 
 `--order-id` je při zápisovém běhu odmítnuto. Dry-run sestaví kanonického kandidáta, používá pouze anonymní otisk objednávky a vrací kódy validačních chyb a důkazních příznaků. Nezapisuje objednávku, integrační event ani checkpoint.
 
-Živý dry-run nad kandidátem `d0b1b3ae75b2` načetl jeden záznam a bezpečně skončil s nepotvrzenou klasifikací. Počty portálových objednávek, eventů a checkpointů zůstaly před i po běhu `0|0|0`.
+Opakovaný živý dry-run nad kandidátem `d0b1b3ae75b2` po potvrzení `schvaleno` již nehlásí neznámý hlavní typ. Kandidát má `schvaleno=1`, takže je rozpoznán jako skladová repase; bezpečně zůstávají `TECHNICAL_TYPE_UNCONFIRMED`, `ROUTING_UNCONFIRMED` a `WORKFLOW_SCENARIO_UNCONFIRMED`. Počty portálových objednávek, eventů a checkpointů zůstaly před i po běhu `0|0|0`.
 
 ## Testovací pokrytí
 
@@ -101,6 +112,9 @@ SQLite fixture modeluje normalizované tabulky PrestaShopu. Testy pokrývají:
 - vyloučení zálohové položky,
 - chybějící a vícenásobné řízení,
 - nejasnou platbu i při pokryté částce,
+- mapování `schvaleno=1` na skladovou a `schvaleno=2` na zakázkovou repasi,
+- odmítnutí `schvaleno=0`,
+- neznámý podtyp `custom_repair` versus `catalog_repair`,
 - idempotentní import při explicitně ověřené testovací klasifikaci,
 - nulové portálové zápisy při dry-runu,
 - introspekci starého MySQL pouze přes `SHOW` a `SELECT VERSION()`.

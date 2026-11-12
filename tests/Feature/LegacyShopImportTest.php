@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Contracts\CreatesInitialProcessThreads;
+use App\Enums\OrderType;
 use App\Enums\OrganizationCode;
 use App\Integrations\LegacyShop\LegacySchemaInspector;
 use App\Integrations\LegacyShop\LegacyShopConfigurationException;
@@ -105,7 +106,7 @@ class LegacyShopImportTest extends TestCase
         $this->assertDatabaseCount('orders', 0);
         $this->assertDatabaseCount('integration_events', 0);
         $this->assertDatabaseCount('integration_checkpoints', 0);
-        self::assertContains('LEGACY_APPROVAL_REPORTED_NOT_MAPPED', $result->validation[0]['warnings']);
+        self::assertContains('MAPPING_NOT_VERIFIED', $result->validation[0]['warnings']);
     }
 
     public function test_repeated_writing_import_is_idempotent(): void
@@ -121,6 +122,36 @@ class LegacyShopImportTest extends TestCase
         self::assertSame(1, Order::query()->count());
         self::assertSame('4101', Order::first()->order_no);
         self::assertSame('100', Order::first()->source_order_id);
+        self::assertSame(OrderType::STOCK_REBUILD, Order::first()->order_type);
+        self::assertSame(3, Order::first()->processThreads()->count());
+    }
+
+    public function test_approval_two_maps_custom_branch_but_keeps_repair_subtype_unknown(): void
+    {
+        $this->insertLegacyOrder(100, ['order' => ['schvaleno' => 2]]);
+
+        $candidate = app(PrestaShop14OrderReader::class)->readOne(100);
+        $result = app(LegacyShopImportService::class)->run(dryRun: false);
+
+        self::assertSame('CUSTOM_REBUILD', $candidate?->repairBranch);
+        self::assertNull($candidate?->repairSubtype);
+        self::assertContains('REPAIR_SUBTYPE_UNCONFIRMED', $candidate?->warnings ?? []);
+        self::assertSame(1, $result->imported);
+        self::assertSame(OrderType::CUSTOM_REBUILD, Order::first()->order_type);
+        self::assertNull(Order::first()->business_snapshot['legacy_repair_subtype']);
+        self::assertSame(1, Order::first()->processThreads()->count());
+    }
+
+    public function test_approval_zero_is_rejected_as_not_classified(): void
+    {
+        $this->insertLegacyOrder(100, ['order' => ['schvaleno' => 0]]);
+
+        $result = app(LegacyShopImportService::class)->run(dryRun: true, sourceOrderId: 100);
+
+        self::assertSame(1, $result->errors);
+        self::assertContains('ORDER_NOT_CLASSIFIED', $result->validation[0]['issues']);
+        self::assertContains('ORDER_TYPE_UNCONFIRMED', $result->validation[0]['issues']);
+        $this->assertDatabaseCount('orders', 0);
     }
 
     public function test_both_start_boundaries_are_enforced(): void

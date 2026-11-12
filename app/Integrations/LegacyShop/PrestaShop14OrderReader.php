@@ -125,8 +125,18 @@ class PrestaShop14OrderReader
         $warnings[] = $paypalStatus === null ? 'PAYMENT_EVIDENCE_PAYPAL_ABSENT' : 'PAYMENT_EVIDENCE_PAYPAL_PRESENT';
         $warnings[] = $totalCovered ? 'PAYMENT_TOTAL_COVERED_NOT_STANDALONE_PROOF' : 'PAYMENT_TOTAL_NOT_COVERED';
         $approval = $order->schvaleno === null ? null : (int) $order->schvaleno;
-        if (in_array($approval, [1, 2], true)) {
-            $warnings[] = 'LEGACY_APPROVAL_REPORTED_NOT_MAPPED';
+        $repairBranch = match ($approval) {
+            1 => 'STOCK_REBUILD',
+            2 => 'CUSTOM_REBUILD',
+            default => null,
+        };
+        if ($approval === 0) {
+            $issues[] = 'ORDER_NOT_CLASSIFIED';
+        } elseif ($repairBranch === null) {
+            $issues[] = 'LEGACY_APPROVAL_UNCONFIRMED';
+        }
+        if ($approval === 2) {
+            $warnings[] = 'REPAIR_SUBTYPE_UNCONFIRMED';
         }
 
         $name = $this->joinNonEmpty([$order->address_firstname, $order->address_lastname])
@@ -166,6 +176,8 @@ class PrestaShop14OrderReader
             hasCardPayment: $hasCardPayment,
             paypalPaymentStatus: $this->clean($paypalStatus),
             approvalValue: $approval,
+            repairBranch: $repairBranch,
+            repairSubtype: null,
             price: $this->clean($order->total_paid),
             deposit: $detail === null ? null : $this->clean($detail->deposit_amount),
             steeringItemCount: $details->count(),

@@ -25,10 +25,12 @@ class LegacyOrderMapper
             $missing[] = 'PRODUCT_CODE_MISSING';
         }
 
-        $orderType = $this->enum($classification, 'order_type', OrderType::class, $missing);
+        $orderType = $this->orderType($candidate, $missing);
         $technicalType = $this->enum($classification, 'technical_type', TechnicalType::class, $missing);
         $routing = $this->enum($classification, 'routing', RoutingCode::class, $missing);
-        $workflowScenario = $this->enum($classification, 'workflow_scenario', WorkflowScenario::class, $missing);
+        $workflowScenario = $candidate->repairBranch === OrderType::CUSTOM_REBUILD->value
+            ? WorkflowScenario::CUSTOM_REBUILD
+            : $this->enum($classification, 'workflow_scenario', WorkflowScenario::class, $missing);
 
         if ($missing !== []) {
             throw new IncompleteLegacyOrderException(array_values(array_unique($missing)));
@@ -53,6 +55,8 @@ class LegacyOrderMapper
             'latest_state_id' => $candidate->latestStateId,
             'valid' => $candidate->valid,
             'approval_value' => $candidate->approvalValue,
+            'repair_branch' => $candidate->repairBranch,
+            'repair_subtype' => $candidate->repairSubtype,
         ];
         $hash = hash('sha256', json_encode($raw, JSON_THROW_ON_ERROR));
 
@@ -76,6 +80,8 @@ class LegacyOrderMapper
                 'deposit' => $candidate->deposit,
                 'legacy_latest_state_id' => $candidate->latestStateId,
                 'legacy_approval_value' => $candidate->approvalValue,
+                'legacy_repair_branch' => $candidate->repairBranch,
+                'legacy_repair_subtype' => $candidate->repairSubtype,
             ],
             sourceCreatedAt: $sourceCreatedAt,
             payloadHash: $hash,
@@ -93,6 +99,17 @@ class LegacyOrderMapper
         $value = is_string($raw) ? $enum::tryFrom($raw) : null;
         if ($value === null) {
             $missing[] = strtoupper($key).'_UNCONFIRMED';
+        }
+
+        return $value;
+    }
+
+    /** @param array<int, string> $missing */
+    private function orderType(PrestaShop14OrderCandidate $candidate, array &$missing): ?OrderType
+    {
+        $value = $candidate->repairBranch === null ? null : OrderType::tryFrom($candidate->repairBranch);
+        if ($value === null) {
+            $missing[] = 'ORDER_TYPE_UNCONFIRMED';
         }
 
         return $value;

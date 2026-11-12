@@ -31,6 +31,8 @@ class PrestaShop14OrderCandidate
         public readonly bool $hasCardPayment,
         public readonly ?string $paypalPaymentStatus,
         public readonly ?int $approvalValue,
+        public readonly ?string $repairBranch,
+        public readonly ?string $repairSubtype,
         public readonly ?string $price,
         public readonly ?string $deposit,
         public readonly int $steeringItemCount,

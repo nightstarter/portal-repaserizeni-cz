@@ -47,10 +47,10 @@ Vestavěný příkaz `legacy-shop:diagnose` navázal spojení, ale nedokončil i
 | `product_code`, `product_name` | `ps_order_detail.product_reference`, `product_name` | dostupné; je nutné rozhodnout objednávky s více položkami |
 | `vin` | `ps_order_vin_check.vin`, záložně `ps_cart_vehicle_data.vin` | dostupné volitelně; priorita zdrojů není potvrzena |
 | `vehicle` | složenina polí `ps_cart_vehicle_data` | dostupné volitelně; formát není potvrzen |
-| `order_type` | `ps_repase_manual_orders.repair_type` | nalezeny bezpečné hodnoty `custom`, `stock`; cílové mapování vyžaduje potvrzení |
+| `order_type` | `ps_orders.schvaleno` | potvrzeno: `0` nezařazeno, `1` skladová repase, `2` zakázková repase |
 | `technical_type` | nenalezen jednoznačný zdroj | chybí |
 | `routing` | nenalezen jednoznačný zdroj | chybí; `ps_product.shop` označuje web, nikoli potvrzený routing |
-| `workflow_scenario` | nenalezen přímý zdroj | chybí; nesmí se odvodit jen z `repair_type` |
+| `workflow_scenario` | `schvaleno=2` potvrzuje společný scénář zakázkové repase | pro `schvaleno=1` stále chybí rozlišení `STOCK_DECIN` / `STOCK_POLAND` |
 | `customer_handover` | `ps_carrier.name` | nalezeny hodnoty `DPD`, `GLS`, `Česká pošta`, `Osobní odběr v Děčíně`; cílové hodnoty musí potvrdit vlastník |
 | `price` | `ps_orders.total_paid` nebo položkové hodnoty v `ps_order_detail` | nejasná obchodní definice a DPH |
 | `deposit` | `ps_product.deposit_amount` | sloupec existuje, ale musí se potvrdit, zda jde o historický snapshot objednávky |
@@ -80,8 +80,8 @@ Dry-run Fáze 1B byl podle tehdejšího bezpečnostního návrhu odmítnut hlá�
 - potvrdit legacy časové pásmo; mapper nyní parsuje zdrojové datum jako UTC,
 - určit zdroj a mapu `technical_type` → `WORM` / `HYDRAULIC` / `EPS`,
 - určit zdroj a mapu `routing` → `KRAFT` / `ARGO`,
-- určit zdroj a mapu `workflow_scenario` → `CUSTOM_REBUILD` / `STOCK_DECIN` / `STOCK_POLAND` / `BUYOUT`,
-- potvrdit `repair_type` `custom` / `stock` vůči cílovému `order_type`, včetně případného `BUYOUT`,
+- určit zdroj pro skladový `workflow_scenario` → `STOCK_DECIN` / `STOCK_POLAND`,
+- určit jednoznačný zdroj podtypu `custom_repair` / `catalog_repair`; do té doby zůstává `repair_subtype=null`,
 - potvrdit úplnou mapu dopravců/předání a cílové řetězce `customer_handover`,
 - potvrdit prioritu VIN a formát složeného vozidla,
 - rozhodnout zacházení s více položkami objednávky; současný cílový model očekává jeden produkt na objednávku,
@@ -102,10 +102,11 @@ Aktuální implementace již nepoužívá `LEGACY_SHOP_ORDERS_TABLE` ani mapu p�
 - Po vyloučení zálohy musí existovat právě jedna položka řízení.
 - Dopravci 19 a 20 byli živě potvrzeni jako `Osobní odběr v Děčíně` a mapují se na `PERSONAL_PICKUP`.
 - `total_paid` není samostatný důkaz úhrady; porovnává se `valid`, poslední stav, částkový příznak a dostupné platební záznamy.
-- `schvaleno` se pouze reportuje. Technický typ, routing a workflow zůstávají bez explicitní produktové klasifikace nepotvrzené.
+- `schvaleno=0` znamená nezařazenou objednávku, `1` skladovou repasi a `2` zakázkovou repasi. Zakázkový podtyp `custom_repair` / `catalog_repair` se z této hodnoty neurčuje.
+- Technický typ a routing zůstávají bez explicitní produktové klasifikace nepotvrzené; u skladové repase zůstává nepotvrzené také Děčín/Polsko.
 - Diagnostika používá `LegacySchemaInspector` s `SHOW TABLES`, `SHOW COLUMNS` a `SELECT VERSION()`; Laravel Schema introspekce není pro legacy MySQL použita.
 
-Živý dry-run přes `--dry-run --order-id=<id> --limit=1` sestavil kandidáta `d0b1b3ae75b2`, vrátil anonymizované nepotvrzené klasifikace a zachoval počty portálových objednávek, eventů a checkpointů na `0|0|0`.
+Živý dry-run přes `--dry-run --order-id=<id> --limit=1` sestavil kandidáta `d0b1b3ae75b2`. Po potvrzení `schvaleno=1` již rozpoznal skladovou repasi a vrátil jen zbývající anonymizované blokátory technického typu, routingu a skladového scénáře. Počty portálových objednávek, eventů a checkpointů zůstaly `0|0|0`.
 
 ## Pohoda
 
