@@ -22,4 +22,14 @@ class Organization extends Model
     {
         return $this->hasMany(User::class);
     }
+
+    public function responsibleProcessThreads(): HasMany
+    {
+        return $this->hasMany(ProcessThread::class, 'responsible_organization_id');
+    }
+
+    public function threadEvents(): HasMany
+    {
+        return $this->hasMany(ThreadEvent::class, 'actor_organization_id');
+    }
 }

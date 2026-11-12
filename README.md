@@ -5,7 +5,7 @@ Samostatný transakční portál AUTOKLUBY ↔ POLSKO. Procesní pravidla určuj
 ## Stav implementace
 
 - [x] Fáze 0 – bootstrap a bezpečný základ (viz `docs/PHASE_0.md`)
-- [ ] Fáze 1 – import a doménové jádro
+- [ ] Fáze 1 – import a doménové jádro (Fáze 1A: datové jádro a read-only UI dokončeno; viz `docs/PHASE_1A.md`)
 - [ ] Fáze 2 – základní workflow repase
 - [ ] Fáze 3 – zásilky a hromadné skenování
 - [ ] Fáze 4 – vratky a finance
@@ -14,7 +14,7 @@ Samostatný transakční portál AUTOKLUBY ↔ POLSKO. Procesní pravidla určuj
 - [ ] Fáze 7 – Pohoda bridge a přecenění
 - [ ] Fáze 8 – produkční připravenost
 
-Produkční import objednávek není ve Fázi 0 implementován a `LEGACY_SHOP_IMPORT_ENABLED=false` je bezpečná výchozí hodnota.
+Produkční import objednávek není ve Fázi 1A implementován a `LEGACY_SHOP_IMPORT_ENABLED=false` zůstává bezpečná výchozí hodnota.
 
 ## Instalace z čistého klonu
 

@@ -1,3 +1,37 @@
 <?php
 
-return ['dashboard' => 'Panel', 'users' => 'Użytkownicy', 'logout' => 'Wyloguj', 'phase_zero_ready' => 'Bezpieczna podstawa Fazy 0 została wdrożona. Procesy operacyjne zostaną wdrożone w kolejnych fazach.', 'organization' => 'Organizacja', 'role' => 'Rola', 'import_disabled' => 'Produkcyjny import zamówień jest wyłączony.', 'change_password' => 'Zmień hasło', 'current_password' => 'Aktualne hasło', 'new_password' => 'Nowe hasło', 'password_confirmation' => 'Potwierdzenie hasła', 'save' => 'Zapisz', 'password_changed' => 'Hasło zostało zmienione.', 'password_change_required' => 'Przed kontynuowaniem zmień hasło tymczasowe.', 'name' => 'Imię i nazwisko', 'active' => 'Aktywny', 'yes' => 'Tak', 'no' => 'Nie', 'create_user' => 'Utwórz użytkownika', 'language' => 'Język', 'user_created' => 'Użytkownik został utworzony.', 'user_updated' => 'Użytkownik został zaktualizowany.', 'invalid_role_organization' => 'Rola nie pasuje do organizacji.', 'cannot_deactivate_self' => 'Nie można dezaktywować własnego konta.'];
+return [
+    'dashboard' => 'Panel', 'users' => 'Użytkownicy', 'logout' => 'Wyloguj',
+    'phase_zero_ready' => 'Bezpieczna podstawa Fazy 0 została wdrożona. Procesy operacyjne zostaną wdrożone w kolejnych fazach.',
+    'phase_1a_ready' => 'Rdzeń danych Fazy 1A używa danych testowych. Import produkcyjny pozostaje wyłączony.',
+    'organization' => 'Organizacja', 'role' => 'Rola', 'import_disabled' => 'Produkcyjny import zamówień jest wyłączony.',
+    'change_password' => 'Zmień hasło', 'current_password' => 'Aktualne hasło', 'new_password' => 'Nowe hasło',
+    'password_confirmation' => 'Potwierdzenie hasła', 'save' => 'Zapisz', 'password_changed' => 'Hasło zostało zmienione.',
+    'password_change_required' => 'Przed kontynuowaniem zmień hasło tymczasowe.', 'name' => 'Imię i nazwisko', 'active' => 'Aktywny',
+    'yes' => 'Tak', 'no' => 'Nie', 'create_user' => 'Utwórz użytkownika', 'language' => 'Język',
+    'user_created' => 'Użytkownik został utworzony.', 'user_updated' => 'Użytkownik został zaktualizowany.',
+    'invalid_role_organization' => 'Rola nie pasuje do organizacji.', 'cannot_deactivate_self' => 'Nie można dezaktywować własnego konta.',
+    'orders' => 'Zlecenia', 'orders_total' => 'Wszystkie zlecenia', 'waiting_for_us' => 'Czeka na nas',
+    'waiting_for_poland' => 'Czeka na Polskę', 'integration_errors' => 'Błędy integracji', 'order_no' => 'Numer zlecenia',
+    'vehicle' => 'Pojazd', 'order_type' => 'Typ zlecenia', 'active_threads' => 'Gałęzie procesu',
+    'next_responsibility' => 'Kto wykonuje następny krok', 'no_orders' => 'Brak zleceń do wyświetlenia.',
+    'product_code' => 'Kod produktu', 'technical_type' => 'Typ techniczny', 'routing' => 'Routing',
+    'process_threads' => 'Gałęzie procesu', 'physical_items' => 'Fizyczne części', 'item_role' => 'Rola części',
+    'location' => 'Lokalizacja', 'no_items' => 'Zlecenie nie ma jeszcze fizycznych części.', 'customer' => 'Klient',
+    'read_only_phase_1a' => 'Ten podstawowy widok jest w Fazie 1A tylko do odczytu.',
+    'order_types' => ['CUSTOM_REBUILD' => 'Regeneracja indywidualna', 'STOCK_REBUILD' => 'Regeneracja magazynowa', 'BUYOUT' => 'Odkup'],
+    'thread_types' => [
+        'STOCK_REQUEST' => 'Realizacja dla klienta', 'CUSTOM_REBUILD' => 'Regeneracja indywidualna', 'CORE_RETURN' => 'Zwrot starej części',
+        'STOCK_REPLENISHMENT' => 'Uzupełnienie magazynu', 'WARRANTY' => 'Reklamacja', 'BUYOUT' => 'Odkup',
+    ],
+    'thread_states' => [
+        'WAITING_CUSTOMER_ITEM' => 'Oczekuje na przekładnię od klienta', 'READY_AK_DISPATCH' => 'Gotowe do wysyłki klientowi',
+        'WAITING_PL_STOCK' => 'Oczekuje na część magazynową z Polski', 'WAITING_CORE' => 'Oczekuje na zwrot starej przekładni',
+        'WAITING_AK_BUYOUT_REVIEW' => 'Oczekuje na ocenę odkupu',
+    ],
+    'responsible_parties' => ['CUSTOMER' => 'Klient', 'AUTOKLUBY' => 'AUTOKLUBY', 'POLAND' => 'Polska', 'SYSTEM' => 'System'],
+    'item_roles' => [
+        'STOCK_ITEM' => 'Część magazynowa', 'CUSTOMER_ITEM' => 'Część klienta', 'CORE_RETURN' => 'Zwrot',
+        'STOCK_REPLACEMENT' => 'Zastępcza część magazynowa', 'WARRANTY_ITEM' => 'Część reklamowana', 'BUYOUT_ITEM' => 'Odkup',
+    ],
+];

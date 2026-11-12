@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\UserRole;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -38,5 +39,15 @@ class User extends Authenticatable
     public function isAdministrator(): bool
     {
         return $this->active && $this->role->isAdministrator();
+    }
+
+    public function threadEvents(): HasMany
+    {
+        return $this->hasMany(ThreadEvent::class, 'actor_user_id');
+    }
+
+    public function auditLogs(): HasMany
+    {
+        return $this->hasMany(AuditLog::class, 'actor_user_id');
     }
 }

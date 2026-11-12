@@ -17,6 +17,12 @@
         .danger { background:var(--red) } .error { color:var(--red) } .status { background:#d9f2df; padding:.75rem; border-radius:.3rem }
         table { width:100%; border-collapse:collapse } th,td { padding:.6rem; border-bottom:1px solid #ddd; text-align:left; vertical-align:top }
         .inline { display:inline } .inline button { margin:0 } .narrow { max-width:30rem; margin:auto }
+        .kpis,.cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(12rem,1fr)); gap:1rem; margin-bottom:1rem }
+        .kpi strong { display:block; font-size:1.8rem } .muted { color:#627180 }
+        .badge { display:inline-block; border-radius:999px; background:#e4edf5; padding:.25rem .55rem; margin:.1rem; font-size:.86rem }
+        .badge.waiting { background:#fff0c2 } .badge.done { background:#d9f2df }
+        .meta { display:flex; gap:1rem; flex-wrap:wrap } .meta span { min-width:10rem }
+        @media (max-width:700px) { table.responsive thead { display:none } table.responsive tr { display:block; margin-bottom:1rem; border:1px solid #ddd; border-radius:.4rem } table.responsive td { display:block; border:0 } }
     </style>
 </head>
 <body>

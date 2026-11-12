@@ -3,6 +3,7 @@
 namespace App\Application\Audit;
 
 use App\Models\AuditLog;
+use App\Models\Order;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -26,6 +27,7 @@ final class AuditLogger
         return AuditLog::query()->create([
             'actor_user_id' => $actor?->id,
             'organization_id' => $actor?->organization_id,
+            'order_id' => $subject instanceof Order ? $subject->id : $subject?->getAttribute('order_id'),
             'subject_type' => $subject ? $subject::class : null,
             'subject_id' => $subject?->getKey(),
             'action' => $action,
