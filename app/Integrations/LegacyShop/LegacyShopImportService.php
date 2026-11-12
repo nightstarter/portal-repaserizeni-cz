@@ -270,16 +270,14 @@ class LegacyShopImportService
     /** @return array<string, mixed> */
     private function validationContext(PrestaShop14OrderCandidate $candidate): array
     {
-        $configuration = $this->mapper->productConfiguration($candidate->productCode);
-        $configured = $configuration !== null
-            && $configuration->verification_status?->value === 'VERIFIED'
-            && $configuration->technical_type !== null
-            && $configuration->default_routing !== null;
+        $classification = $this->mapper->productClassification($candidate);
+        $configured = $classification['technical_type'] !== null && $classification['routing'] !== null;
 
         return [
-            'technical_type' => $configured ? $configuration->technical_type->value : null,
-            'routing' => $configured ? $configuration->default_routing->value : null,
-            'product_configuration_status' => $configured ? 'VERIFIED' : 'PRODUCT_CONFIGURATION_REQUIRED',
+            'technical_type' => $classification['technical_type']?->value,
+            'routing' => $classification['routing']?->value,
+            'product_classification_source' => $classification['source'],
+            'product_configuration_status' => $configured ? 'RESOLVED' : 'PRODUCT_CONFIGURATION_REQUIRED',
             'configuration_queue' => $configured ? null : 'PRODUCT_CONFIGURATION_REQUIRED',
             'configuration_queue_owner' => $configured ? null : 'AUTOKLUBY',
             'stock_decision_status' => $candidate->repairBranch === 'STOCK_REBUILD'

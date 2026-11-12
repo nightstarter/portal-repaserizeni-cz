@@ -33,12 +33,16 @@ class LegacyImportResult
             'import_eligible' => $issues === [] && $blockingWarnings === [],
             'eligibility_reasons' => array_values(array_unique(array_merge($issues, $blockingWarnings))),
             'repair_type' => $candidate->repairBranch,
+            'repair_subtype' => $candidate->repairSubtype,
             'product_reference' => $candidate->productCode,
+            'raw_omacka' => $candidate->rawOmacka,
+            'handover_type' => $candidate->customerHandover,
             'latest_state' => $candidate->latestStateId === null ? null : [
                 'id' => $candidate->latestStateId,
                 'name' => $candidate->latestStateName,
             ],
             'payment_accepted' => $candidate->paymentAcceptedHistory,
+            'payment_eligibility' => $candidate->paymentAcceptedHistory ? 'ELIGIBLE' : 'NOT_ELIGIBLE',
             'issues' => array_values(array_unique($issues)),
             'warnings' => array_values(array_unique($warnings)),
         ], $context);

@@ -48,10 +48,11 @@ Vestavěný příkaz `legacy-shop:diagnose` navázal spojení, ale nedokončil i
 | `vin` | `ps_order_vin_check.vin`, záložně `ps_cart_vehicle_data.vin` | dostupné volitelně; priorita zdrojů není potvrzena |
 | `vehicle` | složenina polí `ps_cart_vehicle_data` | dostupné volitelně; formát není potvrzen |
 | `order_type` | `ps_orders.schvaleno` | potvrzeno: `0` čeká na klasifikaci bez erroru, `1` skladová repase, `2` zakázková repase; `NULL`/jiná hodnota je chyba |
-| `technical_type` | portálový registr podle přesné `product_reference` | legacy zdroj nenalezen; bez ověřené konfigurace `PRODUCT_CONFIGURATION_REQUIRED` |
-| `routing` | portálový registr podle přesné `product_reference` | legacy zdroj nenalezen; bez ověřené konfigurace `PRODUCT_CONFIGURATION_REQUIRED` |
+| `technical_type` | `ps_order_detail.product_id → ps_product.omacka` | potvrzená normalizace je popsána ve Fázi 1E; ověřený portálový registr může hodnotu opravit/override |
+| `routing` | výchozí hodnota podle technického typu | `WORM→KRAFT`, `HYDRAULIC/EPS→ARGO`; override konkrétní zakázky nemění produktové přednastavení |
 | `workflow_scenario` | `schvaleno=2` → `CUSTOM_REBUILD`; `schvaleno=1` → `PENDING_STOCK_CHECK` | Děčín/Polsko později určí výhradně Pohoda snapshot |
-| `customer_handover` | `ps_carrier.name` | nalezeny hodnoty `DPD`, `GLS`, `Česká pošta`, `Osobní odběr v Děčíně`; cílové hodnoty musí potvrdit vlastník |
+| `customer_handover` | `ps_orders.id_carrier` + diagnostický `ps_carrier.name` | potvrzeno jen `18→GLS`, `19/20→PERSONAL_PICKUP`; ostatní vrací `DELIVERY_MAPPING_REQUIRED` |
+| `repair_subtype` | schválený použitý `ps_offer_vin_token.offer_mode` přes přímé `id_order` | `schvaleno=2` standardně `custom_repair`; pouze explicitní `catalog_repair` přepne podtyp; konfliktní režimy jsou chyba |
 | `price` | `ps_orders.total_paid` nebo položkové hodnoty v `ps_order_detail` | nejasná obchodní definice a DPH |
 | `deposit` | `ps_product.deposit_amount` | sloupec existuje, ale musí se potvrdit, zda jde o historický snapshot objednávky |
 
@@ -77,10 +78,10 @@ Dry-run Fáze 1B byl podle tehdejšího bezpečnostního návrhu odmítnut hlá�
 
 - potvrdit obchodní význam `order_no` (`id_order` versus `invoice_number`),
 - potvrdit legacy časové pásmo; mapper nyní parsuje zdrojové datum jako UTC,
-- naplnit a provozně ověřit portálový produktový registr (`technical_type`, routing, potvrzující osoba a čas),
+- provozně doplnit registry override pouze pro produkty s neznámou/chybnou `omacka` nebo výjimkou routingu,
 - dodat aktuální Pohoda snapshot a potvrdit jeho kontrakt pro rozhodnutí skladového scénáře,
-- určit jednoznačný zdroj podtypu `custom_repair` / `catalog_repair`; do té doby zůstává `repair_subtype=null`,
-- potvrdit úplnou mapu dopravců/předání a cílové řetězce `customer_handover`,
+- potvrdit význam `Mech_el` a `Mech_bez`; do té doby vrací `PRODUCT_CONFIGURATION_REQUIRED`,
+- rozhodnout mapování historických carrier ID `13`, `15` a `16`; do té doby vrací `DELIVERY_MAPPING_REQUIRED`,
 - potvrdit prioritu VIN a formát složeného vozidla,
 - rozhodnout zacházení s více položkami objednávky; současný cílový model očekává jeden produkt na objednávku,
 - potvrdit význam ceny (objednávka versus položka, s/bez DPH) a zálohy,
@@ -98,12 +99,12 @@ Aktuální implementace již nepoužívá `LEGACY_SHOP_ORDERS_TABLE` ani mapu p�
 - `source_order_id = ps_orders.id_order`; `order_no = 4001 + id_order` pro Pohodu.
 - `product_id=91173` je záloha a nevstupuje do výběru řízení.
 - Po vyloučení zálohy musí existovat právě jedna položka řízení.
-- Dopravci 19 a 20 byli živě potvrzeni jako `Osobní odběr v Děčíně` a mapují se na `PERSONAL_PICKUP`.
+- Dopravci 19 a 20 mapují na `PERSONAL_PICKUP`, carrier 18 na `GLS`; ostatní ID se na GLS neodhadují.
 - Úhrada je potvrzena výhradně existencí stavu 2 kdykoli v `ps_order_history`; `total_paid`, `valid`, poslední stav a platební tabulky zůstávají jen v diagnostice.
-- `schvaleno=0` znamená čekání na klasifikaci ve starém `objednavky.php`; nevzniká portálová objednávka ani integrační error. `1` znamená skladovou a `2` zakázkovou repasi. `NULL` a jiné hodnoty jsou viditelná integrační chyba. Zakázkový podtyp `custom_repair` / `catalog_repair` se z této hodnoty neurčuje.
+- `schvaleno=0` znamená čekání na klasifikaci ve starém `objednavky.php`; nevzniká portálová objednávka ani integrační error. `1` znamená skladovou a `2` zakázkovou repasi. `NULL` a jiné hodnoty jsou viditelná integrační chyba. U dvojky je výchozí podtyp `custom_repair`; pouze schválený použitý offer token s `offer_mode=catalog_repair` nastaví `catalog_repair`.
 - Čekající zdrojová ID jsou bezpečně vedena v `integration_checkpoints.metadata.pending_source_order_ids` a při každém běhu znovu načtena, takže je vyšší checkpoint po změně `0 → 1/2` nepřeskočí.
 - Živý dry-run kandidáta `b88ed8beba19` se `schvaleno=0` vrátil `pending=1`, `errors=0` a zachoval portálové počty `0|0|0`.
-- Technický typ a routing poskytuje pouze ověřený produktový registr portálu. Skladová repase bez Pohoda snapshotu zůstává `PENDING_STOCK_CHECK` u AUTOKLUBY a nemá polskou větev.
+- Technický typ poskytuje `ps_product.omacka`, routing se určí potvrzenou výchozí mapou a ověřený produktový registr zůstává možností opravy/override. Skladová repase bez Pohoda snapshotu zůstává `PENDING_STOCK_CHECK` u AUTOKLUBY a nemá polskou větev.
 - Diagnostika používá `LegacySchemaInspector` s `SHOW TABLES`, `SHOW COLUMNS` a `SELECT VERSION()`; Laravel Schema introspekce není pro legacy MySQL použita.
 
 Živý dry-run přes `--dry-run --order-id=<id> --limit=1` sestavil kandidáta `d0b1b3ae75b2`. Po potvrzení `schvaleno=1` již rozpoznal skladovou repasi a vrátil jen zbývající anonymizované blokátory technického typu, routingu a skladového scénáře. Počty portálových objednávek, eventů a checkpointů zůstaly `0|0|0`.
@@ -111,6 +112,10 @@ Aktuální implementace již nepoužívá `LEGACY_SHOP_ORDERS_TABLE` ani mapu p�
 ### Fáze 1D – uzavřená integrační smlouva
 
 Aktuální smlouva, anonymizovaný produkční report, produktový registr, skladový stop stav a dva živé dry-runy jsou popsány v `docs/PHASE_1D.md`. Produkční `LEGACY_SHOP_IMPORT_ENABLED=false` a `LEGACY_SHOP_MAPPING_VERIFIED=false` zůstávají beze změny.
+
+### Fáze 1E – produkt a dokončení legacy klasifikace
+
+Normalizace `omacka`, výchozí routing, podtyp nabídky, přesná mapa dopravců, ověření referenčního zdrojového kódu a opakované živé dry-runy jsou popsány v `docs/PHASE_1E.md`.
 
 ## Pohoda
 

@@ -91,6 +91,20 @@ trait InteractsWithLegacyShopFixture
         $schema->create('ps_product', function (Blueprint $t): void {
             $t->unsignedInteger('id_product')->primary();
             $t->decimal('deposit_amount', 12, 2)->nullable();
+            $t->string('omacka')->nullable();
+        });
+        $schema->create('ps_order_vin_check', function (Blueprint $t): void {
+            $t->unsignedInteger('id_order_vin_check')->primary();
+            $t->unsignedInteger('id_order');
+            $t->unsignedInteger('id_offer')->nullable();
+        });
+        $schema->create('ps_offer_vin_token', function (Blueprint $t): void {
+            $t->unsignedInteger('id_offer_vin_token')->primary();
+            $t->unsignedInteger('id_offer');
+            $t->unsignedInteger('id_order');
+            $t->boolean('used')->default(true);
+            $t->string('vin_status')->default('approved');
+            $t->string('offer_mode')->nullable();
         });
         $schema->create('ps_payment_cc', function (Blueprint $t): void {
             $t->unsignedInteger('id_payment_cc')->primary();
@@ -103,9 +117,10 @@ trait InteractsWithLegacyShopFixture
 
         DB::connection('legacy_shop')->table('ps_country')->insert(['id_country' => 1, 'iso_code' => 'CZ']);
         DB::connection('legacy_shop')->table('ps_carrier')->insert([
+            ['id_carrier' => 18, 'name' => 'GLS'],
             ['id_carrier' => 19, 'name' => 'Osobní odběr v Děčíně'],
             ['id_carrier' => 20, 'name' => 'Osobní odběr v Děčíně'],
-            ['id_carrier' => 30, 'name' => 'GLS'],
+            ['id_carrier' => 30, 'name' => 'Unmapped carrier'],
         ]);
         DB::connection('legacy_shop')->table('ps_order_state_lang')->insert([
             ['id_order_state' => 2, 'id_lang' => 1, 'name' => 'Payment accepted'],
@@ -120,7 +135,7 @@ trait InteractsWithLegacyShopFixture
             'prestashop14' => [
                 'table_prefix' => 'ps_',
                 'paid_state_ids' => [2],
-                'carrier_handover_map' => ['19' => 'PERSONAL_PICKUP', '20' => 'PERSONAL_PICKUP', '30' => 'GLS'],
+                'carrier_handover_map' => ['18' => 'GLS', '19' => 'PERSONAL_PICKUP', '20' => 'PERSONAL_PICKUP'],
             ],
             'mapping' => ['verified' => true],
         ];
@@ -166,8 +181,13 @@ trait InteractsWithLegacyShopFixture
             $db->table('ps_product')->insertOrIgnore([
                 'id_product' => $detail['product_id'],
                 'deposit_amount' => $detail['product_id'] === 91173 ? null : '200.00',
+                'omacka' => $detail['product_id'] === 91173
+                    ? null
+                    : (array_key_exists('omacka', (array) ($overrides['product'] ?? []))
+                        ? $overrides['product']['omacka']
+                        : 'EPS'),
             ]);
-            if (($overrides['configure_product'] ?? true)
+            if (($overrides['configure_product'] ?? false)
                 && $detail['product_id'] !== 91173
                 && ! empty($detail['product_reference'])
             ) {
@@ -181,6 +201,23 @@ trait InteractsWithLegacyShopFixture
                     ],
                 );
             }
+        }
+
+        foreach ((array) ($overrides['offers'] ?? []) as $index => $offer) {
+            $offerId = (int) ($offer['id_offer'] ?? ($id * 100 + $index));
+            $db->table('ps_order_vin_check')->insert([
+                'id_order_vin_check' => $id * 100 + $index,
+                'id_order' => $id,
+                'id_offer' => $offerId,
+            ]);
+            $db->table('ps_offer_vin_token')->insert([
+                'id_offer_vin_token' => $id * 100 + $index,
+                'id_offer' => $offerId,
+                'id_order' => $id,
+                'used' => $offer['used'] ?? 1,
+                'vin_status' => $offer['vin_status'] ?? 'approved',
+                'offer_mode' => $offer['offer_mode'] ?? null,
+            ]);
         }
     }
 }

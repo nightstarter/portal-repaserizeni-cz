@@ -76,3 +76,24 @@
 - Stav: potvrzeno provozovatelem pro Fázi 1D
 - Rozhodnutí: PrestaShop nerozhoduje, zda je skladový kus v Děčíně nebo v Polsku. Autoritou je aktuální Pohoda snapshot.
 - Dopad: Bez snapshotu vzniká pouze AUTOKLUBY stav `PENDING_STOCK_CHECK`; polská větev se nevytvoří ani nezobrazí.
+
+## D-012: `ps_product.omacka` je autoritou technického typu
+
+- Datum: 2026-11-12
+- Stav: potvrzeno provozovatelem pro Fázi 1E; nahrazuje předpoklad D-010, že legacy zdroj neexistuje
+- Rozhodnutí: Po trimu a bez ohledu na velikost písmen se `EPS/EPS_H/EPS_EL` mapují na `EPS`, `HYD/HYD_H/HYD_V/HYD_HV` na `HYDRAULIC` a `snek` na `WORM`. `Mech_el`, `Mech_bez`, prázdná, `NULL` a jiné hodnoty zůstávají neznámé.
+- Dopad: Výchozí routing je `WORM→KRAFT`, `HYDRAULIC/EPS→ARGO`. Raw `omacka` zůstává v auditu. Ověřený produktový registr je explicitní oprava/override, nikoli povinný zdroj pro známé hodnoty.
+
+## D-013: Zakázkový podtyp používá pouze schválenou nabídku
+
+- Datum: 2026-11-12
+- Stav: potvrzeno referenčními `objednavky.php`, `update.php` a `offer_approval_service.php`
+- Rozhodnutí: `schvaleno=2` je standardně `custom_repair`. Pouze použitý a VIN-schválený záznam `ps_offer_vin_token` přímo spojený přes `id_order` s `offer_mode=catalog_repair` nastaví `catalog_repair`. Konfliktní kvalifikované režimy se nesmí řešit volbou „posledního“ záznamu.
+- Dopad: Konflikt vrací `REPAIR_SUBTYPE_AMBIGUOUS`; chybějící nabídka bezpečně ponechá standardní `custom_repair`.
+
+## D-014: Automatická mapa předání je uzavřený allowlist
+
+- Datum: 2026-11-12
+- Stav: potvrzeno provozovatelem a referenčním kódem pro Fázi 1E
+- Rozhodnutí: `18→GLS`, `19/20→PERSONAL_PICKUP`. Žádný jiný carrier se automaticky nemapuje na GLS.
+- Dopad: Ostatní hodnoty končí `DELIVERY_MAPPING_REQUIRED`. Legacy kód výslovně potvrzuje, že osobní odběr tvoří pouze 19/20; živý číselník potvrzuje název GLS pro 18.

@@ -114,7 +114,7 @@ class PrestaShop14OrderReader
             ->join($prefix.'product as product', 'product.id_product', '=', 'detail.product_id')
             ->where('detail.id_order', $order->id_order)
             ->where('detail.product_id', '<>', self::DEPOSIT_PRODUCT_ID)
-            ->select('detail.product_id', 'detail.product_reference', 'detail.product_name', 'product.deposit_amount')
+            ->select('detail.product_id', 'detail.product_reference', 'detail.product_name', 'product.deposit_amount', 'product.omacka')
             ->get();
         $issues = [];
         if ($details->count() === 0) {
@@ -147,7 +147,7 @@ class PrestaShop14OrderReader
         $handoverMap = (array) config('integrations.legacy_shop.prestashop14.carrier_handover_map', []);
         $handover = $carrierId === null ? null : ($handoverMap[(string) $carrierId] ?? null);
         if (! is_string($handover) || $handover === '') {
-            $issues[] = 'CUSTOMER_HANDOVER_UNCONFIRMED';
+            $issues[] = 'DELIVERY_MAPPING_REQUIRED';
             $handover = null;
         }
 
@@ -169,8 +169,13 @@ class PrestaShop14OrderReader
         } elseif ($repairBranch === null) {
             $issues[] = 'LEGACY_APPROVAL_UNCONFIRMED';
         }
+        $repairSubtype = null;
+        $rawOfferMode = null;
         if ($approval === 2) {
-            $warnings[] = 'REPAIR_SUBTYPE_UNCONFIRMED';
+            [$repairSubtype, $rawOfferMode, $subtypeIssue] = $this->repairSubtype((int) $order->id_order);
+            if ($subtypeIssue !== null) {
+                $issues[] = $subtypeIssue;
+            }
         }
 
         $name = $this->joinNonEmpty([$order->address_firstname, $order->address_lastname])
@@ -197,6 +202,7 @@ class PrestaShop14OrderReader
             ],
             productCode: $detail === null ? null : $this->clean($detail->product_reference),
             productName: $detail === null ? null : $this->clean($detail->product_name),
+            rawOmacka: $detail === null || $detail->omacka === null ? null : (string) $detail->omacka,
             vin: $vehicle === null ? null : $this->clean($vehicle->vin ?? null),
             vehicle: $vehicleText,
             carrierId: $carrierId,
@@ -213,7 +219,8 @@ class PrestaShop14OrderReader
             paypalPaymentStatus: $this->clean($paypalStatus),
             approvalValue: $approval,
             repairBranch: $repairBranch,
-            repairSubtype: null,
+            repairSubtype: $repairSubtype,
+            rawOfferMode: $rawOfferMode,
             price: $this->clean($order->total_paid),
             deposit: $detail === null ? null : $this->clean($detail->deposit_amount),
             steeringItemCount: $details->count(),
@@ -235,7 +242,8 @@ class PrestaShop14OrderReader
             'order_history' => ['id_order_history', 'id_order', 'id_order_state'],
             'order_state_lang' => ['id_order_state', 'id_lang', 'name'],
             'order_detail' => ['id_order', 'product_id', 'product_reference', 'product_name'],
-            'product' => ['id_product', 'deposit_amount'],
+            'product' => ['id_product', 'deposit_amount', 'omacka'],
+            'offer_vin_token' => ['id_order', 'used', 'vin_status', 'offer_mode'],
         ];
         foreach ($required as $suffix => $columns) {
             $table = $prefix.$suffix;
@@ -247,6 +255,37 @@ class PrestaShop14OrderReader
                 throw new LegacyShopConfigurationException("Required PrestaShop columns are missing from {$table}: ".implode(', ', $missing));
             }
         }
+    }
+
+    /** @return array{0: ?string, 1: ?string, 2: ?string} */
+    private function repairSubtype(int $sourceOrderId): array
+    {
+        $prefix = $this->prefix();
+        $rows = $this->connection->table($prefix.'offer_vin_token')
+            ->where('id_order', $sourceOrderId)
+            ->where('used', 1)
+            ->where('vin_status', 'approved')
+            ->select('offer_mode')
+            ->get();
+        $modes = $rows->pluck('offer_mode')
+            ->map(fn (mixed $value): ?string => $this->clean($value))
+            ->filter()
+            ->map(fn (string $value): string => strtolower($value))
+            ->unique()
+            ->values();
+
+        if ($modes->count() > 1) {
+            return [null, null, 'REPAIR_SUBTYPE_AMBIGUOUS'];
+        }
+
+        $mode = $modes->first();
+
+        return match ($mode) {
+            'catalog_repair' => ['catalog_repair', $mode, null],
+            null, 'custom_repair', 'standard' => ['custom_repair', $mode, null],
+            'stock_product' => [null, $mode, 'REPAIR_BRANCH_OFFER_MISMATCH'],
+            default => [null, $mode, 'REPAIR_SUBTYPE_UNCONFIRMED'],
+        };
     }
 
     private function prefix(): string

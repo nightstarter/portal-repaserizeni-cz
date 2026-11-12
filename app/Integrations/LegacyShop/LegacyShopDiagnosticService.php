@@ -25,7 +25,7 @@ class LegacyShopDiagnosticService
         }
 
         $prefix = (string) config('integrations.legacy_shop.prestashop14.table_prefix', 'ps_');
-        $required = ['orders', 'customer', 'address', 'country', 'carrier', 'cart_vehicle_data', 'order_history', 'order_state_lang', 'order_detail', 'product'];
+        $required = ['orders', 'customer', 'address', 'country', 'carrier', 'cart_vehicle_data', 'order_history', 'order_state_lang', 'order_detail', 'product', 'offer_vin_token'];
 
         return [
             'generated_at' => now()->utc()->toIso8601String(),

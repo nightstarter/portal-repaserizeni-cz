@@ -6,11 +6,13 @@ use App\Contracts\CreatesInitialProcessThreads;
 use App\Enums\OrderType;
 use App\Enums\OrganizationCode;
 use App\Enums\ResponsibleParty;
+use App\Enums\RoutingCode;
 use App\Integrations\LegacyShop\LegacySchemaInspector;
 use App\Integrations\LegacyShop\LegacyShopConfigurationException;
 use App\Integrations\LegacyShop\LegacyShopImportService;
 use App\Integrations\LegacyShop\PrestaShop14OrderReader;
 use App\Models\IntegrationCheckpoint;
+use App\Models\LegacyProductConfiguration;
 use App\Models\Order;
 use App\Models\Organization;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -116,7 +118,7 @@ class LegacyShopImportTest extends TestCase
 
     public function test_unknown_product_requires_visible_configuration(): void
     {
-        $this->insertLegacyOrder(100, ['configure_product' => false]);
+        $this->insertLegacyOrder(100, ['configure_product' => false, 'product' => ['omacka' => 'Mech_el']]);
 
         $result = app(LegacyShopImportService::class)->run(dryRun: true, sourceOrderId: 100);
 
@@ -131,7 +133,7 @@ class LegacyShopImportTest extends TestCase
 
     public function test_unknown_product_creates_visible_autokluby_integration_queue_on_writing_run(): void
     {
-        $this->insertLegacyOrder(100, ['configure_product' => false]);
+        $this->insertLegacyOrder(100, ['configure_product' => false, 'product' => ['omacka' => null]]);
 
         $result = app(LegacyShopImportService::class)->run(dryRun: false);
 
@@ -142,6 +144,43 @@ class LegacyShopImportTest extends TestCase
             'status' => 'FAILED',
         ]);
         $this->assertDatabaseCount('orders', 0);
+    }
+
+    public function test_verified_portal_product_registry_overrides_unknown_legacy_value(): void
+    {
+        $this->insertLegacyOrder(100, ['configure_product' => true, 'product' => ['omacka' => 'Mech_bez']]);
+
+        $result = app(LegacyShopImportService::class)->run(dryRun: true, sourceOrderId: 100);
+
+        self::assertSame(0, $result->errors);
+        self::assertSame('EPS', $result->validation[0]['technical_type']);
+        self::assertSame('ARGO', $result->validation[0]['routing']);
+        self::assertSame('PORTAL_PRODUCT_OVERRIDE', $result->validation[0]['product_classification_source']);
+    }
+
+    public function test_order_routing_override_does_not_change_product_default(): void
+    {
+        $this->insertLegacyOrder(100, ['configure_product' => true]);
+        app(LegacyShopImportService::class)->run(dryRun: false);
+
+        Order::query()->firstOrFail()->update(['routing' => RoutingCode::KRAFT]);
+
+        self::assertSame(RoutingCode::KRAFT, Order::query()->firstOrFail()->routing);
+        self::assertSame(RoutingCode::ARGO, LegacyProductConfiguration::query()->firstOrFail()->default_routing);
+    }
+
+    public function test_carrier_eighteen_maps_to_gls_and_unknown_carrier_is_rejected(): void
+    {
+        $this->insertLegacyOrder(100, ['order' => ['id_carrier' => 18]]);
+        $this->insertLegacyOrder(101, ['order' => ['id_carrier' => 30]]);
+
+        $gls = app(LegacyShopImportService::class)->run(dryRun: true, sourceOrderId: 100);
+        $unknown = app(LegacyShopImportService::class)->run(dryRun: true, sourceOrderId: 101);
+
+        self::assertSame('GLS', $gls->validation[0]['handover_type']);
+        self::assertNotContains('DELIVERY_MAPPING_REQUIRED', $gls->validation[0]['issues']);
+        self::assertNull($unknown->validation[0]['handover_type']);
+        self::assertContains('DELIVERY_MAPPING_REQUIRED', $unknown->validation[0]['issues']);
     }
 
     public function test_missing_pohoda_snapshot_keeps_stock_order_out_of_polish_branch(): void
@@ -222,7 +261,7 @@ class LegacyShopImportTest extends TestCase
         self::assertSame('PENDING_STOCK_CHECK', Order::first()->processThreads()->first()->state);
     }
 
-    public function test_approval_two_maps_custom_branch_but_keeps_repair_subtype_unknown(): void
+    public function test_approval_two_defaults_to_custom_repair_subtype(): void
     {
         $this->insertLegacyOrder(100, ['order' => ['schvaleno' => 2]]);
 
@@ -230,12 +269,76 @@ class LegacyShopImportTest extends TestCase
         $result = app(LegacyShopImportService::class)->run(dryRun: false);
 
         self::assertSame('CUSTOM_REBUILD', $candidate?->repairBranch);
-        self::assertNull($candidate?->repairSubtype);
-        self::assertContains('REPAIR_SUBTYPE_UNCONFIRMED', $candidate?->warnings ?? []);
+        self::assertSame('custom_repair', $candidate?->repairSubtype);
         self::assertSame(1, $result->imported);
         self::assertSame(OrderType::CUSTOM_REBUILD, Order::first()->order_type);
-        self::assertNull(Order::first()->business_snapshot['legacy_repair_subtype']);
+        self::assertSame('custom_repair', Order::first()->business_snapshot['legacy_repair_subtype']);
         self::assertSame(1, Order::first()->processThreads()->count());
+    }
+
+    public function test_explicit_catalog_offer_sets_catalog_repair_subtype(): void
+    {
+        $this->insertLegacyOrder(100, [
+            'order' => ['schvaleno' => 2],
+            'offers' => [['id_offer' => 500, 'offer_mode' => 'catalog_repair']],
+        ]);
+
+        $result = app(LegacyShopImportService::class)->run(dryRun: true, sourceOrderId: 100);
+
+        self::assertSame(0, $result->errors);
+        self::assertSame('catalog_repair', $result->validation[0]['repair_subtype']);
+    }
+
+    public function test_ambiguous_offer_link_is_visible_error(): void
+    {
+        $this->insertLegacyOrder(100, [
+            'order' => ['schvaleno' => 2],
+            'offers' => [
+                ['id_offer' => 500, 'offer_mode' => 'catalog_repair'],
+                ['id_offer' => 501, 'offer_mode' => 'custom_repair'],
+            ],
+        ]);
+
+        $result = app(LegacyShopImportService::class)->run(dryRun: true, sourceOrderId: 100);
+
+        self::assertSame(1, $result->errors);
+        self::assertContains('REPAIR_SUBTYPE_AMBIGUOUS', $result->validation[0]['issues']);
+        self::assertNull($result->validation[0]['repair_subtype']);
+    }
+
+    public function test_stock_offer_cannot_silently_become_custom_repair(): void
+    {
+        $this->insertLegacyOrder(100, [
+            'order' => ['schvaleno' => 2],
+            'offers' => [['id_offer' => 500, 'offer_mode' => 'stock_product']],
+        ]);
+
+        $result = app(LegacyShopImportService::class)->run(dryRun: true, sourceOrderId: 100);
+
+        self::assertContains('REPAIR_BRANCH_OFFER_MISMATCH', $result->validation[0]['issues']);
+        self::assertNull($result->validation[0]['repair_subtype']);
+    }
+
+    public function test_raw_omacka_is_preserved_in_business_snapshot(): void
+    {
+        $this->insertLegacyOrder(100, ['product' => ['omacka' => '  hyd_h  ']]);
+
+        app(LegacyShopImportService::class)->run(dryRun: false);
+
+        self::assertSame('  hyd_h  ', Order::query()->firstOrFail()->business_snapshot['legacy_product_omacka_raw']);
+        self::assertSame('HYDRAULIC', Order::query()->firstOrFail()->technical_type->value);
+        self::assertSame('ARGO', Order::query()->firstOrFail()->routing->value);
+    }
+
+    public function test_confirmed_handover_carriers_are_mapped_exactly(): void
+    {
+        $this->insertLegacyOrder(100, ['order' => ['id_carrier' => 18]]);
+        $this->insertLegacyOrder(101, ['order' => ['id_carrier' => 19]]);
+        $this->insertLegacyOrder(102, ['order' => ['id_carrier' => 20]]);
+
+        self::assertSame('GLS', app(PrestaShop14OrderReader::class)->readOne(100)?->customerHandover);
+        self::assertSame('PERSONAL_PICKUP', app(PrestaShop14OrderReader::class)->readOne(101)?->customerHandover);
+        self::assertSame('PERSONAL_PICKUP', app(PrestaShop14OrderReader::class)->readOne(102)?->customerHandover);
     }
 
     public function test_approval_zero_is_pending_without_portal_writes_in_dry_run(): void
