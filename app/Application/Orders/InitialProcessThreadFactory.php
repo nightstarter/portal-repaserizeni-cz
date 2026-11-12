@@ -3,11 +3,13 @@
 namespace App\Application\Orders;
 
 use App\Contracts\CreatesInitialProcessThreads;
+use App\Enums\ItemRole;
 use App\Enums\OrderType;
 use App\Enums\OrganizationCode;
 use App\Enums\ProcessThreadType;
 use App\Enums\ResponsibleParty;
 use App\Enums\WorkflowScenario;
+use App\Models\Item;
 use App\Models\Order;
 use App\Models\Organization;
 use App\Models\ProcessThread;
@@ -71,6 +73,13 @@ class InitialProcessThreadFactory implements CreatesInitialProcessThreads
                 $threads->push($thread);
             }
 
+            if ($scenario === WorkflowScenario::CUSTOM_REBUILD) {
+                Item::query()->firstOrCreate(
+                    ['order_id' => $lockedOrder->id, 'role' => ItemRole::CUSTOMER_ITEM],
+                    ['current_location' => ResponsibleParty::CUSTOMER->value],
+                );
+            }
+
             return $threads;
         });
     }
@@ -82,7 +91,7 @@ class InitialProcessThreadFactory implements CreatesInitialProcessThreads
     {
         return match ($scenario) {
             WorkflowScenario::CUSTOM_REBUILD => [
-                $this->definition(ProcessThreadType::CUSTOM_REBUILD, 'WAITING_CUSTOMER_ITEM', ResponsibleParty::CUSTOMER),
+                $this->definition(ProcessThreadType::CUSTOM_REBUILD, 'WAITING_CUSTOMER_ITEM', ResponsibleParty::AUTOKLUBY, OrganizationCode::AUTOKLUBY),
             ],
             WorkflowScenario::PENDING_STOCK_CHECK => [
                 $this->definition(ProcessThreadType::STOCK_REQUEST, 'PENDING_STOCK_CHECK', ResponsibleParty::AUTOKLUBY, OrganizationCode::AUTOKLUBY),

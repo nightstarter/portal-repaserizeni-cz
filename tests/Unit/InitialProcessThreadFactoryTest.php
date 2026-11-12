@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Application\Orders\InitialProcessThreadFactory;
+use App\Enums\ItemRole;
 use App\Enums\OrderType;
 use App\Enums\OrganizationCode;
 use App\Enums\ProcessThreadType;
@@ -37,7 +38,13 @@ class InitialProcessThreadFactoryTest extends TestCase
         self::assertCount(1, $threads);
         self::assertSame(ProcessThreadType::CUSTOM_REBUILD, $threads->first()->type);
         self::assertSame('WAITING_CUSTOMER_ITEM', $threads->first()->state);
-        self::assertSame(ResponsibleParty::CUSTOMER, $threads->first()->responsible_party);
+        self::assertSame(ResponsibleParty::AUTOKLUBY, $threads->first()->responsible_party);
+        self::assertSame($this->factoryOrganizationId(OrganizationCode::AUTOKLUBY), $threads->first()->responsible_organization_id);
+        self::assertSame(1, $order->items()->count());
+        $item = $order->items()->sole();
+        self::assertSame(ItemRole::CUSTOMER_ITEM, $item->role);
+        self::assertSame('CUSTOMER', $item->current_location);
+        self::assertSame(48, strlen($item->qr_token));
         $this->assertDatabaseHas('thread_events', [
             'process_thread_id' => $threads->first()->id,
             'action' => 'THREAD_CREATED',
@@ -82,5 +89,22 @@ class InitialProcessThreadFactoryTest extends TestCase
 
         self::assertSame(2, $order->processThreads()->count());
         self::assertSame(2, $order->threadEvents()->count());
+    }
+
+    public function test_creating_custom_rebuild_domain_is_idempotent(): void
+    {
+        $order = Order::factory()->create();
+
+        $this->factory->createFor($order, WorkflowScenario::CUSTOM_REBUILD);
+        $this->factory->createFor($order, WorkflowScenario::CUSTOM_REBUILD);
+
+        self::assertSame(1, $order->processThreads()->count());
+        self::assertSame(1, $order->items()->where('role', ItemRole::CUSTOMER_ITEM)->count());
+        self::assertSame(1, $order->threadEvents()->where('action', 'THREAD_CREATED')->count());
+    }
+
+    private function factoryOrganizationId(OrganizationCode $code): int
+    {
+        return Organization::query()->where('code', $code)->valueOrFail('id');
     }
 }

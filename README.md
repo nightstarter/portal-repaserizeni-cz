@@ -7,6 +7,8 @@ Samostatný transakční portál AUTOKLUBY ↔ POLSKO. Procesní pravidla určuj
 - [x] Fáze 0 – bootstrap a bezpečný základ (viz `docs/PHASE_0.md`)
 - [x] Fáze 1 – import a doménové jádro (Fáze 1A–1F dokončeny; závěrečná akceptace viz `docs/PHASE_1_ACCEPTANCE.md`)
 - [ ] Fáze 2 – základní workflow repase
+  - [x] Fáze 2A – doménový stavový automat `CUSTOM_REBUILD` (viz `docs/PHASE_2A.md` a `docs/STATE_MACHINES.md`)
+  - [ ] Fáze 2B – další workflow a uživatelské rozhraní
 - [ ] Fáze 3 – zásilky a hromadné skenování
 - [ ] Fáze 4 – vratky a finance
 - [ ] Fáze 5 – diskuse a notifikace
@@ -14,7 +16,7 @@ Samostatný transakční portál AUTOKLUBY ↔ POLSKO. Procesní pravidla určuj
 - [ ] Fáze 7 – Pohoda bridge a přecenění
 - [ ] Fáze 8 – produkční připravenost
 
-Legacy mapování bylo ověřeno proti živé databázi a přijato ve Fázi 1F. Produkční import, cron ani scheduler nebyly aktivovány; `LEGACY_SHOP_IMPORT_ENABLED=false` zůstává bezpečná provozní i výchozí hodnota. Fáze 2 nebyla zahájena.
+Legacy mapování bylo ověřeno proti živé databázi a přijato ve Fázi 1F. Fáze 2A přidala pouze doménové command workflow zakázkové repase. Produkční import, cron ani scheduler nebyly aktivovány; `LEGACY_SHOP_IMPORT_ENABLED=false` zůstává bezpečná provozní i výchozí hodnota. Skladové workflow, zásilky, finance, dokumenty, diskuse, notifikace a Fáze 2B nebyly zahájeny.
 
 ## Instalace z čistého klonu
 

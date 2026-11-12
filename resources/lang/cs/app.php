@@ -28,6 +28,10 @@ return [
         'WAITING_CUSTOMER_ITEM' => 'Čeká na řízení od zákazníka', 'READY_AK_DISPATCH' => 'Připraveno k expedici zákazníkovi',
         'WAITING_PL_STOCK' => 'Čeká na skladový kus z Polska', 'WAITING_CORE' => 'Čeká na vratný díl',
         'WAITING_AK_BUYOUT_REVIEW' => 'Čeká na posouzení výkupu',
+        'RECEIVED_AK' => 'Přijaté AUTOKLUBY', 'SENT_TO_PL' => 'Odeslané do Polska',
+        'RECEIVED_PL_REPAIR' => 'Přijaté k repasi', 'REPAIRED_PL' => 'Opravené v Polsku',
+        'SENT_TO_AK' => 'Odeslané k AUTOKLUBY', 'SENT_CUSTOMER' => 'Odeslané zákazníkovi',
+        'READY_PICKUP' => 'Připraveno k osobnímu odběru', 'PICKED_UP' => 'Převzato zákazníkem',
     ],
     'responsible_parties' => ['CUSTOMER' => 'Zákazník', 'AUTOKLUBY' => 'AUTOKLUBY', 'POLAND' => 'Polsko', 'SYSTEM' => 'Systém'],
     'item_roles' => [

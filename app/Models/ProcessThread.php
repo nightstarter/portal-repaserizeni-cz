@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\CustomRebuildState;
 use App\Enums\ProcessThreadType;
 use App\Enums\ResponsibleParty;
 use App\Enums\RoutingCode;
@@ -30,6 +31,11 @@ class ProcessThread extends Model
             'completed_at' => 'immutable_datetime',
             'lock_version' => 'integer',
         ];
+    }
+
+    public function customRebuildState(): CustomRebuildState
+    {
+        return CustomRebuildState::from($this->state);
     }
 
     public function order(): BelongsTo

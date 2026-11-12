@@ -15,6 +15,7 @@ class ThreadEvent extends Model
         'process_thread_id', 'order_id', 'action', 'from_state', 'to_state',
         'actor_type', 'actor_user_id', 'actor_organization_id', 'responsible_organization_id', 'reason',
         'metadata', 'performed_at',
+        'idempotency_key', 'request_hash',
     ];
 
     protected function casts(): array

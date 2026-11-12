@@ -36,4 +36,9 @@ class Item extends Model
     {
         return $this->belongsTo(Order::class);
     }
+
+    public function axialRodsSurchargeCzk(): int
+    {
+        return (bool) ($this->technical_attributes['axial_rods'] ?? false) ? 700 : 0;
+    }
 }

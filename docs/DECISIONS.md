@@ -97,3 +97,31 @@
 - Stav: potvrzeno provozovatelem a referenčním kódem pro Fázi 1E
 - Rozhodnutí: `18→GLS`, `19/20→PERSONAL_PICKUP`. Žádný jiný carrier se automaticky nemapuje na GLS.
 - Dopad: Ostatní hodnoty končí `DELIVERY_MAPPING_REQUIRED`. Legacy kód výslovně potvrzuje, že osobní odběr tvoří pouze 19/20; živý číselník potvrzuje název GLS pro 18.
+
+## D-015: `RECEIVED_AK` se rozlišuje vstupní událostí
+
+- Datum: 2026-11-12
+- Stav: přijato pro Fázi 2A
+- Rozhodnutí: První a zpětný příjem používají stejný stabilní stav `RECEIVED_AK`. Další povolenou akci určuje poslední neměnná událost (`CONFIRM_AK_RECEIPT` nebo `CONFIRM_AK_RETURN_RECEIPT`) uvnitř zamčené větve.
+- Dopad: Nevznikají alternativní veřejné kódy. Override přímo do `RECEIVED_AK` neodemkne běžný navazující krok a musí se dořešit dalším auditovaným override.
+
+## D-016: Čekající zakázkovou repasu obsluhuje AUTOKLUBY
+
+- Datum: 2026-11-12
+- Stav: přijato podle explicitního zadání Fáze 2A
+- Rozhodnutí: Počáteční `CUSTOM_REBUILD` větev ve stavu `WAITING_CUSTOMER_ITEM` má odpovědnost `AUTOKLUBY` a vazbu na organizaci AUTOKLUBY, protože její další systémovou akcí je příjem AUTOKLUBY. Fyzický kus přitom zůstává v lokalitě `CUSTOMER`.
+- Dopad: Jde o zpřesnění D-004 pro tuto konkrétní větev; nevytváří se falešná zákaznická organizace a akční fronta ukazuje na skutečného provozního vykonavatele.
+
+## D-017: 700 Kč za axiální táhla je odvozená nefinanční hodnota
+
+- Datum: 2026-11-12
+- Stav: přijato pro Fázi 2A
+- Rozhodnutí: Na fyzickém kusu se ukládá pouze příznak `axial_rods`. Doménová metoda z něj odvozuje 700 Kč nebo 0 Kč.
+- Dopad: Fáze 2A nevytváří finanční záznam, doklad ani platbu. Budoucí finanční workflow může hodnotu převzít explicitním doménovým krokem.
+
+## D-018: Idempotence workflow patří k události větve
+
+- Datum: 2026-11-12
+- Stav: přijato pro Fázi 2A
+- Rozhodnutí: Idempotency key je unikátní v rámci procesní větve a událost ukládá hash akce, aktéra, dat a očekávané verze.
+- Dopad: Shodné opakování vrací původní událost. Opětovné použití klíče pro jiný příkaz je konflikt; nevznikne druhá událost ani audit.

@@ -28,6 +28,10 @@ return [
         'WAITING_CUSTOMER_ITEM' => 'Oczekuje na przekładnię od klienta', 'READY_AK_DISPATCH' => 'Gotowe do wysyłki klientowi',
         'WAITING_PL_STOCK' => 'Oczekuje na część magazynową z Polski', 'WAITING_CORE' => 'Oczekuje na zwrot starej przekładni',
         'WAITING_AK_BUYOUT_REVIEW' => 'Oczekuje na ocenę odkupu',
+        'RECEIVED_AK' => 'Przyjęte w AUTOKLUBY', 'SENT_TO_PL' => 'Wysłane do Polski',
+        'RECEIVED_PL_REPAIR' => 'Przyjęte do regeneracji', 'REPAIRED_PL' => 'Zregenerowane w Polsce',
+        'SENT_TO_AK' => 'Wysłane do AUTOKLUBY', 'SENT_CUSTOMER' => 'Wysłane do klienta',
+        'READY_PICKUP' => 'Gotowe do odbioru osobistego', 'PICKED_UP' => 'Odebrane przez klienta',
     ],
     'responsible_parties' => ['CUSTOMER' => 'Klient', 'AUTOKLUBY' => 'AUTOKLUBY', 'POLAND' => 'Polska', 'SYSTEM' => 'System'],
     'item_roles' => [
