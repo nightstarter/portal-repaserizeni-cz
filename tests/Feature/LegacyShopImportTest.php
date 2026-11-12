@@ -229,6 +229,21 @@ class LegacyShopImportTest extends TestCase
         }
     }
 
+    public function test_repeated_dry_run_is_deterministic_and_write_free(): void
+    {
+        $this->insertLegacyOrder(100, ['order' => ['id_carrier' => 18], 'product' => ['omacka' => 'HYD']]);
+
+        $first = app(LegacyShopImportService::class)->run(dryRun: true, sourceOrderId: 100);
+        $second = app(LegacyShopImportService::class)->run(dryRun: true, sourceOrderId: 100);
+
+        self::assertSame($first->toArray(), $second->toArray());
+        self::assertSame($first->validation, $second->validation);
+        self::assertTrue($first->validation[0]['import_eligible']);
+        $this->assertDatabaseCount('orders', 0);
+        $this->assertDatabaseCount('integration_events', 0);
+        $this->assertDatabaseCount('integration_checkpoints', 0);
+    }
+
     public function test_dry_run_performs_no_portal_writes_even_when_mapping_is_unverified(): void
     {
         $this->insertLegacyOrder(100);
