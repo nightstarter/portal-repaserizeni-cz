@@ -28,6 +28,7 @@ use App\Models\ThreadEvent;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
@@ -184,6 +185,40 @@ class ShipmentWorkflowTest extends TestCase
         self::assertSame(CustomRebuildState::SENT_TO_PL->value, $secondThread->fresh()->state);
         self::assertCount(2, $event->metadata['items']);
         self::assertSame(2, $shipment->shipmentItems()->count());
+    }
+
+    public function test_hundred_item_batch_prevalidation_is_bounded_and_failure_writes_nothing(): void
+    {
+        $shipment = $this->createShipment(ShipmentDirection::AK_TO_PL, ShipmentCarrier::GLS, $this->akOperator, 'batch-100');
+        $threads = collect();
+
+        foreach (range(1, 100) as $index) {
+            [$item, $thread] = $this->customOutbound('batch-100-'.$index);
+            $this->add($shipment, $item, $thread, $this->akOperator, 'batch-100-add-'.$index);
+            $threads->push($thread);
+        }
+
+        $threads->last()->update(['state' => CustomRebuildState::WAITING_CUSTOMER_ITEM->value]);
+        $selects = [];
+        DB::listen(static function ($query) use (&$selects): void {
+            if (str_starts_with(strtolower(ltrim($query->sql)), 'select')) {
+                $selects[] = $query->sql;
+            }
+        });
+
+        try {
+            $this->send($shipment, $this->akOperator, 'GLS-BATCH-100', 'batch-100-send');
+            self::fail('Expected whole-batch validation failure.');
+        } catch (WorkflowConflictException) {
+            self::assertLessThanOrEqual(10, count($selects), 'Batch prevalidation must load orders and events in bounded queries.');
+            self::assertSame(ShipmentStatus::PREPARED, $shipment->fresh()->status);
+            self::assertSame(100, $shipment->shipmentItems()->count());
+            self::assertSame(99, $threads->filter(
+                fn (ProcessThread $thread): bool => $thread->fresh()->state === CustomRebuildState::RECEIVED_AK->value,
+            )->count());
+            self::assertFalse($shipment->events()->where('action', ShipmentAction::SEND_SHIPMENT)->exists());
+            self::assertSame(0, ThreadEvent::query()->where('action', CustomRebuildAction::SEND_TO_POLAND)->count());
+        }
     }
 
     public function test_duplicate_item_in_same_or_second_active_shipment_is_rejected(): void

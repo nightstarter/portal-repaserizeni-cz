@@ -379,7 +379,7 @@ final class ShipmentService
         if ($item->order_id !== $thread->order_id || $item->current_location !== $shipment->direction->sender()->value) {
             throw new WorkflowConflictException('Item, thread, location and shipment direction are inconsistent.');
         }
-        $order = $thread->order()->firstOrFail();
+        $order = $thread->order;
 
         if ($shipment->direction === ShipmentDirection::AK_TO_PL) {
             if ($thread->type !== ProcessThreadType::CUSTOM_REBUILD || $item->role !== ItemRole::CUSTOMER_ITEM) {
@@ -413,7 +413,7 @@ final class ShipmentService
         if ($item->order_id !== $thread->order_id) {
             throw new WorkflowConflictException('Item does not belong to the supplied process thread.');
         }
-        $order = $thread->order()->firstOrFail();
+        $order = $thread->order;
         if ($shipment->direction === ShipmentDirection::AK_TO_PL
             && $thread->type === ProcessThreadType::CUSTOM_REBUILD
             && $item->role === ItemRole::CUSTOMER_ITEM) {
@@ -494,7 +494,13 @@ final class ShipmentService
             return [];
         }
         $items = Item::query()->whereIn('id', $links->pluck('item_id'))->orderBy('id')->lockForUpdate()->get()->keyBy('id');
-        $threads = ProcessThread::query()->whereIn('id', $links->pluck('process_thread_id'))->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+        $threads = ProcessThread::query()
+            ->with(['order', 'events'])
+            ->whereIn('id', $links->pluck('process_thread_id'))
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('id');
 
         return $links->map(function (ShipmentItem $link) use ($items, $threads): array {
             $item = $items->get($link->item_id);
