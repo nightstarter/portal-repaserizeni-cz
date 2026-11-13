@@ -7,7 +7,7 @@
     <title>{{ config('app.name') }}</title>
     <style>
         :root { color-scheme: light; font-family: Inter,system-ui,sans-serif; --blue:#174b78; --blue-dark:#103653; --red:#a21d2b; --green:#187443; --ink:#1d2935; }
-        * { box-sizing:border-box } body { margin:0; background:#f3f5f7; color:#1d2935 }
+        * { box-sizing:border-box } [hidden] { display:none!important } body { margin:0; background:#f3f5f7; color:#1d2935 }
         nav { background:var(--blue); color:white; padding:.8rem 1.2rem; display:flex; align-items:center; gap:1rem; flex-wrap:wrap }
         nav a { color:white } nav .spacer { flex:1 }
         main { max-width:1100px; margin:2rem auto; padding:0 1rem }
@@ -15,6 +15,7 @@
         label { display:block; font-weight:600; margin-top:.8rem } input, select, textarea { width:100%; padding:.7rem; border:1px solid #adb5bd; border-radius:.35rem; font:inherit; background:white }
         textarea { min-height:6rem; resize:vertical } input[type=checkbox],input[type=radio] { width:auto } button,.button { display:inline-block; background:var(--blue); color:white; border:0; border-radius:.35rem; padding:.7rem 1rem; cursor:pointer; text-decoration:none; margin-top:1rem; font-weight:650 }
         button:hover,.button:hover { background:var(--blue-dark) }
+        button:disabled,.button[aria-disabled=true] { opacity:.55; cursor:not-allowed }
         .danger { background:var(--red) } .error { color:var(--red) } .status { background:#d9f2df; padding:.75rem; border-radius:.3rem }
         table { width:100%; border-collapse:collapse } th,td { padding:.6rem; border-bottom:1px solid #ddd; text-align:left; vertical-align:top }
         .inline { display:inline } .inline button { margin:0 } .narrow { max-width:30rem; margin:auto }

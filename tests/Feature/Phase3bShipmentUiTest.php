@@ -60,26 +60,35 @@ class Phase3bShipmentUiTest extends TestCase
             ->assertOk()->assertSee($shipment->public_number)->assertDontSee('Skanowanie części');
     }
 
-    public function test_qr_url_adds_item_and_stale_duplicate_is_reported_safely(): void
+    public function test_qr_url_and_token_add_items_and_duplicate_is_reported_safely(): void
     {
-        [$item] = $this->outboundItem();
+        [$urlItem] = $this->outboundItem();
+        [$tokenItem] = $this->outboundItem();
         $shipment = $this->shipment();
-        $payload = [
-            'qr_token' => route('items.qr', $item->qr_token),
-            'idempotency_key' => 'ui-add',
+        $this->actingAs($this->akOperator)->post(route('shipments.items.store', $shipment), [
+            'qr_token' => route('items.qr', $urlItem->qr_token),
+            'idempotency_key' => 'ui-add-url',
             'expected_lock_version' => 0,
-        ];
-        $this->actingAs($this->akOperator)->post(route('shipments.items.store', $shipment), $payload)
+        ])
             ->assertRedirect(route('shipments.show', $shipment));
-        $this->assertDatabaseHas('shipment_items', ['shipment_id' => $shipment->id, 'item_id' => $item->id]);
-        self::assertSame($shipment->id, $item->fresh()->active_shipment_id);
-
-        $this->actingAs($this->akOperator)->post(route('shipments.items.store', $shipment), array_merge($payload, [
-            'idempotency_key' => 'ui-add-duplicate',
+        $this->actingAs($this->akOperator)->post(route('shipments.items.store', $shipment), [
+            'qr_token' => $tokenItem->qr_token,
+            'idempotency_key' => 'ui-add-token',
             'expected_lock_version' => 1,
-        ]))
+        ])->assertRedirect(route('shipments.show', $shipment));
+
+        $this->assertDatabaseHas('shipment_items', ['shipment_id' => $shipment->id, 'item_id' => $urlItem->id]);
+        $this->assertDatabaseHas('shipment_items', ['shipment_id' => $shipment->id, 'item_id' => $tokenItem->id]);
+        self::assertSame($shipment->id, $urlItem->fresh()->active_shipment_id);
+        self::assertSame($shipment->id, $tokenItem->fresh()->active_shipment_id);
+
+        $this->actingAs($this->akOperator)->post(route('shipments.items.store', $shipment), [
+            'qr_token' => $tokenItem->qr_token,
+            'idempotency_key' => 'ui-add-duplicate',
+            'expected_lock_version' => 2,
+        ])
             ->assertSessionHasErrors('shipment');
-        self::assertSame(1, $shipment->shipmentItems()->count());
+        self::assertSame(2, $shipment->shipmentItems()->count());
     }
 
     public function test_http_send_and_receive_advance_whole_workflow(): void
@@ -205,13 +214,72 @@ class Phase3bShipmentUiTest extends TestCase
         $this->actingAs($this->akOperator)->get(route('shipments.show', $shipment))
             ->assertSee('Zásilka')
             ->assertSee('AUTOKLUBY → Polsko')
-            ->assertSee('BarcodeDetector', false)
-            ->assertSee("facingMode:'environment'", false);
+            ->assertSee('id="qr_token"', false)
+            ->assertSee('name="qr_token"', false)
+            ->assertSee('id="start-camera"', false)
+            ->assertSee('disabled aria-disabled="true" data-camera-initialized="false"', false)
+            ->assertSee('/vendor/jsqr/1.4.0/jsQR.js', false)
+            ->assertSee('/js/shipment-camera.js', false)
+            ->assertSee('data-camera-starting="Spouštím kameru…"', false)
+            ->assertSee('data-camera-denied="Přístup ke kameře byl zamítnut.', false)
+            ->assertSee('data-camera-not-found=', false)
+            ->assertSee('data-camera-in-use=', false)
+            ->assertSee('data-camera-not-supported=', false)
+            ->assertSee('data-camera-policy-blocked=', false)
+            ->assertSee('data-camera-start-failed=', false)
+            ->assertSee('data-qr-format-not-supported=', false)
+            ->assertSee('data-qr-not-found=', false)
+            ->assertDontSee('cdn.jsdelivr.net', false)
+            ->assertDontSee('unpkg.com', false)
+            ->assertDontSee('cdnjs.cloudflare.com', false);
+
+        $polishShipment = Shipment::query()->create([
+            'direction' => ShipmentDirection::PL_TO_AK,
+            'carrier' => ShipmentCarrier::DPD,
+            'status' => ShipmentStatus::PREPARED,
+            'sender_organization_id' => $this->poland->id,
+            'recipient_organization_id' => $this->autokluby->id,
+            'created_by' => $this->plOperator->id,
+        ]);
+        $this->actingAs($this->plOperator)->get(route('shipments.show', $polishShipment))
+            ->assertOk()
+            ->assertSee('data-camera-starting="Uruchamiam kamerę…"', false)
+            ->assertSee('data-camera-denied="Dostęp do kamery został odrzucony.', false);
+
         $this->actingAs($this->plOperator)->get(route('shipments.create'))
             ->assertOk()
             ->assertSee('Nowa przesyłka')
             ->assertSee('Polska → AUTOKLUBY')
             ->assertSee('DPD');
+    }
+
+    public function test_camera_uses_local_pinned_fallback_and_complete_lifecycle(): void
+    {
+        $cameraAsset = public_path('js/shipment-camera.js');
+        $fallbackAsset = public_path('vendor/jsqr/1.4.0/jsQR.js');
+        $packageFile = public_path('vendor/jsqr/1.4.0/package.json');
+        $licenseFile = public_path('vendor/jsqr/1.4.0/LICENSE');
+
+        self::assertFileExists($cameraAsset);
+        self::assertFileExists($fallbackAsset);
+        self::assertFileExists($packageFile);
+        self::assertFileExists($licenseFile);
+        self::assertSame('bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859', hash_file('sha256', $fallbackAsset));
+        $package = json_decode(file_get_contents($packageFile), true, flags: JSON_THROW_ON_ERROR);
+        self::assertSame('1.4.0', $package['version']);
+        self::assertSame('Apache-2.0', $package['license']);
+
+        $script = file_get_contents($cameraAsset);
+        self::assertIsString($script);
+        self::assertStringContainsString("facingMode: {ideal: 'environment'}", $script);
+        self::assertStringContainsString('video: true', $script);
+        self::assertStringContainsString("formats.indexOf('qr_code')", $script);
+        self::assertStringContainsString("decoder = 'jsqr'", $script);
+        self::assertStringContainsString('track.stop()', $script);
+        self::assertStringContainsString("window.addEventListener('pagehide', stopTracks)", $script);
+        self::assertStringContainsString('form.requestSubmit()', $script);
+        self::assertStringNotContainsString('https://', $script);
+        self::assertStringNotContainsString('http://', $script);
     }
 
     private function shipment(): Shipment

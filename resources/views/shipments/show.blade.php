@@ -20,7 +20,24 @@
 </section>
 
 @if($canEdit)
-<section class="card action-card">
+<section
+    id="shipment-qr-scanner"
+    class="card action-card"
+    data-camera-starting="{{ __('app.camera_starting') }}"
+    data-camera-available="{{ __('app.camera_available') }}"
+    data-camera-ready="{{ __('app.camera_ready') }}"
+    data-camera-stopped="{{ __('app.camera_stopped') }}"
+    data-camera-denied="{{ __('app.camera_denied') }}"
+    data-camera-not-found="{{ __('app.camera_not_found') }}"
+    data-camera-in-use="{{ __('app.camera_in_use') }}"
+    data-camera-not-supported="{{ __('app.camera_not_supported') }}"
+    data-camera-policy-blocked="{{ __('app.camera_policy_blocked') }}"
+    data-camera-start-failed="{{ __('app.camera_start_failed') }}"
+    data-qr-format-not-supported="{{ __('app.qr_format_not_supported') }}"
+    data-qr-not-found="{{ __('app.qr_not_found') }}"
+    data-qr-found="{{ __('app.qr_found') }}"
+    data-camera-label="{{ __('app.camera_label') }}"
+>
     <h2>{{ __('app.scan_items') }}</h2>
     <p>{{ __('app.scan_items_intro') }}</p>
     <form id="shipment-scan-form" method="post" action="{{ route('shipments.items.store', $shipment) }}">@csrf
@@ -29,10 +46,16 @@
         <label for="qr_token">{{ __('app.qr_code') }}</label>
         <input id="qr_token" name="qr_token" required autofocus autocomplete="off" placeholder="{{ __('app.scan_or_enter_qr') }}">
         <button>{{ __('app.add_to_shipment') }}</button>
-        <button type="button" id="start-camera" class="button compact">{{ __('app.start_camera') }}</button>
+        <button type="button" id="start-camera" class="button compact" disabled aria-disabled="true" data-camera-initialized="false">{{ __('app.start_camera') }}</button>
+        <button type="button" id="stop-camera" class="button compact danger" hidden>{{ __('app.stop_camera') }}</button>
     </form>
-    <video id="qr-camera" hidden playsinline style="width:100%;margin-top:1rem;border-radius:.4rem"></video>
-    <p id="camera-message" class="muted"></p>
+    <div id="camera-selector" hidden>
+        <label for="camera-device">{{ __('app.select_camera') }}</label>
+        <select id="camera-device"></select>
+    </div>
+    <video id="qr-camera" hidden playsinline muted style="width:100%;margin-top:1rem;border-radius:.4rem"></video>
+    <canvas id="qr-camera-canvas" hidden></canvas>
+    <p id="camera-message" class="muted" role="status" aria-live="polite">{{ __('app.camera_not_initialized') }}</p>
 </section>
 @endif
 </div>
@@ -75,34 +98,7 @@
 </ol></section>
 
 @if($canEdit)
-<script>
-(() => {
-    const button = document.getElementById('start-camera');
-    const video = document.getElementById('qr-camera');
-    const input = document.getElementById('qr_token');
-    const form = document.getElementById('shipment-scan-form');
-    const message = document.getElementById('camera-message');
-    if (!button || !('BarcodeDetector' in window) || !navigator.mediaDevices?.getUserMedia) {
-        if (button) button.hidden = true;
-        return;
-    }
-    button.addEventListener('click', async () => {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-            video.srcObject = stream; video.hidden = false; await video.play();
-            const detector = new BarcodeDetector({formats:['qr_code']});
-            const scan = async () => {
-                const codes = await detector.detect(video);
-                if (codes.length) {
-                    stream.getTracks().forEach(track => track.stop());
-                    input.value = codes[0].rawValue; form.submit(); return;
-                }
-                requestAnimationFrame(scan);
-            };
-            scan();
-        } catch (error) { message.textContent = @json(__('app.camera_unavailable')); }
-    });
-})();
-</script>
+<script defer src="{{ asset('vendor/jsqr/1.4.0/jsQR.js') }}"></script>
+<script defer src="{{ asset('js/shipment-camera.js') }}"></script>
 @endif
 @endsection

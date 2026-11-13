@@ -72,7 +72,7 @@ Protože nejsou pending migrace, plánovaný deployment Fáze 3 je pouze kódov�
 6. Provést níže uvedený browser smoke test s explicitně schválenými testovacími zakázkami; nevytvářet anonymní produkční demo data.
 7. Ověřit logy, eventy, audity, aktivní rezervace a absenci duplicit. Import, Pohoda bridge a scheduler ponechat vypnuté.
 
-## Ruční browser smoke-test checklist
+## Ruční browser smoke-test checklist po 3D
 
 Provést na desktopu a znovu v mobilním viewportu **390 × 844 px**:
 
@@ -81,16 +81,28 @@ Provést na desktopu a znovu v mobilním viewportu **390 × 844 px**:
 3. Otevřít připravenou zásilku. Ověřit číslo, směr, carrier, `PREPARED`, sender/recipient a prázdnou historii/položky podle skutečnosti.
 4. Naskenovat platný QR hardwarovou čtečkou jako token a druhý jako celou URL `/q/{token}`. Řádky se musí objevit jednou se správnou zakázkou, rolí, větví a lokalitou.
 5. Zkusit neplatný, směrově cizí a duplicitní QR. Zobrazí se bezpečná chyba a počet položek ani verze se částečně nezmění.
-6. Pokud browser podporuje `BarcodeDetector`, povolit zadní kameru, naskenovat QR a ověřit automatický submit. Při zamítnutí kamery ověřit čitelnou fallback zprávu a funkční ruční vstup.
-7. Odebrat item v `PREPARED`, znovu jej přidat a ověřit historii. Po odeslání už ovládání přidat/odebrat nesmí být dostupné.
-8. U GLS/DPD nechat tracking prázdný a ověřit serverovou chybu; poté zadat unikátní tracking a odeslat. Dvojklik/opakovaný submit nesmí vytvořit druhou akci.
-9. Jako sender zkusit přímý příjmový POST a jako recipient přímý odesílací POST; oba musí být odmítnuty bez změny DB.
-10. Přihlásit se jako příjemce. Detail musí ukazovat `SENT`, carrier, direction, tracking pouze u GLS/DPD, všechny položky a historii. Potvrdit doručení a ověřit `DELIVERED`.
-11. Na jiné zásilce nahlásit `TRANSPORT_ERROR`: prázdný popis odmítnout, neprázdný přijmout; rezervace zůstane. Poté potvrdit doručení.
-12. Přepnout CZ/PL a ověřit navigaci, stavy, akce, validace a historii. Jako `READ_ONLY` ověřit detail bez mutačních tlačítek a přímý POST `403`.
-13. V mobilním viewportu ověřit, že tabulky přecházejí na karty, horizontálně nepřetékají, hlavní tlačítka jsou dosažitelná a kamera/formulář nejsou překryté navigací.
+6. Před kliknutím ověřit, že tlačítko kamery nezačne zdánlivě aktivní dříve, než se zobrazí stav dostupnosti. Po kliknutí se musí okamžitě zobrazit „Spouštím kameru…“.
+7. Ověřit video preview, tlačítko Vypnout kameru a při více `videoinput` zařízeních select pro přepnutí. Po přepnutí, stopu, skenu i opuštění stránky musí zhasnout indikátor webkamery.
+8. Naskenovat QR a ověřit automatický submit stejným formulářem jako ruční vstup. Po pěti sekundách bez QR musí vzniknout viditelná lokalizovaná zpráva, skenování však pokračuje.
+9. Odebrat item v `PREPARED`, znovu jej přidat a ověřit historii. Po odeslání už ovládání přidat/odebrat nesmí být dostupné.
+10. U GLS/DPD nechat tracking prázdný a ověřit serverovou chybu; poté zadat unikátní tracking a odeslat. Dvojklik/opakovaný submit nesmí vytvořit druhou akci.
+11. Jako sender zkusit přímý příjmový POST a jako recipient přímý odesílací POST; oba musí být odmítnuty bez změny DB.
+12. Přihlásit se jako příjemce. Detail musí ukazovat `SENT`, carrier, direction, tracking pouze u GLS/DPD, všechny položky a historii. Potvrdit doručení a ověřit `DELIVERED`.
+13. Na jiné zásilce nahlásit `TRANSPORT_ERROR`: prázdný popis odmítnout, neprázdný přijmout; rezervace zůstane. Poté potvrdit doručení.
+14. Přepnout CZ/PL a ověřit navigaci, stavy, akce, validace a historii. Jako `READ_ONLY` ověřit detail bez mutačních tlačítek a přímý POST `403`.
+15. V mobilním viewportu ověřit, že tabulky přecházejí na karty, horizontálně nepřetékají, hlavní tlačítka jsou dosažitelná a kamera/formulář nejsou překryté navigací.
 
-Browser smoke test je k datu 3C **neprovedený**, protože relace neměla browser/computer-use nástroj.
+### Povinná platformní matice kamery
+
+- **Chrome a Edge na PC s webkamerou:** ověřit běžnou přední USB/interní kameru, fallback z environment preference na `video=true`, preview, sken a stop; při dvou kamerách přepnutí selectem.
+- **PC bez kamery:** zobrazit lokalizované „kamera nenalezena“, tlačítko nenechat aktivní a zachovat plně funkční ruční token i URL.
+- **Android Chrome se zadní kamerou:** ověřit preferenci zadní kamery, portrait/landscape, změnu kamery, QR za horšího světla a zhasnutí indikátoru po skenu.
+- **iPhone Safari:** ověřit HTTPS permission prompt, inline preview bez fullscreen přehrávače, jsQR fallback, sken, stop a návrat ze stránky.
+- **Zamítnuté a následně povolené oprávnění:** první pokus musí zobrazit konkrétní chybu; po povolení v site settings musí další kliknutí spustit kameru bez reloadu, případně browserem vyžadovaný reload jasně zaznamenat.
+- **Kamera používaná jinou aplikací:** zobrazit konkrétní stav, po uvolnění kamery umožnit retry.
+- **Policy/nezabezpečený kontext:** na ne-HTTPS nebo při zablokované camera policy ponechat tlačítko disabled a zobrazit konkrétní vysvětlení.
+
+Browser smoke test je po 3D stále **neprovedený** a Fáze 3 není browserově přijata, protože relace neměla browser/computer-use nástroj ani lokální browser.
 
 ## Rollback plán
 
@@ -100,5 +112,5 @@ Browser smoke test je k datu 3C **neprovedený**, protože relace neměla browse
 - Pokud již existují shipmenty, před rollbackem ověřit aktivní `items.active_shipment_id`, rozpracované `PREPARED/SENT/TRANSPORT_ERROR`, eventy a audity. Nedokončené zásilky nejprve provozně uzavřít nebo zmrazit.
 - Destruktivní `down()` 000006 připadá v úvahu jen jako zvlášť schválená obnova celého releasu po záloze a potvrzení, že historii lze odstranit. Preferovaná oprava schématu je vždy nová dopředná migrace.
 
-3C produkční databázi nezměnila a tento plán sám neopravňuje žádnou produkční migraci.
+3C ani hotfix 3D produkční databázi nezměnily a tento plán sám neopravňuje žádnou produkční migraci.
 

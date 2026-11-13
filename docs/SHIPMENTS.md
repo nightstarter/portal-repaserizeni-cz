@@ -74,3 +74,11 @@ Každý command vytváří neměnný `shipment_event` a audit. Odeslání a př�
 Celý rozsah domény a UI přijímá `docs/PHASE_3_ACCEPTANCE.md`; produkční schéma a deployment plán audituje `docs/PHASE_3_DEPLOYMENT.md`. Předvalidace shipment dávky načítá položky, itemy, thready, objednávky a události po množinách. Regresní test 100 položek drží validační čtení pod 10 SELECTy a při chybě poslední položky ověřuje nulový částečný zápis.
 
 UI nikdy nepoužívá skryté tlačítko jako autorizační hranici. Server znovu kontroluje organizaci, roli, stav, verzi a idempotenci. U `SVOZ_AUTOKLUBY` se tracking nezobrazuje ani neodesílá; doména jej navíc vždy odmítne.
+
+## QR kamera – oprava 3D
+
+Ruční pole `qr_token` je primární a vždy dostupná cesta; přijímá náhodný token i celou `/q/{token}` URL. Kamera je progressive enhancement pouze na HTTPS. Její tlačítko je v serverovém HTML disabled a lokální `public/js/shipment-camera.js` je povolí až po úspěšné inicializaci a registraci handlerů.
+
+Skript preferuje zadní kameru přes `facingMode: ideal`, na PC opakuje požadavek s obecnou webkamerou, ukazuje preview, dovoluje přepnout více kamer a ukončuje všechny tracky ve všech koncových i chybových cestách. Nativní `BarcodeDetector` používá jen při deklarované podpoře `qr_code`. Fallback je beze změn vendored `jsQR 1.4.0` pod Apache-2.0 v `public/vendor/jsqr/1.4.0`; neexistuje runtime CDN požadavek.
+
+Obraz se kreslí jen do skrytého browserového canvasu a neopouští zařízení. Po dekódování se řetězec vloží do stejného formuláře jako ruční vstup, takže serverová normalizace QR URL/token, CSRF, autorizace, idempotence a `lock_version` zůstávají společné. Browserová platformní akceptace zůstává pending podle `docs/PHASE_3_DEPLOYMENT.md`.

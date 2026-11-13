@@ -1,6 +1,6 @@
 # Fáze 3C – akceptace celé Fáze 3
 
-Datum auditu: 2026-11-13. Výsledek: **přijato s níže uvedenými provozními omezeními**.
+Datum auditu: 2026-11-13. Výsledek po opravě 3D: **automatizovaná akceptace je zelená, browserová akceptace zůstává neprovedená a Fáze 3 proto není browserově přijata**.
 
 Audit neprovedl push, produkční migraci, import ani zápis do produkční databáze. Jediné produkční DB operace byly read-only `migrate:status`, `SELECT VERSION()`, počty a dotazy do `information_schema`. Počty `shipments`, `shipment_items` a `shipment_events` byly před i po testech shodně `0 / 0 / 0`.
 
@@ -36,9 +36,9 @@ První oprava odstraňuje N+1 při předvalidaci dávky, druhá odstraňuje zav�
 
 ## Automatizovaná akceptace
 
-Příkaz `php8.4 composer.phar check` prošel celý: **272 testů, 904 assertions**. Před testy vypsal `Test database guard: isolated SQLite :memory: connection confirmed.`
+Příkaz `php8.4 composer.phar check` prošel celý: **273 testů, 944 assertions**. Před testy vypsal `Test database guard: isolated SQLite :memory: connection confirmed.`
 
-Zásilkový výřez (`ShipmentWorkflowTest` a `Phase3bShipmentUiTest`) po rozšíření obsahuje **23 testů, 166 assertions** a pokrývá:
+Zásilkový výřez (`ShipmentWorkflowTest` a `Phase3bShipmentUiTest`) po rozšíření obsahuje **24 testů, 206 assertions** a pokrývá:
 
 - oba směry a všechny čtyři povolené kombinace GLS/DPD/SVOZ;
 - povinný tracking GLS/DPD, zakázaný tracking svozu a unikátní `(carrier, tracking)`;
@@ -51,7 +51,7 @@ Zásilkový výřez (`ShipmentWorkflowTest` a `Phase3bShipmentUiTest`) po rozš�
 - globální idempotenci, replay, stale `lock_version`, duplicitní tracking a souběžné požadavky;
 - role AUTOKLUBY/POLSKO/read-only a serverové zamítnutí přímého nepovoleného POST;
 - seznam/detail/historii omezené na sender/recipient organizaci; současný model má právě tyto dvě organizace, takže obě jsou účastníkem každé meziorganizační zásilky;
-- QR token, celou QR URL, kamerový `BarcodeDetector` fallback, neplatný, směrově cizí a duplicitní QR;
+- QR token, celou QR URL, progressive kamerový dekodér (`BarcodeDetector` nebo lokální jsQR), neplatný, směrově cizí a duplicitní QR;
 - CSRF, serverovou validaci, CZ/PL texty a opakovaný HTTP submit bez druhé akce;
 - regresi celých `CUSTOM_REBUILD` a `STOCK_REBUILD` sad v plném `composer check`.
 
@@ -65,6 +65,20 @@ Automatizované HTTP/Blade testy potvrzují, že obsah zásilky mění pouze sen
 
 Browser/computer-use nástroj nebyl v této relaci dostupný, proto nebyl proveden skutečný browser smoke test ani test kamery. Nebyla vytvořena produkční demo data. Ruční checklist je v `docs/PHASE_3_DEPLOYMENT.md`.
 
+## Oprava 3D – kompatibilní QR kamera
+
+Diagnostika původní implementace našla příčinu zdánlivě aktivního tlačítka bez reakce. Při chybějícím `BarcodeDetector` nebo `mediaDevices` skript nastavil `button.hidden=true` a skončil bez click handleru, ale globální CSS `.button { display:inline-block }` přebilo atribut `hidden`. Tlačítko tedy zůstalo viditelné, i když JavaScript kameru vůbec neinicializoval. Původní kód navíc nekontroloval `BarcodeDetector.getSupportedFormats()`, neměl dekódovací fallback, desktopový retry, přepnutí kamery ani úplné ukončení tracků ve všech chybových cestách.
+
+Read-only HTTPS kontrola produkční odpovědi v 3D nenašla explicitní `Permissions-Policy` ani CSP hlavičku blokující kameru. Konkrétní stav uživatelského oprávnění, dostupnost `mediaDevices`, seznam formátů `BarcodeDetector` ani obsazenost zařízení nelze bez daného browseru zjistit předem; nový skript je proto kontroluje za běhu a každý výsledek zobrazí lokalizovaně.
+
+3D mění výchozí stav tlačítka na serverem renderované `disabled` + `aria-disabled=true`. Lokální skript jej povolí až po registraci handlerů a úspěšném ověření HTTPS, permissions policy, `mediaDevices.getUserMedia` a alespoň jednoho QR dekodéru. Globální `[hidden] { display:none!important }` zabraňuje opakování CSS chyby.
+
+Po kliknutí se synchronně zobrazí „Spouštím kameru…“. Skript žádá `facingMode: {ideal: 'environment'}` a při nedostupné zadní kameře opakuje požadavek s `video:true`. Po udělení oprávnění nabídne výběr více `videoinput` zařízení. Kamera má ruční stop a všechny tracky se zastaví při stopu, změně kamery, chybě, úspěšném skenu, `pagehide` i `beforeunload`.
+
+Nativní `BarcodeDetector` se použije pouze tehdy, když `getSupportedFormats()` obsahuje `qr_code`. Jinak se použije lokálně hostovaný `jsQR 1.4.0`, Apache-2.0, z oficiálního npm tarballu s připnutou integritou a SHA-256 uvedenými v `public/vendor/jsqr/1.4.0/README.md`. Runtime neobsahuje CDN ani externí script. Canvas, snímky i video zůstávají pouze v paměti browseru; server dostane až dekódovaný řetězec stejným CSRF/idempotentním formulářem jako ruční token/URL.
+
+Renderovací testy ověřují ruční vstup bez kamery, bezpečný počáteční stav, lokální a verzované assety, licenci a checksum, absenci CDN, lifecycle tracků, CZ/PL chybové texty a serverovou validaci samostatného tokenu i celé QR URL.
+
 ## Provozní audit
 
 - `php8.4 artisan schedule:list`: žádné definované úlohy.
@@ -75,7 +89,8 @@ Browser/computer-use nástroj nebyl v této relaci dostupný, proto nebyl proved
 
 ## Známá omezení
 
-- Skutečný browser a fyzická kamera nebyly v 3C otestovány; `BarcodeDetector` je progresivní rozšíření a fallback je hardwarová čtečka nebo ruční token/URL.
+- Skutečný browser a fyzická kamera nebyly ani po 3D otestovány: relace neposkytla cloud-desktop/CUA nástroj a lokální Chrome/Chromium/Firefox nebyl instalovaný. Browserová akceptace je proto výslovně **PENDING**.
+- jsQR fallback rozšiřuje podporu dekódování, ale dostupnost webkamery a konkrétní permission UX musí potvrdit ruční matice Chrome/Edge PC, Android Chrome a iPhone Safari.
 - Není implementováno carrier API, příloha chyby přepravy, zákaznická přeprava, finance, detail vratky, dokumenty, diskuse ani notifikace.
 - Zápis 100 úspěšných položek je z principu lineární, protože každý thread musí vytvořit vlastní event a audit; odstraněné N+1 se týkalo redundantního čtení během předvalidace.
 - Akceptace neopravňuje zapnutí importu, Pohoda bridge ani scheduleru a nezahajuje Fázi 4.
