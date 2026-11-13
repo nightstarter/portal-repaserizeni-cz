@@ -101,6 +101,30 @@ class Phase3bShipmentUiTest extends TestCase
         self::assertNull($item->fresh()->active_shipment_id);
     }
 
+    public function test_svoz_ui_never_presents_a_fake_tracking_field(): void
+    {
+        $shipment = Shipment::query()->create([
+            'direction' => ShipmentDirection::AK_TO_PL,
+            'carrier' => ShipmentCarrier::SVOZ_AUTOKLUBY,
+            'status' => ShipmentStatus::PREPARED,
+            'sender_organization_id' => $this->autokluby->id,
+            'recipient_organization_id' => $this->poland->id,
+            'created_by' => $this->akOperator->id,
+        ]);
+
+        $this->actingAs($this->akOperator)->get(route('shipments.show', $shipment))
+            ->assertOk()
+            ->assertSee('Svoz AUTOKLUBY')
+            ->assertDontSee('<dt>Tracking</dt>', false)
+            ->assertDontSee('name="tracking"', false);
+
+        $this->actingAs($this->akOperator)->get(route('shipments.create'))
+            ->assertOk()
+            ->assertSee('data-directions="AK_TO_PL PL_TO_AK"', false)
+            ->assertSee('trackingField.hidden = withoutTracking', false)
+            ->assertSee('tracking.disabled = withoutTracking', false);
+    }
+
     private function shipment(): Shipment
     {
         return Shipment::query()->create([

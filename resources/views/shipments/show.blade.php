@@ -11,7 +11,7 @@
     <dl class="branch-facts">
         <div><dt>{{ __('app.sender') }}</dt><dd>{{ $shipment->senderOrganization->name }}</dd></div>
         <div><dt>{{ __('app.recipient') }}</dt><dd>{{ $shipment->recipientOrganization->name }}</dd></div>
-        <div><dt>{{ __('app.tracking') }}</dt><dd>{{ $shipment->tracking ?: '—' }}</dd></div>
+        @if($shipment->carrier->requiresTracking())<div><dt>{{ __('app.tracking') }}</dt><dd>{{ $shipment->tracking ?: '—' }}</dd></div>@endif
         <div><dt>{{ __('app.created_by') }}</dt><dd>{{ $shipment->creator->name }}</dd></div>
         @if($shipment->sent_at)<div><dt>{{ __('app.sent_at') }}</dt><dd>{{ $shipment->sent_at->format('d.m.Y H:i') }}</dd></div>@endif
         @if($shipment->delivered_at)<div><dt>{{ __('app.delivered_at') }}</dt><dd>{{ $shipment->delivered_at->format('d.m.Y H:i') }}</dd></div>@endif
