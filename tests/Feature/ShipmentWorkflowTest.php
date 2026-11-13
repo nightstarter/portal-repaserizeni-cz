@@ -244,6 +244,31 @@ class ShipmentWorkflowTest extends TestCase
         }
     }
 
+    public function test_delivered_shipment_item_history_survives_a_later_active_shipment(): void
+    {
+        [$item, $thread] = $this->customOutbound('historical-link');
+        $outbound = $this->preparedWithItem(ShipmentDirection::AK_TO_PL, ShipmentCarrier::SVOZ_AUTOKLUBY, $this->akOperator, $item, $thread, 'history-outbound');
+        $this->send($outbound, $this->akOperator, null, 'history-outbound-send');
+        $this->deliver($outbound, $this->plOperator, 'history-outbound-deliver');
+
+        $thread->update(['state' => CustomRebuildState::REPAIRED_PL->value]);
+        ThreadEvent::query()->create([
+            'process_thread_id' => $thread->id,
+            'order_id' => $thread->order_id,
+            'action' => CustomRebuildAction::MARK_REPAIRED_PL->value,
+            'to_state' => CustomRebuildState::REPAIRED_PL->value,
+            'actor_type' => OrganizationCode::POLAND->value,
+            'responsible_organization_id' => $this->poland->id,
+        ]);
+        $return = $this->createShipment(ShipmentDirection::PL_TO_AK, ShipmentCarrier::SVOZ_AUTOKLUBY, $this->plOperator, 'history-return');
+        $this->add($return, $item, $thread, $this->plOperator, 'history-return-add');
+
+        self::assertSame(2, $item->shipmentItems()->count());
+        self::assertTrue($item->shipmentItems()->where('shipment_id', $outbound->id)->exists());
+        self::assertTrue($item->shipmentItems()->where('shipment_id', $return->id)->exists());
+        self::assertSame($return->id, $item->fresh()->active_shipment_id);
+    }
+
     public function test_wrong_direction_state_organization_and_unrelated_thread_are_rejected_without_partial_write(): void
     {
         [$plItem, $plThread] = $this->customInbound('wrong-direction');

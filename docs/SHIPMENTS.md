@@ -68,3 +68,9 @@ Klient nikdy neposílá cílový stav ani akci procesní větve. Vazba `shipment
 ## Audit
 
 Každý command vytváří neměnný `shipment_event` a audit. Odeslání a příjem navíc vytvoří standardní `thread_events` a audity existujícího workflow. Bezpečná metadata obsahují interní ID itemu, threadu a objednávky; zásilka neukládá zákaznické PII.
+
+## Akceptace Fáze 3C
+
+Celý rozsah domény a UI přijímá `docs/PHASE_3_ACCEPTANCE.md`; produkční schéma a deployment plán audituje `docs/PHASE_3_DEPLOYMENT.md`. Předvalidace shipment dávky načítá položky, itemy, thready, objednávky a události po množinách. Regresní test 100 položek drží validační čtení pod 10 SELECTy a při chybě poslední položky ověřuje nulový částečný zápis.
+
+UI nikdy nepoužívá skryté tlačítko jako autorizační hranici. Server znovu kontroluje organizaci, roli, stav, verzi a idempotenci. U `SVOZ_AUTOKLUBY` se tracking nezobrazuje ani neodesílá; doména jej navíc vždy odmítne.

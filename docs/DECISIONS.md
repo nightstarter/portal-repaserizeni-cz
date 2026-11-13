@@ -230,3 +230,17 @@
 - Stav: přijato pro Fázi 3A
 - Rozhodnutí: `shipment_events.idempotency_key` je globálně unikátní. Request hash obsahuje shipment command, aktéra, payload, očekávanou verzi a kontext itemu/threadu; interní thread klíč se deterministicky odvodí z shipment commandu.
 - Dopad: Replay stejného commandu vrací původní výsledek a jiný payload se stejným klíčem je konflikt. Zásilka zároveň používá `lock_version` a row locks proti dvojímu odeslání, příjmu nebo souběžné editaci obsahu.
+
+## D-034: Předvalidace velké zásilky načítá vztahy po množinách
+
+- Datum: 2026-11-13
+- Stav: přijato ve Fázi 3C
+- Rozhodnutí: `ShipmentService` zamkne itemy a thready deterministicky a potřebné objednávky a thread eventy načte dávkově před per-item validací. Samotné zápisy thread eventů a auditů zůstávají záměrně po jednotlivých větvích uvnitř jedné transakce.
+- Dopad: Test 100 položek snížil validační průchod z 206 SELECTů pod pevnou mez 10 a zároveň dokládá úplný rollback při chybě posledního itemu. Lineární počet nutných doménových zápisů se neskrývá jako N+1 čtení.
+
+## D-035: Fáze 3 je přijata bez další produkční migrace
+
+- Datum: 2026-11-13
+- Stav: přijato ve Fázi 3C
+- Rozhodnutí: Automatizovaná doménová, HTTP, bezpečnostní a regresní akceptace Fáze 3 je zelená. Produkční `migrate:status` ukazuje 000001–000006 jako aplikované a přesný seznam pending migrací je prázdný. Již aplikovaný soubor 000006 zůstává neměnný a jeho hash odpovídá incident dokumentaci.
+- Dopad: Nasazení je kódové a nepovoluje spuštění migrace, importu, Pohoda bridge ani scheduleru. Browser smoke test zůstává povinnou ruční deployment branou, protože v relaci 3C nebyl browser nástroj dostupný.

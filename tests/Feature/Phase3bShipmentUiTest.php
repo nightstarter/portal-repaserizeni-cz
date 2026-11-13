@@ -74,7 +74,10 @@ class Phase3bShipmentUiTest extends TestCase
         $this->assertDatabaseHas('shipment_items', ['shipment_id' => $shipment->id, 'item_id' => $item->id]);
         self::assertSame($shipment->id, $item->fresh()->active_shipment_id);
 
-        $this->actingAs($this->akOperator)->post(route('shipments.items.store', $shipment), array_merge($payload, ['idempotency_key' => 'ui-add-stale']))
+        $this->actingAs($this->akOperator)->post(route('shipments.items.store', $shipment), array_merge($payload, [
+            'idempotency_key' => 'ui-add-duplicate',
+            'expected_lock_version' => 1,
+        ]))
             ->assertSessionHasErrors('shipment');
         self::assertSame(1, $shipment->shipmentItems()->count());
     }
@@ -87,11 +90,15 @@ class Phase3bShipmentUiTest extends TestCase
             'qr_token' => $item->qr_token, 'idempotency_key' => 'add-send', 'expected_lock_version' => 0,
         ])->assertSessionHasNoErrors();
 
-        $this->actingAs($this->akOperator)->post(route('shipments.actions', [$shipment, ShipmentAction::SEND_SHIPMENT->value]), [
+        $sendPayload = [
             'tracking' => 'GLS-UI-001', 'idempotency_key' => 'ui-send', 'expected_lock_version' => 1,
-        ])->assertSessionHasNoErrors();
+        ];
+        $sendRoute = route('shipments.actions', [$shipment, ShipmentAction::SEND_SHIPMENT->value]);
+        $this->actingAs($this->akOperator)->post($sendRoute, $sendPayload)->assertSessionHasNoErrors();
+        $this->actingAs($this->akOperator)->post($sendRoute, $sendPayload)->assertSessionHasNoErrors();
         self::assertSame(ShipmentStatus::SENT, $shipment->fresh()->status);
         self::assertSame(CustomRebuildState::SENT_TO_PL->value, $thread->fresh()->state);
+        self::assertSame(1, $shipment->events()->where('action', ShipmentAction::SEND_SHIPMENT)->count());
 
         $this->actingAs($this->plOperator)->post(route('shipments.actions', [$shipment, ShipmentAction::CONFIRM_SHIPMENT_DELIVERY->value]), [
             'idempotency_key' => 'ui-deliver', 'expected_lock_version' => 2,
@@ -123,6 +130,88 @@ class Phase3bShipmentUiTest extends TestCase
             ->assertSee('data-directions="AK_TO_PL PL_TO_AK"', false)
             ->assertSee('trackingField.hidden = withoutTracking', false)
             ->assertSee('tracking.disabled = withoutTracking', false);
+    }
+
+    public function test_invalid_wrong_direction_and_unauthorized_qr_requests_are_rejected_server_side(): void
+    {
+        $shipment = $this->shipment();
+        $this->actingAs($this->akOperator)->post(route('shipments.items.store', $shipment), [
+            'qr_token' => 'not-a-real-token', 'idempotency_key' => 'invalid-token', 'expected_lock_version' => 0,
+        ])->assertSessionHasErrors('qr_token');
+
+        $order = Order::factory()->create();
+        $foreignItem = Item::factory()->create([
+            'order_id' => $order->id,
+            'role' => ItemRole::CUSTOMER_ITEM,
+            'current_location' => OrganizationCode::POLAND->value,
+        ]);
+        ProcessThread::factory()->create([
+            'order_id' => $order->id,
+            'type' => ProcessThreadType::CUSTOM_REBUILD,
+            'state' => CustomRebuildState::REPAIRED_PL->value,
+            'responsible_party' => ResponsibleParty::POLAND,
+            'responsible_organization_id' => $this->poland->id,
+        ]);
+        $this->actingAs($this->akOperator)->post(route('shipments.items.store', $shipment), [
+            'qr_token' => $foreignItem->qr_token, 'idempotency_key' => 'wrong-direction', 'expected_lock_version' => 0,
+        ])->assertSessionHasErrors('shipment');
+        $this->actingAs($this->plOperator)->post(route('shipments.items.store', $shipment), [
+            'qr_token' => $foreignItem->qr_token, 'idempotency_key' => 'wrong-sender', 'expected_lock_version' => 0,
+        ])->assertForbidden();
+
+        self::assertSame(0, $shipment->shipmentItems()->count());
+        self::assertNull($foreignItem->fresh()->active_shipment_id);
+    }
+
+    public function test_controls_match_server_authorization_and_read_only_user_cannot_mutate(): void
+    {
+        [$item] = $this->outboundItem();
+        $shipment = $this->shipment();
+        $readOnly = User::factory()->create([
+            'organization_id' => $this->autokluby->id,
+            'role' => UserRole::READ_ONLY,
+        ]);
+
+        $this->actingAs($readOnly)->get(route('shipments.show', $shipment))
+            ->assertOk()
+            ->assertDontSee('Skenování kusů')
+            ->assertDontSee('Odeslat zásilku');
+        $this->actingAs($readOnly)->post(route('shipments.items.store', $shipment), [
+            'qr_token' => $item->qr_token, 'idempotency_key' => 'readonly-add', 'expected_lock_version' => 0,
+        ])->assertForbidden();
+
+        $this->actingAs($this->akOperator)->post(route('shipments.items.store', $shipment), [
+            'qr_token' => $item->qr_token, 'idempotency_key' => 'authorized-add', 'expected_lock_version' => 0,
+        ])->assertSessionHasNoErrors();
+        $this->actingAs($this->plOperator)->post(route('shipments.actions', [$shipment, ShipmentAction::SEND_SHIPMENT->value]), [
+            'tracking' => 'GLS-NOT-ALLOWED', 'idempotency_key' => 'wrong-sender-send', 'expected_lock_version' => 1,
+        ])->assertForbidden();
+    }
+
+    public function test_shipment_forms_require_csrf_and_czech_polish_ui_and_camera_fallback_are_present(): void
+    {
+        $this->app->detectEnvironment(static fn (): string => 'local');
+        try {
+            $this->actingAs($this->akOperator)->post(route('shipments.store'), [
+                'direction' => ShipmentDirection::AK_TO_PL->value,
+                'carrier' => ShipmentCarrier::GLS->value,
+                'idempotency_key' => 'without-csrf',
+            ])->assertStatus(419);
+        } finally {
+            $this->app->detectEnvironment(static fn (): string => 'testing');
+        }
+
+        $shipment = $this->shipment();
+        $this->actingAs($this->akOperator)->get(route('shipments.show', $shipment))
+            ->assertSee('Zásilka')
+            ->assertSee('AUTOKLUBY → Polsko')
+            ->assertSee('BarcodeDetector', false)
+            ->assertSee("facingMode:'environment'", false);
+        $this->actingAs($this->plOperator)->get(route('shipments.create'))
+            ->assertOk()
+            ->assertSee('Nowa przesyłka')
+            ->assertSee('Polska → AUTOKLUBY')
+            ->assertSee('DPD');
     }
 
     private function shipment(): Shipment
