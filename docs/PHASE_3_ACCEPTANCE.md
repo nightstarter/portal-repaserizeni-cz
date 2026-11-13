@@ -1,8 +1,8 @@
 # Fáze 3C – akceptace celé Fáze 3
 
-Datum auditu: 2026-11-13. Výsledek po opravě 3D: **automatizovaná akceptace je zelená, browserová akceptace zůstává neprovedená a Fáze 3 proto není browserově přijata**.
+Datum auditu: 2026-11-13. Výsledek po opravě 3D: **automatizovaná i potvrzená ruční browserová akceptace jsou zelené a Fáze 3 je přijata**. Mobilní platforma zatím potvrzena nebyla a zůstává samostatnou ruční kontrolou.
 
-Audit neprovedl push, produkční migraci, import ani zápis do produkční databáze. Jediné produkční DB operace byly read-only `migrate:status`, `SELECT VERSION()`, počty a dotazy do `information_schema`. Počty `shipments`, `shipment_items` a `shipment_events` byly před i po testech shodně `0 / 0 / 0`.
+Audit neprovedl push, produkční migraci, import ani zápis do produkční databáze. Jediné produkční DB operace byly read-only `migrate:status`, `SELECT VERSION()`, počty a dotazy do `information_schema`. Při finální kontrole po ručním testu byly počty `shipments`, `shipment_items` a `shipment_events` před i po `composer check` shodně `1 / 0 / 1`; izolovaný testovací běh tedy produkční DB nezměnil a do existující testovací zásilky nepřidal žádnou položku.
 
 ## Historie commitů
 
@@ -22,6 +22,14 @@ e415a5f fix: bound shipment batch prevalidation queries
 ```
 
 První oprava odstraňuje N+1 při předvalidaci dávky, druhá odstraňuje zavádějící tracking ze svozu AUTOKLUBY. Historie nebyla přepisována, slučována ani rebasována.
+
+Hotfix 3D je rovněž samostatný commit:
+
+```text
+96d6e7d fix: add compatible shipment QR camera
+```
+
+V aktuálním `origin/main..HEAD` je hotfix 3D; finální dokumentační commit bude druhým commitem tohoto rozsahu. Commity 3A–3C už jsou součástí `origin/main`.
 
 ## Bezpečné testovací prostředí
 
@@ -63,7 +71,7 @@ Nový test připraví zásilku se 100 itemy, zneplatní poslední větev a spust
 
 Automatizované HTTP/Blade testy potvrzují, že obsah zásilky mění pouze sender v `PREPARED`, sender zásilku odešle, recipient ji přijme a read-only uživatel nemá mutační ovládání. Přímé nepovolené POSTy končí `403`, takže skrytí tlačítka není autorizační hranice. Detail vykresluje číslo, směr, carrier, stav, tracking jen pro GLS/DPD, položky, zakázky, větve a historii. Responzivní tabulky a breakpoint do 700 px jsou součástí layoutu.
 
-Browser/computer-use nástroj nebyl v této relaci dostupný, proto nebyl proveden skutečný browser smoke test ani test kamery. Nebyla vytvořena produkční demo data. Ruční checklist je v `docs/PHASE_3_DEPLOYMENT.md`.
+Finální ruční browser test potvrdil spuštění kamery, rozpoznání testovací QR URL a bezpečnou 404/validační chybu pro neexistující token. Do zásilky se nic nepřidalo. Konkrétní desktopový OS ani název a verze browseru nebyly v testovacím záznamu uvedeny, proto nejsou v dokumentaci domýšleny. Mobilní browser nebyl potvrzen a zůstává zbývající ruční kontrolou podle `docs/PHASE_3_DEPLOYMENT.md`.
 
 ## Oprava 3D – kompatibilní QR kamera
 
@@ -85,12 +93,12 @@ Renderovací testy ověřují ruční vstup bez kamery, bezpečný počáteční
 - Neběžel portalový `artisan schedule`, queue ani legacy import proces. Uživatelský crontab obsahuje jiné systémy, ale žádnou cestu/doménu tohoto portálu.
 - `.env`, `.env.testing` a adresář `legacy-reference` nejsou tracked; `legacy-reference` leží mimo kořen Git repozitáře `web`.
 - Sken tracked souborů nenašel privátní klíče, známé cloud/GitHub/Slack tokeny ani neprázdné produkční secret assignmenty. Sledované `.env*.example` obsahují pouze prázdné placeholdery.
-- Produkční data se testy nemohla měnit: Composer guard potvrdil SQLite `:memory:` a produkční shipment počty se nezměnily.
+- Produkční data se testy nemohla měnit: Composer guard potvrdil SQLite `:memory:` a produkční shipment počty zůstaly před i po běhu `1 / 0 / 1`.
 
 ## Známá omezení
 
-- Skutečný browser a fyzická kamera nebyly ani po 3D otestovány: relace neposkytla cloud-desktop/CUA nástroj a lokální Chrome/Chromium/Firefox nebyl instalovaný. Browserová akceptace je proto výslovně **PENDING**.
-- jsQR fallback rozšiřuje podporu dekódování, ale dostupnost webkamery a konkrétní permission UX musí potvrdit ruční matice Chrome/Edge PC, Android Chrome a iPhone Safari.
+- Potvrzený browserový test neobsahuje identifikaci desktopového OS/browseru, proto nelze přijmout jmenovitou platformní matici Chrome/Edge.
+- Mobilní kamera a permission UX na Android Chrome a iPhone Safari nebyly potvrzeny a zůstávají ruční kontrolou mimo uzavření Fáze 3.
 - Není implementováno carrier API, příloha chyby přepravy, zákaznická přeprava, finance, detail vratky, dokumenty, diskuse ani notifikace.
 - Zápis 100 úspěšných položek je z principu lineární, protože každý thread musí vytvořit vlastní event a audit; odstraněné N+1 se týkalo redundantního čtení během předvalidace.
 - Akceptace neopravňuje zapnutí importu, Pohoda bridge ani scheduleru a nezahajuje Fázi 4.

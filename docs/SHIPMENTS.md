@@ -81,4 +81,6 @@ Ruční pole `qr_token` je primární a vždy dostupná cesta; přijímá náhod
 
 Skript preferuje zadní kameru přes `facingMode: ideal`, na PC opakuje požadavek s obecnou webkamerou, ukazuje preview, dovoluje přepnout více kamer a ukončuje všechny tracky ve všech koncových i chybových cestách. Nativní `BarcodeDetector` používá jen při deklarované podpoře `qr_code`. Fallback je beze změn vendored `jsQR 1.4.0` pod Apache-2.0 v `public/vendor/jsqr/1.4.0`; neexistuje runtime CDN požadavek.
 
-Obraz se kreslí jen do skrytého browserového canvasu a neopouští zařízení. Po dekódování se řetězec vloží do stejného formuláře jako ruční vstup, takže serverová normalizace QR URL/token, CSRF, autorizace, idempotence a `lock_version` zůstávají společné. Browserová platformní akceptace zůstává pending podle `docs/PHASE_3_DEPLOYMENT.md`.
+Obraz se kreslí jen do skrytého browserového canvasu a neopouští zařízení. Po dekódování se řetězec vloží do stejného formuláře jako ruční vstup, takže serverová normalizace QR URL/token, CSRF, autorizace, idempotence a `lock_version` zůstávají společné.
+
+Finální ruční browser test potvrdil spuštění kamery, rozpoznání testovací QR URL a bezpečné odmítnutí neexistujícího tokenu bez přidání položky do zásilky. OS ani název a verze browseru nebyly zaznamenány, proto není potvrzena žádná konkrétní desktopová platforma. Mobilní test na Android Chrome a iPhone Safari zůstává ruční kontrolou podle `docs/PHASE_3_DEPLOYMENT.md`.

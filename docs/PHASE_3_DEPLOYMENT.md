@@ -39,15 +39,15 @@ Původní lock riziko bylo nízké pro vytvoření nových tabulek, ale `ALTER i
 
 ## Produkční schéma a data
 
-Read-only stav během 3C:
+Read-only stav během 3C byl `0 / 0 / 0`. Finální kontrola po potvrzeném ručním browser testu zjistila následující aktuální stav, shodný před i po izolovaném `composer check`:
 
 | Objekt | Počet |
 |---|---:|
-| `shipments` | 0 |
+| `shipments` | 1 |
 | `shipment_items` | 0 |
-| `shipment_events` | 0 |
+| `shipment_events` | 1 |
 
-Počty byly stejné před i po plném testovacím běhu.
+Do existující testovací zásilky nebyla při testu neexistujícího QR tokenu přidána žádná položka. Finální kontrola ani testovací běh produkční DB nezměnily.
 
 Klíčové unikátní indexy:
 
@@ -102,7 +102,16 @@ Provést na desktopu a znovu v mobilním viewportu **390 × 844 px**:
 - **Kamera používaná jinou aplikací:** zobrazit konkrétní stav, po uvolnění kamery umožnit retry.
 - **Policy/nezabezpečený kontext:** na ne-HTTPS nebo při zablokované camera policy ponechat tlačítko disabled a zobrazit konkrétní vysvětlení.
 
-Browser smoke test je po 3D stále **neprovedený** a Fáze 3 není browserově přijata, protože relace neměla browser/computer-use nástroj ani lokální browser.
+### Výsledek finálního ručního browser testu
+
+Potvrzeno bylo:
+
+- kamera se spustila;
+- testovací QR URL byla rozpoznána;
+- neexistující token skončil bezpečnou 404/validační chybou;
+- do zásilky nebyla přidána žádná položka.
+
+Konkrétní OS, browser a jeho verze nebyly zaznamenány, proto se žádná jmenovitá desktopová platforma neoznačuje jako ověřená. Fáze 3 je na základě potvrzeného funkčního browserového scénáře přijata. Android Chrome a iPhone Safari nebyly potvrzeny; mobilní platformní test zůstává zbývající ruční kontrolou.
 
 ## Rollback plán
 
@@ -112,5 +121,5 @@ Browser smoke test je po 3D stále **neprovedený** a Fáze 3 není browserově 
 - Pokud již existují shipmenty, před rollbackem ověřit aktivní `items.active_shipment_id`, rozpracované `PREPARED/SENT/TRANSPORT_ERROR`, eventy a audity. Nedokončené zásilky nejprve provozně uzavřít nebo zmrazit.
 - Destruktivní `down()` 000006 připadá v úvahu jen jako zvlášť schválená obnova celého releasu po záloze a potvrzení, že historii lze odstranit. Preferovaná oprava schématu je vždy nová dopředná migrace.
 
-3C ani hotfix 3D produkční databázi nezměnily a tento plán sám neopravňuje žádnou produkční migraci.
+3C, hotfix 3D ani finální izolovaná kontrola produkční databázi nezměnily a tento plán sám neopravňuje žádnou produkční migraci.
 
