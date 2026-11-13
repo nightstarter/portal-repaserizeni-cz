@@ -12,16 +12,16 @@ Samostatný transakční portál AUTOKLUBY ↔ POLSKO. Procesní pravidla určuj
   - [x] Fáze 2C – skladová repase a paralelní větve (viz `docs/PHASE_2C.md`)
   - [x] Fáze 2D – UI skladové repase a paralelních větví (viz `docs/PHASE_2D.md`)
   - [x] Fáze 2E – závěrečná akceptace Fáze 2 a audit pending migrací
-- [ ] Fáze 3 – zásilky a hromadné skenování
+- [x] Fáze 3 – zásilky a hromadné skenování
   - [x] Fáze 3A – doména zásilek AUTOKLUBY ↔ POLSKO (viz `docs/PHASE_3A.md`, `docs/SHIPMENTS.md` a `docs/STATE_MACHINES.md`)
-  - [ ] Fáze 3B – UI zásilek a QR skener
+  - [x] Fáze 3B – UI zásilek a QR skener (viz `docs/PHASE_3B.md`)
 - [ ] Fáze 4 – vratky a finance
 - [ ] Fáze 5 – diskuse a notifikace
 - [ ] Fáze 6 – reklamace a výkup
 - [ ] Fáze 7 – Pohoda bridge a přecenění
 - [ ] Fáze 8 – produkční připravenost
 
-Legacy mapování bylo ověřeno proti živé databázi a přijato ve Fázi 1F. Fáze 2A–2B implementovaly doménu a UI zakázkové repase. Fáze 2C–2D přidaly doménové skladové rozhodnutí, paralelní větve `STOCK_REQUEST`, `STOCK_REPLENISHMENT`, čekající `CORE_RETURN`, oddělené fyzické kusy a jejich bezpečné dashboardy, detail, časovou osu a mobilní QR obsluhu. Fáze 2E celý rozsah automatizovaně přijala. Fáze 3A přidala atomickou doménu hromadných zásilek AUTOKLUBY ↔ POLSKO s aktivními rezervacemi fyzických kusů; její UI a QR skener zůstávají pro 3B. Produkční migrace nebyly spuštěny. Produkční import, Pohoda bridge, cron ani scheduler nebyly aktivovány; `LEGACY_SHOP_IMPORT_ENABLED=false` zůstává bezpečná provozní i výchozí hodnota. Finance, detailní vratky, zákaznické přepravy, dokumenty, diskuse a notifikace budou řešeny až v dalších fázích.
+Legacy mapování bylo ověřeno proti živé databázi a přijato ve Fázi 1F. Fáze 2A–2B implementovaly doménu a UI zakázkové repase. Fáze 2C–2D přidaly doménové skladové rozhodnutí, paralelní větve `STOCK_REQUEST`, `STOCK_REPLENISHMENT`, čekající `CORE_RETURN`, oddělené fyzické kusy a jejich bezpečné dashboardy, detail, časovou osu a mobilní QR obsluhu. Fáze 2E celý rozsah automatizovaně přijala. Fáze 3A přidala atomickou doménu hromadných zásilek AUTOKLUBY ↔ POLSKO s aktivními rezervacemi fyzických kusů a Fáze 3B její dvojjazyčné UI, hromadný QR příjem a bezpečné expediční akce. Produkční migrace nebyly spuštěny. Produkční import, Pohoda bridge, cron ani scheduler nebyly aktivovány; `LEGACY_SHOP_IMPORT_ENABLED=false` zůstává bezpečná provozní i výchozí hodnota. Finance, detailní vratky, zákaznické přepravy, dokumenty, diskuse a notifikace budou řešeny až v dalších fázích.
 
 ## Instalace z čistého klonu
 

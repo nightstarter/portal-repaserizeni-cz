@@ -62,6 +62,7 @@
 <nav>
     <strong>{{ config('app.name') }}</strong>
     <a href="{{ route('dashboard') }}">{{ __('app.dashboard') }}</a>
+    <a href="{{ route('shipments.index') }}">{{ __('app.shipments') }}</a>
     @can('manage-users')<a href="{{ route('users.index') }}">{{ __('app.users') }}</a>@endcan
     <span class="spacer"></span>
     <form class="inline" method="post" action="{{ route('locale.update') }}">@csrf @method('PUT')

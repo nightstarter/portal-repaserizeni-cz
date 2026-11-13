@@ -108,7 +108,7 @@ HTTP formuláře posílají pouze akční kód, typ větve, idempotency key, oč
 
 Polský query scope zpřístupní jen historicky přidělený `STOCK_REQUEST` nebo `STOCK_REPLENISHMENT`. Stejná hranice platí pro detail a QR konkrétního kusu. Role kusu se mapuje právě na jednu větev: `STOCK_ITEM → STOCK_REQUEST`, `STOCK_REPLACEMENT → STOCK_REPLENISHMENT`, `CORE_RETURN → CORE_RETURN`.
 
-## SHIPMENTS — fáze 3A
+## SHIPMENTS — fáze 3A–3B
 
 Zásilka koordinuje stávající thread automaty a nevytváří alternativní přechody. Klient posílá pouze shipment command; akci každého threadu odvodí server z direction, typu a zamčeného stavu.
 
@@ -122,6 +122,8 @@ Zásilka koordinuje stávající thread automaty a nevytváří alternativní p�
 
 Úplná matice `direction + carrier + thread type + source state + action + target state` je v `docs/SHIPMENTS.md`. `DELIVERED` je koncový stav zásilky; `TRANSPORT_ERROR` není koncový a lze jej později potvrdit jako doručený.
 
-## Mimo fáze 2A–3A
+Ve Fázi 3B klientské formuláře posílají pouze shipment command, idempotency key, očekávanou `lock_version` a případná data akce. Při skenování posílají QR token; server sám odvodí fyzický item a jeho procesní větev. UI proto nemůže určit thread akci ani cílový stav.
 
-UI zásilek a QR skener, detailní vratky, zákaznické zásilky, carrier integrace, finance, dokumenty, diskuse, notifikace, reklamace a výkupy zde nejsou implementované. Budou specifikovány až v příslušných dalších fázích.
+## Mimo fáze 2A–3B
+
+Detailní vratky, zákaznické zásilky, carrier integrace, finance, dokumenty, diskuse, notifikace, reklamace a výkupy zde nejsou implementované. Budou specifikovány až v příslušných dalších fázích.

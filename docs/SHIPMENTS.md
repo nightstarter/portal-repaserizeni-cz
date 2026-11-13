@@ -1,6 +1,6 @@
 # Zásilky AUTOKLUBY ↔ POLSKO
 
-Fáze 3A zavádí doménu hromadných zásilek mezi organizacemi. UI, QR skener a HTTP formuláře vzniknou až ve Fázi 3B. Zákaznické přepravy nejsou součástí tohoto modelu.
+Fáze 3A zavádí doménu hromadných zásilek mezi organizacemi a Fáze 3B nad ní staví UI, QR skener a HTTP formuláře popsané v `docs/PHASE_3B.md`. Zákaznické přepravy nejsou součástí tohoto modelu.
 
 ## Povolená matice
 
