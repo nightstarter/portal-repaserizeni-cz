@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Application\Messages\DiscussionService;
 use App\Application\Orders\CoreReturnPresentation;
 use App\Application\Orders\CustomRebuildPresentation;
 use App\Application\Orders\CustomRebuildTimeline;
@@ -30,8 +31,10 @@ class OrderController extends Controller
         StockRebuildPresentation $stockPresentation,
         StockRebuildTimeline $stockTimeline,
         CoreReturnPresentation $corePresentation,
+        DiscussionService $discussion,
     ): View {
         $this->authorize('view', $order);
+        $discussionUnreadCount = $discussion->unreadCount($order, $request->user());
 
         if ($order->order_type === OrderType::STOCK_REBUILD) {
             $isAutokluby = $request->user()->organization->code === OrganizationCode::AUTOKLUBY;
@@ -80,6 +83,7 @@ class OrderController extends Controller
                 'selectedItem' => null,
                 'coreActionFormKeys' => collect(CoreReturnAction::cases())->mapWithKeys(fn ($action) => [$action->value => (string) Str::uuid()])->all(),
                 'documentFormKeys' => $order->processThreads->mapWithKeys(fn ($thread) => [$thread->id => (string) Str::uuid()])->all(),
+                'discussionUnreadCount' => $discussionUnreadCount,
             ]);
         }
 
@@ -89,7 +93,7 @@ class OrderController extends Controller
                 $order->load('customer');
             }
 
-            return view('orders.show-readonly', compact('order'));
+            return view('orders.show-readonly', compact('order', 'discussionUnreadCount'));
         }
 
         $order->load([
@@ -115,6 +119,7 @@ class OrderController extends Controller
             'qrMode' => false,
             'selectedItem' => null,
             'documentFormKeys' => $order->processThreads->mapWithKeys(fn ($thread) => [$thread->id => (string) Str::uuid()])->all(),
+            'discussionUnreadCount' => $discussionUnreadCount,
         ]);
     }
 

@@ -14,7 +14,7 @@
 <div class="section-nav" role="navigation" aria-label="{{ __('app.order_sections') }}">
     <a href="#overview">{{ __('app.section_overview') }}</a>
     @if($maySeeFinanceSection)<a href="#finance">{{ __('app.section_documents_finance') }}</a>@endif
-    <a href="{{ route('orders.discussion.index', $order) }}">{{ __('app.discussion') }}</a>
+    <a href="{{ route('orders.discussion.index', $order) }}">{{ __('app.discussion') }} @if($discussionUnreadCount > 0)<span class="unread-badge">{{ $discussionUnreadCount }}</span>@endif</a>
 </div>
 
 @include('orders.partials.action-panel')

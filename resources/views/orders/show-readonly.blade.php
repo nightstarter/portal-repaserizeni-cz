@@ -12,7 +12,7 @@
 </div>
 <div class="section-nav" role="navigation" aria-label="{{ __('app.order_sections') }}">
     <a href="{{ route('orders.show', $order) }}">{{ __('app.section_overview') }}</a>
-    <a href="{{ route('orders.discussion.index', $order) }}">{{ __('app.discussion') }}</a>
+    <a href="{{ route('orders.discussion.index', $order) }}">{{ __('app.discussion') }} @if($discussionUnreadCount > 0)<span class="unread-badge">{{ $discussionUnreadCount }}</span>@endif</a>
 </div>
 <h2>{{ __('app.process_threads') }}</h2>
 <div class="cards">

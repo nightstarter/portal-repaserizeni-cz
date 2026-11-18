@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Application\Messages\DiscussionService;
 use App\Application\Orders\InitialProcessThreadFactory;
 use App\Application\Security\DatabaseCommandGuard;
 use App\Contracts\CreatesInitialProcessThreads;
@@ -28,6 +29,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -61,6 +63,13 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Message::class, MessagePolicy::class);
         Gate::policy(MessageAttachment::class, MessageAttachmentPolicy::class);
         Gate::define('manage-users', fn (User $user): bool => $user->isAdministrator());
+
+        View::composer('layouts.app', function ($view): void {
+            $user = auth()->user();
+            $view->with('globalUnreadMessages', $user === null
+                ? 0
+                : $this->app->make(DiscussionService::class)->globalUnreadCount($user));
+        });
 
         RateLimiter::for('login', fn (Request $request) => Limit::perMinute(5)->by(strtolower((string) $request->input('email')).'|'.$request->ip()));
     }

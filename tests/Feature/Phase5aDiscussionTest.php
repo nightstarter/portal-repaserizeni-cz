@@ -115,11 +115,11 @@ class Phase5aDiscussionTest extends TestCase
             ->assertDontSee('pii-5a@example.test')
             ->assertDontSee('+420777555444')
             ->assertDontSee('Skrytá zpráva');
-        $this->actingAs($this->plUser)->get(route('orders.discussion.index', $hidden))->assertForbidden();
+        $this->actingAs($this->plUser)->get(route('orders.discussion.index', $hidden))->assertNotFound();
         $this->actingAs($this->plUser)->post(route('orders.discussion.store', $hidden), [
             'body' => 'Neoprávněný pokus',
             'idempotency_key' => 'forbidden-message',
-        ])->assertForbidden();
+        ])->assertNotFound();
         $readOnly = User::factory()->create([
             'organization_id' => $this->pl->id,
             'role' => UserRole::READ_ONLY,

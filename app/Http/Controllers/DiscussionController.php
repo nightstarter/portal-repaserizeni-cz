@@ -16,26 +16,26 @@ class DiscussionController extends Controller
 {
     public function index(Request $request, Order $order, DiscussionService $discussion): View
     {
-        $this->authorize('view', $order);
+        abort_unless($request->user()->can('view', $order), 404);
+        $discussion->markRead($order, $request->user());
         $messages = $order->messages()
-            ->with(['author:id,name', 'authorOrganization:id,name', 'attachments'])
+            ->with(['author:id,name', 'authorOrganization:id,name,code', 'attachments'])
+            ->orderByDesc('created_at')
             ->orderByDesc('id')
-            ->limit(200)
-            ->get()
-            ->reverse()
-            ->values();
+            ->cursorPaginate(30)
+            ->withQueryString();
 
         return view('orders.discussion', [
             'order' => $order,
             'messages' => $messages,
-            'unreadCount' => $discussion->unreadCount($order, $request->user()),
             'messageFormKey' => (string) Str::uuid(),
         ]);
     }
 
     public function store(Request $request, Order $order, DiscussionService $discussion): RedirectResponse
     {
-        $this->authorize('create', [Message::class, $order]);
+        abort_unless($request->user()->can('view', $order), 404);
+        abort_unless($request->user()->can('create', [Message::class, $order]), 403, __('app.message_not_allowed'));
         $attachments = $request->file('attachments', []);
         if (! is_array($attachments)) {
             $attachments = [$attachments];
@@ -56,7 +56,7 @@ class DiscussionController extends Controller
 
     public function markRead(Request $request, Order $order, DiscussionService $discussion): RedirectResponse
     {
-        $this->authorize('view', $order);
+        abort_unless($request->user()->can('view', $order), 404);
         $discussion->markRead($order, $request->user());
 
         return back()->with('status', __('app.messages_marked_read'));

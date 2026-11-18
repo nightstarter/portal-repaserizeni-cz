@@ -24,6 +24,7 @@ Samostatný transakční portál AUTOKLUBY ↔ POLSKO. Procesní pravidla určuj
   - [x] Fáze 4D – samostatné autorizované fronty Vratky a Doklady a finance, stabilní menu a sekční navigace detailu (viz `docs/PHASE_4D.md`)
 - [ ] Fáze 5 – diskuse a notifikace
   - [x] Fáze 5A – doménové jádro diskuse, privátní přílohy, read-state a outbox bez odesílání e-mailů (viz `docs/PHASE_5A.md`)
+  - [x] Fáze 5B – UI diskuse, globální a lokální unread badge, autorizovaná fronta a cursorové stránkování (viz `docs/PHASE_5B.md`)
 - [ ] Fáze 6 – reklamace a výkup
 - [ ] Fáze 7 – Pohoda bridge a přecenění
 - [ ] Fáze 8 – produkční připravenost

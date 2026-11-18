@@ -45,8 +45,13 @@
         .section-heading { display:flex; justify-content:space-between; gap:1rem; align-items:start }
         .section-heading h2 { margin:.1rem 0 } .queue-count { font-size:1.8rem; color:var(--blue) }
         .empty-state { padding:1rem .25rem } .empty-state p { margin-bottom:0 }
-        .message-card { border-left:4px solid #b7cee1 } .message-header { display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap }
-        .message-header time { color:#627180 } .message-body { white-space:normal; overflow-wrap:anywhere } .attachment-list { margin-bottom:0 }
+        .unread-badge { display:inline-flex; min-width:1.35rem; min-height:1.35rem; align-items:center; justify-content:center; border-radius:999px; background:#c51f32; color:white; padding:.1rem .4rem; font-size:.78rem; font-weight:800; line-height:1 }
+        .message-card { border-left:5px solid #b7cee1; overflow:hidden } .message-card.organization-autokluby { border-left-color:var(--blue); background:#f8fbfe } .message-card.organization-poland { border-left-color:#d79b19; background:#fffdf7 }
+        .message-header { display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap } .message-header time { color:#627180 }
+        .message-body,.message-preview,.attachment-list a { white-space:normal; overflow-wrap:anywhere; word-break:break-word } .attachment-list { margin-bottom:0; padding-left:1.25rem }
+        .discussion-unread { background:#fff8e5 } .pagination { display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:1rem }
+        .discussion-list,.message-card { min-width:0; max-width:100% } .discussion-form input[type=file] { max-width:100% }
+        .discussion-form button,.pagination a { min-height:2.75rem; display:inline-flex; align-items:center; justify-content:center }
         .branch-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(19rem,1fr)); gap:1rem; align-items:start }
         .branch-card { border-top:4px solid #d79b19 } .branch-card.completed { border-top-color:var(--green) }
         .branch-card header { display:flex; justify-content:space-between; gap:.75rem; align-items:start }
@@ -73,6 +78,7 @@
     <a class="{{ request()->routeIs('shipments.*') ? 'active' : '' }}" href="{{ route('shipments.index') }}" @if(request()->routeIs('shipments.*')) aria-current="page" @endif>{{ __('app.shipments') }}</a>
     <a class="{{ request()->routeIs('returns.*') ? 'active' : '' }}" href="{{ route('returns.index') }}" @if(request()->routeIs('returns.*')) aria-current="page" @endif>{{ __('app.returns') }}</a>
     <a class="{{ request()->routeIs('finance.*') ? 'active' : '' }}" href="{{ route('finance.index') }}" @if(request()->routeIs('finance.*')) aria-current="page" @endif>{{ __('app.documents_finance') }}</a>
+    <a class="{{ request()->routeIs('discussions.*', 'orders.discussion.*') ? 'active' : '' }}" href="{{ route('discussions.index') }}" @if(request()->routeIs('discussions.*', 'orders.discussion.*')) aria-current="page" @endif>{{ __('app.discussion') }} @if($globalUnreadMessages > 0)<span class="unread-badge" aria-label="{{ trans_choice('app.unread_messages', $globalUnreadMessages, ['count' => $globalUnreadMessages]) }}">{{ $globalUnreadMessages }}</span>@endif</a>
     @can('manage-users')<a class="{{ request()->routeIs('users.*') ? 'active' : '' }}" href="{{ route('users.index') }}" @if(request()->routeIs('users.*')) aria-current="page" @endif>{{ __('app.users') }}</a>@endcan
     <span class="spacer"></span>
     <form class="inline" method="post" action="{{ route('locale.update') }}">@csrf @method('PUT')
@@ -87,5 +93,22 @@
     @if($errors->any())<div class="card error"><ul>@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
     @yield('content')
 </main>
+<script>
+document.querySelectorAll('form[data-submit-once]').forEach((form) => {
+    form.addEventListener('submit', (event) => {
+        if (form.dataset.submitted === '1') {
+            event.preventDefault();
+            return;
+        }
+        form.dataset.submitted = '1';
+        const button = form.querySelector('button[type="submit"], button:not([type])');
+        if (button) {
+            button.disabled = true;
+            button.setAttribute('aria-disabled', 'true');
+            button.textContent = @json(__('app.sending_message'));
+        }
+    });
+});
+</script>
 </body>
 </html>

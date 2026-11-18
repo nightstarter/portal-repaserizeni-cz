@@ -18,7 +18,7 @@
     <a href="#overview">{{ __('app.section_overview') }}</a>
     @if($coreBranch)<a href="#thread-{{ $coreBranch['thread']->id }}">{{ __('app.section_return') }}</a>@endif
     @if($hasFinanceSection)<a href="#finance">{{ __('app.section_documents_finance') }}</a>@endif
-    <a href="{{ route('orders.discussion.index', $order) }}">{{ __('app.discussion') }}</a>
+    <a href="{{ route('orders.discussion.index', $order) }}">{{ __('app.discussion') }} @if($discussionUnreadCount > 0)<span class="unread-badge">{{ $discussionUnreadCount }}</span>@endif</a>
 </div>
 
 <section class="card stock-information">

@@ -83,6 +83,14 @@ class Order extends Model
         return $this->hasMany(Message::class);
     }
 
+    public function latestMessage(): HasOne
+    {
+        return $this->hasOne(Message::class)->ofMany([
+            'created_at' => 'max',
+            'id' => 'max',
+        ]);
+    }
+
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
         if ($user->organization->code === OrganizationCode::AUTOKLUBY) {

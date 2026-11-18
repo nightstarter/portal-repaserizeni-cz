@@ -35,6 +35,13 @@ final class DiscussionService
             'body' => ['required', 'string', 'max:10000'],
             'idempotency_key' => ['required', 'string', 'max:120'],
             'attachment_count' => ['integer', 'max:'.config('messages.max_attachments', 5)],
+        ], [
+            'body.required' => __('app.message_required'),
+            'body.max' => __('app.message_too_long'),
+            'attachment_count.max' => __('app.message_too_many_attachments'),
+        ], [
+            'body' => __('app.message_text'),
+            'attachment_count' => __('app.message_attachments'),
         ])->validate();
 
         $attachments = collect($command->attachments)
@@ -107,6 +114,14 @@ final class DiscussionService
         $this->authorize($order, $user);
 
         return $order->messages()->unreadFor($user)->count();
+    }
+
+    public function globalUnreadCount(User $user): int
+    {
+        return Message::query()
+            ->unreadFor($user)
+            ->whereHas('order', fn ($orders) => $orders->visibleTo($user))
+            ->count();
     }
 
     public function markRead(Order $order, User $user): int

@@ -5,6 +5,7 @@ use App\Http\Controllers\CoreReturnActionController;
 use App\Http\Controllers\CustomRebuildActionController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DiscussionController;
+use App\Http\Controllers\DiscussionQueueController;
 use App\Http\Controllers\DocumentDownloadController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\LocaleController;
@@ -31,6 +32,7 @@ Route::middleware(['auth', 'active', 'password.changed'])->group(function (): vo
     Route::get('/', DashboardController::class)->name('dashboard');
     Route::get('/returns', ReturnController::class)->name('returns.index');
     Route::get('/finance', FinanceController::class)->name('finance.index');
+    Route::get('/discussions', DiscussionQueueController::class)->name('discussions.index');
     Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
     Route::get('/orders/{order}/discussion', [DiscussionController::class, 'index'])->name('orders.discussion.index');
     Route::post('/orders/{order}/discussion', [DiscussionController::class, 'store'])->name('orders.discussion.store');
