@@ -29,6 +29,7 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Tests\Support\IsolatedStorageSandbox;
 use Tests\TestCase;
 
 class Phase4AcceptanceTest extends TestCase
@@ -49,11 +50,20 @@ class Phase4AcceptanceTest extends TestCase
 
     private PrivateDocumentService $documents;
 
+    private ?IsolatedStorageSandbox $storageSandbox = null;
+
     protected function setUp(): void
     {
         parent::setUp();
-        Storage::fake('local');
-        Storage::fake('public');
+        $this->storageSandbox = IsolatedStorageSandbox::create();
+        Storage::set('local', Storage::build(array_replace(
+            config('filesystems.disks.local'),
+            ['root' => $this->storageSandbox->diskRoot('private')],
+        )));
+        Storage::set('public', Storage::build(array_replace(
+            config('filesystems.disks.public'),
+            ['root' => $this->storageSandbox->diskRoot('public')],
+        )));
         $this->ak = Organization::factory()->create(['code' => OrganizationCode::AUTOKLUBY, 'name' => 'AUTOKLUBY']);
         $this->pl = Organization::factory()->create(['code' => OrganizationCode::POLAND, 'name' => 'POLSKO']);
         $this->akOperator = User::factory()->create(['organization_id' => $this->ak->id, 'role' => UserRole::AK_OPERATOR]);
@@ -61,6 +71,15 @@ class Phase4AcceptanceTest extends TestCase
         $this->core = app(CoreReturnWorkflow::class);
         $this->shipments = app(ShipmentService::class);
         $this->documents = app(PrivateDocumentService::class);
+    }
+
+    protected function tearDown(): void
+    {
+        try {
+            $this->storageSandbox?->cleanup();
+        } finally {
+            parent::tearDown();
+        }
     }
 
     public function test_complete_full_reduced_and_no_deposit_paths_preserve_phase_four_invariants(): void

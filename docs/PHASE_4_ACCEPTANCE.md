@@ -24,7 +24,9 @@ První oprava zachovává append-only ledger, ale doménová rozhodnutí nyní p
 
 ## Automatizovaná akceptace
 
-`php8.4 composer.phar check` prošel: **302 testů, 1191 assertions**. Součástí byly Composer validace, Pint, syntax audit, statická analýza a kompletní test runner po fail-fast potvrzení SQLite `:memory:`.
+`php8.4 composer.phar check` prošel: **305 testů, 1199 assertions**. Součástí byly Composer validace, Pint, syntax audit, statická analýza a kompletní test runner po fail-fast potvrzení SQLite `:memory:`.
+
+Blokátor zbytkového testovacího PDF je odstraněn. `Phase4bDocumentsAndFinanceTest`, `Phase4AcceptanceTest` ani `LegacyShopDiagnosticTest` již nepoužívají výchozí repository root z `Storage::fake('local')`; každý test dostane vlastní UUID sandbox pod systémovým temp adresářem. `tearDown()` nebo `finally` ověří prostředí `testing`, resolved cestu s vyhrazeným prefixem a odlišnost od produkční private storage, poté smaže pouze sandbox daného testu. Samostatné regrese ověřují cleanup po úspěchu i po simulované storage/rollback chybě. Problematické testy prošly dvakrát za sebou bez zbytku v repozitáři nebo systémovém tempu a následný celý check ponechal pracovní strom čistý.
 
 Nový `Phase4AcceptanceTest` provádí pro plné, krácené i bez-zálohové vypořádání skutečnou cestu:
 
@@ -84,7 +86,7 @@ Před a po testech byl read-only spočítán přesný počet řádků všech pro
 7a981b425c36eb35331ecffa8d562b5bf913b12f386bf38aa41cc7fa1b17749a
 ```
 
-Produkční DB nebyla změněna. První check odhalil, že starší `LegacyShopDiagnosticTest` zapisoval testovací `legacy-shop-test-report.json` do skutečného `storage/app/private`. Artefakt byl přesně identifikován a odstraněn; test byl v samostatném commitu `ff38c20` převeden na `Storage::fake` a opakovaný celý check již do private storage nezapisuje. Historický `legacy-shop-phase1c-report.json` zůstal beze změny, SHA-256 `f94a111321442739e01ee9b6128855d2c4a795eb76957e8fcdf74ed10cd20790`; finální private storage obsahuje mimo `.gitignore` právě tento jediný původní report a žádný dokument Fáze 4. Adresářový mtime se kvůli vytvoření/odstranění testovacího artefaktu změnil; audit proto netvrdí, že během celé relace neproběhl žádný filesystem write, ale potvrzuje obnovený obsah a odstraněnou příčinu.
+Produkční DB nebyla změněna. První check odhalil, že starší `LegacyShopDiagnosticTest` zapisoval testovací `legacy-shop-test-report.json` do skutečného `storage/app/private`. Artefakt byl přesně identifikován a odstraněn; test byl v samostatném commitu `ff38c20` převeden na `Storage::fake` a opakovaný celý check již do private storage nezapisuje. Historický `legacy-shop-phase1c-report.json` zůstal beze změny, SHA-256 `f94a111321442739e01ee9b6128855d2c4a795eb76957e8fcdf74ed10cd20790`; finální private storage obsahuje mimo `.gitignore` právě tento jediný původní report a žádný dokument Fáze 4. Pozdější blokátor výchozího Laravel fake disku v `storage/framework/testing` byl odstraněn přes unikátní systémový temp sandbox s garantovaným cleanupem; finální check nezanechal testovací PDF ani sandbox adresář. Adresářový mtime produkční private storage se kvůli dřívějšímu vytvoření/odstranění diagnostického artefaktu změnil; audit proto netvrdí, že během celé relace neproběhl žádný filesystem write, ale potvrzuje obnovený obsah a odstraněné příčiny.
 
 ## Známá omezení a deployment brány
 

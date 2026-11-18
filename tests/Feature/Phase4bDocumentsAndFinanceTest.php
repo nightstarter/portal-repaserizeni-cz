@@ -30,6 +30,7 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Tests\Support\IsolatedStorageSandbox;
 use Tests\TestCase;
 
 class Phase4bDocumentsAndFinanceTest extends TestCase
@@ -50,11 +51,20 @@ class Phase4bDocumentsAndFinanceTest extends TestCase
 
     private CoreReturnWorkflow $core;
 
+    private ?IsolatedStorageSandbox $storageSandbox = null;
+
     protected function setUp(): void
     {
         parent::setUp();
-        Storage::fake('local');
-        Storage::fake('public');
+        $this->storageSandbox = IsolatedStorageSandbox::create();
+        Storage::set('local', Storage::build(array_replace(
+            config('filesystems.disks.local'),
+            ['root' => $this->storageSandbox->diskRoot('private')],
+        )));
+        Storage::set('public', Storage::build(array_replace(
+            config('filesystems.disks.public'),
+            ['root' => $this->storageSandbox->diskRoot('public')],
+        )));
         $this->ak = Organization::factory()->create(['code' => OrganizationCode::AUTOKLUBY, 'name' => 'AUTOKLUBY']);
         $this->pl = Organization::factory()->create(['code' => OrganizationCode::POLAND, 'name' => 'POLSKO']);
         $this->akAdmin = User::factory()->create(['organization_id' => $this->ak->id, 'role' => UserRole::AK_ADMIN]);
@@ -62,6 +72,15 @@ class Phase4bDocumentsAndFinanceTest extends TestCase
         $this->plOperator = User::factory()->create(['organization_id' => $this->pl->id, 'role' => UserRole::PL_OPERATOR, 'preferred_locale' => 'pl']);
         $this->documents = app(PrivateDocumentService::class);
         $this->core = app(CoreReturnWorkflow::class);
+    }
+
+    protected function tearDown(): void
+    {
+        try {
+            $this->storageSandbox?->cleanup();
+        } finally {
+            parent::tearDown();
+        }
     }
 
     public function test_pdf_jpeg_and_png_are_private_randomly_named_and_checksummed(): void
@@ -117,7 +136,7 @@ class Phase4bDocumentsAndFinanceTest extends TestCase
                 self::assertSame(0, Document::query()->count());
             }
         }
-        $path = tempnam(sys_get_temp_dir(), 'upload');
+        $path = $this->storageSandbox->temporaryFile('upload');
         file_put_contents($path, '%PDF-1.4');
         $traversal = new UploadedFile($path, '../invoice.pdf', 'application/pdf', null, true);
         $safeTraversal = $this->documents->uploadInvoice($order, $business, $this->invoiceCommand($business, $traversal, 'traversal', false));
@@ -253,7 +272,10 @@ class Phase4bDocumentsAndFinanceTest extends TestCase
             self::assertSame(0, FinanceEntry::query()->count());
         }
         config()->set('documents.disk', 'local');
-        Storage::fake('local');
+        Storage::set('local', Storage::build(array_replace(
+            config('filesystems.disks.local'),
+            ['root' => $this->storageSandbox->diskRoot('private-after-failure')],
+        )));
 
         [$secondOrder, $secondBusiness] = $this->order('db-fail');
         DB::listen(static function ($query): void {
@@ -444,7 +466,7 @@ class Phase4bDocumentsAndFinanceTest extends TestCase
 
     private function realFile(string $name, string $contents, string $mime): UploadedFile
     {
-        $path = tempnam(sys_get_temp_dir(), 'document-test');
+        $path = $this->storageSandbox->temporaryFile('document-test');
         file_put_contents($path, $contents);
 
         return new UploadedFile($path, $name, $mime, null, true);
