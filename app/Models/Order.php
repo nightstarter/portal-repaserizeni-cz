@@ -68,6 +68,11 @@ class Order extends Model
         return $this->hasMany(AuditLog::class);
     }
 
+    public function financeEntries(): HasMany
+    {
+        return $this->hasMany(FinanceEntry::class);
+    }
+
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
         if ($user->organization->code === OrganizationCode::AUTOKLUBY) {

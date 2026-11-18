@@ -64,6 +64,7 @@ return [
     'handover_types' => ['GLS' => 'GLS', 'PERSONAL_PICKUP' => 'Odbiór osobisty'],
     'locations' => ['CUSTOMER' => 'Klient', 'AUTOKLUBY' => 'AUTOKLUBY', 'POLAND' => 'Polska'],
     'inspection_results' => ['CORRECT' => 'Właściwa przekładnia', 'DIFFERENT' => 'Inna przekładnia'],
+    'core_transport_conditions' => ['NO_VISIBLE_DAMAGE' => 'Bez widocznych uszkodzeń', 'PACKAGING_DAMAGED' => 'Uszkodzone opakowanie', 'ITEM_DAMAGED' => 'Uszkodzona część'],
     'faults' => ['OIL_LEAK' => 'Wyciek oleju', 'KNOCKING' => 'Stuka', 'FAULTY_UNIT' => 'Uszkodzony moduł', 'UNKNOWN' => 'Stan nieznany'],
     'actions' => [
         'THREAD_CREATED' => 'Utworzono gałąź procesu', 'CONFIRM_AK_RECEIPT' => 'Potwierdź przyjęcie w AUTOKLUBY',
@@ -76,6 +77,11 @@ return [
         'CONFIRM_PL_STOCK_AVAILABLE' => 'Potwierdź dostępność w Polsce',
         'SET_PL_STOCK_ETA' => 'Ustaw przewidywany termin dostępności',
         'CONFIRM_AK_STOCK_RECEIPT' => 'Potwierdź przyjęcie części magazynowej w AUTOKLUBY',
+        'CONFIRM_CORE_RECEIPT_AK' => 'Potwierdź przyjęcie starej części w AUTOKLUBY',
+        'CONFIRM_CORE_RECEIPT_PL' => 'Potwierdź przyjęcie starej części w Polsce',
+        'APPROVE_FULL_DEPOSIT_RETURN' => 'Zatwierdź pełny zwrot kaucji dostawcy',
+        'APPROVE_REDUCED_DEPOSIT_RETURN' => 'Zatwierdź pomniejszony zwrot kaucji dostawcy',
+        'CONFIRM_NO_SUPPLIER_DEPOSIT' => 'Potwierdź brak naliczonej kaucji dostawcy',
     ],
     'metadata_labels' => [
         'inspection_result' => 'Dostarczona część', 'fault_code' => 'Usterka', 'axial_rods' => 'Drążki osiowe',
@@ -113,6 +119,10 @@ return [
         'READY_PICKUP' => 'Gotowe do odbioru osobistego', 'PICKED_UP' => 'Odebrane przez klienta',
         'PENDING_STOCK_CHECK' => 'Oczekuje na weryfikację magazynu w Děčínie',
         'PL_SECURING_STOCK' => 'Polska organizuje część magazynową', 'PL_STOCK_AVAILABLE' => 'Część magazynowa dostępna w Polsce',
+        'CORE_RECEIVED_AK' => 'Stara część przyjęta w AUTOKLUBY', 'CORE_INSPECTION' => 'Kontrola starej części w Polsce',
+        'DEPOSIT_FULL_APPROVED' => 'Zatwierdzono pełny zwrot kaucji dostawcy',
+        'DEPOSIT_REDUCED_APPROVED' => 'Zatwierdzono pomniejszony zwrot kaucji dostawcy',
+        'CORE_SETTLED_NO_DEPOSIT' => 'Zwrot rozliczony bez kaucji dostawcy',
     ],
     'responsible_parties' => ['CUSTOMER' => 'Klient', 'AUTOKLUBY' => 'AUTOKLUBY', 'POLAND' => 'Polska', 'SYSTEM' => 'System'],
     'item_roles' => [

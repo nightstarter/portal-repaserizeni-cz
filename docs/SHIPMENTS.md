@@ -8,6 +8,8 @@ Fáze 3A zavádí doménu hromadných zásilek mezi organizacemi a Fáze 3B nad 
 |---|---|---|---|---|---|---|---|
 | `AK_TO_PL` | `GLS` | `CUSTOM_REBUILD` | `RECEIVED_AK`, vstupní událost `CONFIRM_AK_RECEIPT` | `SEND_TO_POLAND` | `SENT_TO_PL` | `CONFIRM_PL_RECEIPT` | `RECEIVED_PL_REPAIR` |
 | `AK_TO_PL` | `SVOZ_AUTOKLUBY` | `CUSTOM_REBUILD` | `RECEIVED_AK`, vstupní událost `CONFIRM_AK_RECEIPT` | `SEND_TO_POLAND` | `SENT_TO_PL` | `CONFIRM_PL_RECEIPT` | `RECEIVED_PL_REPAIR` |
+| `AK_TO_PL` | `GLS` | `CORE_RETURN` | `CORE_RECEIVED_AK` | `SEND_TO_POLAND` | `SENT_TO_PL` | `CONFIRM_CORE_RECEIPT_PL` | `CORE_INSPECTION` |
+| `AK_TO_PL` | `SVOZ_AUTOKLUBY` | `CORE_RETURN` | `CORE_RECEIVED_AK` | `SEND_TO_POLAND` | `SENT_TO_PL` | `CONFIRM_CORE_RECEIPT_PL` | `CORE_INSPECTION` |
 | `PL_TO_AK` | `DPD` | `CUSTOM_REBUILD` | `REPAIRED_PL` | `SEND_TO_AUTOKLUBY` | `SENT_TO_AK` | `CONFIRM_AK_RETURN_RECEIPT` | `RECEIVED_AK` |
 | `PL_TO_AK` | `SVOZ_AUTOKLUBY` | `CUSTOM_REBUILD` | `REPAIRED_PL` | `SEND_TO_AUTOKLUBY` | `SENT_TO_AK` | `CONFIRM_AK_RETURN_RECEIPT` | `RECEIVED_AK` |
 | `PL_TO_AK` | `DPD` | `STOCK_REQUEST` | `PL_STOCK_AVAILABLE` | `SEND_TO_AUTOKLUBY` | `SENT_TO_AK` | `CONFIRM_AK_STOCK_RECEIPT` | `RECEIVED_AK` |
@@ -15,7 +17,7 @@ Fáze 3A zavádí doménu hromadných zásilek mezi organizacemi a Fáze 3B nad 
 | `PL_TO_AK` | `DPD` | `STOCK_REPLENISHMENT` | `PL_STOCK_AVAILABLE` | `SEND_TO_AUTOKLUBY` | `SENT_TO_AK` | `CONFIRM_AK_STOCK_RECEIPT` | `RECEIVED_AK` (větev dokončena) |
 | `PL_TO_AK` | `SVOZ_AUTOKLUBY` | `STOCK_REPLENISHMENT` | `PL_STOCK_AVAILABLE` | `SEND_TO_AUTOKLUBY` | `SENT_TO_AK` | `CONFIRM_AK_STOCK_RECEIPT` | `RECEIVED_AK` (větev dokončena) |
 
-Jiné kombinace jsou zakázané. Zejména DPD nelze použít pro `AK_TO_PL`, GLS nelze použít pro `PL_TO_AK` a čekající `CORE_RETURN` nemá ve Fázi 3A akci, která by jej opravňovala k vložení.
+Jiné kombinace jsou zakázané. Zejména DPD nelze použít pro `AK_TO_PL`, GLS nelze použít pro `PL_TO_AK`, `CORE_RETURN/WAITING_CORE` nelze vložit před kontrolou AUTOKLUBY a `CORE_RETURN` nelze v této části procesu vložit do `PL_TO_AK`.
 
 ## Stav zásilky
 
@@ -50,7 +52,7 @@ Aktivní výlučná rezervace je samostatně uložena v `items.active_shipment_i
 1. zamkne shipment a ověří jeho `lock_version`;
 2. deterministicky zamkne shipment items, fyzické itemy a procesní větve;
 3. předem ověří všechny vazby, lokality, rezervace, role, stavy a oprávnění;
-4. v jedné vnější DB transakci zavolá stávající `CustomRebuildWorkflow` nebo `StockRebuildWorkflow` s akcí odvozenou serverem;
+4. v jedné vnější DB transakci zavolá stávající `CustomRebuildWorkflow`, `StockRebuildWorkflow` nebo `CoreReturnWorkflow` s akcí odvozenou serverem;
 5. zapíše thread events/audity, shipment event/audit a nový stav zásilky;
 6. při jediné chybě vrátí zpět celou dávku.
 

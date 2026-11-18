@@ -64,6 +64,7 @@ return [
     'handover_types' => ['GLS' => 'GLS', 'PERSONAL_PICKUP' => 'Osobní odběr'],
     'locations' => ['CUSTOMER' => 'Zákazník', 'AUTOKLUBY' => 'AUTOKLUBY', 'POLAND' => 'Polsko'],
     'inspection_results' => ['CORRECT' => 'Správné řízení', 'DIFFERENT' => 'Jiné řízení'],
+    'core_transport_conditions' => ['NO_VISIBLE_DAMAGE' => 'Bez viditelného poškození', 'PACKAGING_DAMAGED' => 'Poškozený obal', 'ITEM_DAMAGED' => 'Poškozený díl'],
     'faults' => ['OIL_LEAK' => 'Únik oleje', 'KNOCKING' => 'Klepe', 'FAULTY_UNIT' => 'Vadná jednotka', 'UNKNOWN' => 'Stav neznámý'],
     'actions' => [
         'THREAD_CREATED' => 'Vytvořena procesní větev', 'CONFIRM_AK_RECEIPT' => 'Potvrdit příjem AUTOKLUBY',
@@ -76,6 +77,11 @@ return [
         'CONFIRM_PL_STOCK_AVAILABLE' => 'Potvrdit dostupnost v Polsku',
         'SET_PL_STOCK_ETA' => 'Nastavit termín dostupnosti',
         'CONFIRM_AK_STOCK_RECEIPT' => 'Potvrdit příjem skladového kusu AUTOKLUBY',
+        'CONFIRM_CORE_RECEIPT_AK' => 'Potvrdit příjem vratného dílu AUTOKLUBY',
+        'CONFIRM_CORE_RECEIPT_PL' => 'Potvrdit příjem vratného dílu v Polsku',
+        'APPROVE_FULL_DEPOSIT_RETURN' => 'Schválit plné vrácení dodavatelské zálohy',
+        'APPROVE_REDUCED_DEPOSIT_RETURN' => 'Schválit krácené vrácení dodavatelské zálohy',
+        'CONFIRM_NO_SUPPLIER_DEPOSIT' => 'Potvrdit, že dodavatelská záloha nebyla účtována',
     ],
     'metadata_labels' => [
         'inspection_result' => 'Doručený kus', 'fault_code' => 'Závada', 'axial_rods' => 'Axiální táhla',
@@ -113,6 +119,10 @@ return [
         'READY_PICKUP' => 'Připraveno k osobnímu odběru', 'PICKED_UP' => 'Převzato zákazníkem',
         'PENDING_STOCK_CHECK' => 'Čeká na ověření skladu Děčín',
         'PL_SECURING_STOCK' => 'Polsko zajišťuje skladový kus', 'PL_STOCK_AVAILABLE' => 'Skladový kus je v Polsku dostupný',
+        'CORE_RECEIVED_AK' => 'Vratný díl přijat AUTOKLUBY', 'CORE_INSPECTION' => 'Kontrola vratného dílu v Polsku',
+        'DEPOSIT_FULL_APPROVED' => 'Plné vrácení dodavatelské zálohy schváleno',
+        'DEPOSIT_REDUCED_APPROVED' => 'Krácené vrácení dodavatelské zálohy schváleno',
+        'CORE_SETTLED_NO_DEPOSIT' => 'Vratka vypořádána bez dodavatelské zálohy',
     ],
     'responsible_parties' => ['CUSTOMER' => 'Zákazník', 'AUTOKLUBY' => 'AUTOKLUBY', 'POLAND' => 'Polsko', 'SYSTEM' => 'Systém'],
     'item_roles' => [

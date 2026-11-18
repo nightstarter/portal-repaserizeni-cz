@@ -3,12 +3,18 @@
 namespace App\Application\Shipments;
 
 use App\Application\Audit\AuditLogger;
+use App\Application\Orders\CoreReturnActionGuard;
+use App\Application\Orders\CoreReturnCommand;
+use App\Application\Orders\CoreReturnStateMachine;
+use App\Application\Orders\CoreReturnWorkflow;
 use App\Application\Orders\CustomRebuildActionGuard;
 use App\Application\Orders\CustomRebuildCommand;
 use App\Application\Orders\CustomRebuildWorkflow;
 use App\Application\Orders\StockRebuildActionGuard;
 use App\Application\Orders\StockRebuildCommand;
 use App\Application\Orders\StockRebuildWorkflow;
+use App\Enums\CoreReturnAction;
+use App\Enums\CoreReturnState;
 use App\Enums\CustomRebuildAction;
 use App\Enums\ItemRole;
 use App\Enums\OrganizationCode;
@@ -40,6 +46,9 @@ final class ShipmentService
         private readonly StockRebuildActionGuard $stockGuard,
         private readonly CustomRebuildWorkflow $customWorkflow,
         private readonly StockRebuildWorkflow $stockWorkflow,
+        private readonly CoreReturnActionGuard $coreReturnGuard,
+        private readonly CoreReturnStateMachine $coreReturnStateMachine,
+        private readonly CoreReturnWorkflow $coreReturnWorkflow,
         private readonly AuditLogger $auditLogger,
     ) {}
 
@@ -382,6 +391,14 @@ final class ShipmentService
         $order = $thread->order;
 
         if ($shipment->direction === ShipmentDirection::AK_TO_PL) {
+            if ($thread->type === ProcessThreadType::CORE_RETURN && $item->role === ItemRole::CORE_RETURN) {
+                $this->coreReturnGuard->assertMayPerform($actor, new CoreReturnCommand(
+                    CoreReturnAction::SEND_TO_POLAND, $actor, 'shipment-eligibility', [], $thread->lock_version,
+                ));
+                $this->coreReturnStateMachine->nextState(CoreReturnState::from($thread->state), CoreReturnAction::SEND_TO_POLAND);
+
+                return;
+            }
             if ($thread->type !== ProcessThreadType::CUSTOM_REBUILD || $item->role !== ItemRole::CUSTOMER_ITEM) {
                 throw new WorkflowConflictException('Item is not eligible for AK_TO_PL.');
             }
@@ -415,6 +432,16 @@ final class ShipmentService
         }
         $order = $thread->order;
         if ($shipment->direction === ShipmentDirection::AK_TO_PL
+            && $thread->type === ProcessThreadType::CORE_RETURN
+            && $item->role === ItemRole::CORE_RETURN) {
+            $this->coreReturnGuard->assertMayPerform($actor, new CoreReturnCommand(
+                CoreReturnAction::CONFIRM_CORE_RECEIPT_PL, $actor, 'shipment-receipt-eligibility', [], $thread->lock_version,
+            ));
+            $this->coreReturnStateMachine->nextState(CoreReturnState::from($thread->state), CoreReturnAction::CONFIRM_CORE_RECEIPT_PL);
+
+            return;
+        }
+        if ($shipment->direction === ShipmentDirection::AK_TO_PL
             && $thread->type === ProcessThreadType::CUSTOM_REBUILD
             && $item->role === ItemRole::CUSTOMER_ITEM) {
             $this->customGuard->assertActorMayPerform($actor, CustomRebuildAction::CONFIRM_PL_RECEIPT);
@@ -446,6 +473,13 @@ final class ShipmentService
     {
         $key = $this->threadIdempotencyKey($shipment, $thread, ShipmentAction::SEND_SHIPMENT, $command);
         $data = ['shipment_public_number' => $shipment->public_number];
+        if ($thread->type === ProcessThreadType::CORE_RETURN) {
+            $this->coreReturnWorkflow->execute($thread->order, new CoreReturnCommand(
+                CoreReturnAction::SEND_TO_POLAND, $command->actor, $key, $data, $thread->lock_version,
+            ));
+
+            return;
+        }
         if ($thread->type === ProcessThreadType::CUSTOM_REBUILD) {
             $action = $shipment->direction === ShipmentDirection::AK_TO_PL
                 ? CustomRebuildAction::SEND_TO_POLAND
@@ -466,6 +500,13 @@ final class ShipmentService
     {
         $key = $this->threadIdempotencyKey($shipment, $thread, ShipmentAction::CONFIRM_SHIPMENT_DELIVERY, $command);
         $data = ['shipment_public_number' => $shipment->public_number];
+        if ($thread->type === ProcessThreadType::CORE_RETURN) {
+            $this->coreReturnWorkflow->execute($thread->order, new CoreReturnCommand(
+                CoreReturnAction::CONFIRM_CORE_RECEIPT_PL, $command->actor, $key, $data, $thread->lock_version,
+            ));
+
+            return;
+        }
         if ($thread->type === ProcessThreadType::CUSTOM_REBUILD) {
             $action = $shipment->direction === ShipmentDirection::AK_TO_PL
                 ? CustomRebuildAction::CONFIRM_PL_RECEIPT

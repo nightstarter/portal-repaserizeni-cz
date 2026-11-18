@@ -244,3 +244,31 @@
 - Stav: přijato ve Fázi 3C
 - Rozhodnutí: Automatizovaná doménová, HTTP, bezpečnostní a regresní akceptace Fáze 3 je zelená. Produkční `migrate:status` ukazuje 000001–000006 jako aplikované a přesný seznam pending migrací je prázdný. Již aplikovaný soubor 000006 zůstává neměnný a jeho hash odpovídá incident dokumentaci.
 - Dopad: Nasazení je kódové a nepovoluje spuštění migrace, importu, Pohoda bridge ani scheduleru. Browser smoke test zůstává povinnou ruční deployment branou, protože v relaci 3C nebyl browser nástroj dostupný.
+
+## D-036: Zákaznický snapshot a dodavatelská záloha jsou oddělené domény
+
+- Datum: 2026-11-18
+- Stav: přijato pro Fázi 4A
+- Rozhodnutí: `CUSTOMER_DEPOSIT_SNAPSHOT` z legacy e-shopu je pouze reference pro AUTOKLUBY. `SUPPLIER_DEPOSIT_ORIGINAL` vzniká výhradně explicitním polským zápisem s vlastní částkou a ISO měnou; doména odmítá zákaznický snapshot jako zdroj.
+- Dopad: Portál zákaznickou zálohu ve 4A nevrací a Polsku ji nevydává za jeho dodavatelskou pohledávku.
+
+## D-037: Dodavatelské finance jsou append-only ledger
+
+- Datum: 2026-11-18
+- Stav: přijato pro Fázi 4A
+- Rozhodnutí: Finanční řádky se nepřepisují. Každý je navázaný na order, CORE_RETURN, thread event, audit, actor, organizaci, idempotency key a request hash. Oprava používá nový `CORRECTION` nebo `REVERSAL` pouze od `AK_ADMIN` s důvodem.
+- Dopad: Historické rozhodnutí zůstává dohledatelné a transakce thread/event/audit/finance se vrací jako celek.
+
+## D-038: Bez-zálohová větev vyžaduje kladný důkaz absence
+
+- Datum: 2026-11-18
+- Stav: přijato pro Fázi 4A
+- Rozhodnutí: `CONFIRM_NO_SUPPLIER_DEPOSIT` vyžaduje předchozí `SUPPLIER_DEPOSIT_NOT_CHARGED`. Chybějící nebo nullable originál není důkaz.
+- Dopad: Větev nevytváří falešný dobropis, zapíše vypořádací událost a jako jediný finanční výsledek 4A dokončí CORE_RETURN.
+
+## D-039: CORE_RETURN rozšiřuje, ale neduplikuje ShipmentService
+
+- Datum: 2026-11-18
+- Stav: přijato pro Fázi 4A
+- Rozhodnutí: `AK_TO_PL` přijímá `CORE_RETURN/CORE_RECEIVED_AK` pro GLS i svoz. ShipmentService odvodí `SEND_TO_POLAND` a `CONFIRM_CORE_RECEIPT_PL` přes CoreReturnWorkflow ve stejné dávkové transakci.
+- Dopad: Aktivní rezervace, fyzická lokalita, idempotence, lock version a rollback celé zásilky zůstávají společné s Fází 3. `PL_TO_AK` vratku v této části odmítá.

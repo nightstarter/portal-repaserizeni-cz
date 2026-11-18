@@ -94,9 +94,18 @@ Akční kód `SEND_TO_AUTOKLUBY` je záměrně společný s `CUSTOM_REBUILD`; je
 | `READY_AK_DISPATCH` nebo `RECEIVED_AK` | `MARK_READY_PICKUP` | AUTOKLUBY / `AK_ADMIN`, `AK_OPERATOR` | `READY_PICKUP` | ne; pouze osobní odběr |
 | `READY_PICKUP` | `CONFIRM_CUSTOMER_PICKUP` | AUTOKLUBY / `AK_ADMIN`, `AK_OPERATOR` | `PICKED_UP` | větev dokončena |
 
-### `CORE_RETURN` a uzavření objednávky
+### `CORE_RETURN` a uzavření objednávky — fáze 4A
 
-Fáze 2C pouze zakládá `CORE_RETURN/WAITING_CORE` s odpovědností zákazníka. Nemá žádné běžné přechody; vratkový a finanční automat vznikne ve Fázi 4.
+| Výchozí stav | Akce | Organizace / role | Cílový stav | Dokončení |
+| --- | --- | --- | --- | --- |
+| `WAITING_CORE` | `CONFIRM_CORE_RECEIPT_AK` | AUTOKLUBY / `AK_ADMIN`, `AK_OPERATOR` | `CORE_RECEIVED_AK` | ne; povinná neměnná kontrola |
+| `CORE_RECEIVED_AK` | `SEND_TO_POLAND` přes `AK_TO_PL` | AUTOKLUBY / `AK_ADMIN`, `AK_OPERATOR` | `SENT_TO_PL` | ne |
+| `SENT_TO_PL` | `CONFIRM_CORE_RECEIPT_PL` přes příjem zásilky | POLAND / `PL_MANAGER`, `PL_OPERATOR` | `CORE_INSPECTION` | ne |
+| `CORE_INSPECTION` | `APPROVE_FULL_DEPOSIT_RETURN` | POLAND; `AK_ADMIN` pouze s důvodem | `DEPOSIT_FULL_APPROVED` | ne; čeká 4B |
+| `CORE_INSPECTION` | `APPROVE_REDUCED_DEPOSIT_RETURN` | POLAND; `AK_ADMIN` pouze s důvodem | `DEPOSIT_REDUCED_APPROVED` | ne; čeká 4B |
+| `CORE_INSPECTION` | `CONFIRM_NO_SUPPLIER_DEPOSIT` | POLAND; `AK_ADMIN` pouze s důvodem | `CORE_SETTLED_NO_DEPOSIT` | ano |
+
+Bez-zálohový přechod vyžaduje předchozí neměnný `SUPPLIER_DEPOSIT_NOT_CHARGED`; absence ani `NULL` není důkaz. `CREDIT_ISSUED` a `CREDIT_PAID` vzniknou až s bezpečnými dokumenty ve Fázi 4B.
 
 Dokončení jedné větve neuzavírá objednávku. `orders.closed_at` přepočítává společná doménová služba až po dokončení všech povinných větví. Aktivní `CORE_RETURN`, `STOCK_REPLENISHMENT` nebo jiná povinná větev drží objednávku otevřenou.
 
@@ -124,6 +133,6 @@ Zásilka koordinuje stávající thread automaty a nevytváří alternativní p�
 
 Ve Fázi 3B klientské formuláře posílají pouze shipment command, idempotency key, očekávanou `lock_version` a případná data akce. Při skenování posílají QR token; server sám odvodí fyzický item a jeho procesní větev. UI proto nemůže určit thread akci ani cílový stav.
 
-## Mimo fáze 2A–3B
+## Mimo fáze 2A–4A
 
-Detailní vratky, zákaznické zásilky, carrier integrace, finance, dokumenty, diskuse, notifikace, reklamace a výkupy zde nejsou implementované. Budou specifikovány až v příslušných dalších fázích.
+Zákaznické refundace, zákaznické zásilky, carrier integrace, doklady a dobropisy, UI 4B, diskuse, notifikace, reklamace a výkupy zde nejsou implementované.
