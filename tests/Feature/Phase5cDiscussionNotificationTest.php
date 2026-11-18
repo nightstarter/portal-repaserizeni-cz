@@ -108,6 +108,20 @@ class Phase5cDiscussionNotificationTest extends TestCase
         self::assertSame(OutboxEvent::FAILED, OutboxEvent::query()->whereNull('recipient_user_id')->sole()->status);
     }
 
+    public function test_message_keeps_a_traceable_outbox_request_when_target_organization_is_inactive(): void
+    {
+        [$order] = $this->visibleOrder('5C-INACTIVE-TARGET');
+        $this->pl->update(['active' => false]);
+
+        $message = $this->discussion->post($order, new PostMessageCommand($this->akUser, 'Bez aktivní druhé strany', '5c-inactive-target'));
+        $event = OutboxEvent::query()->sole();
+        self::assertSame($message->id, $event->aggregate_id);
+        self::assertNull($event->recipient_user_id);
+        self::assertSame('discussion-email:'.$message->id.':no-recipient', $event->deduplication_key);
+        self::assertSame(OutboxEvent::PENDING, $event->status);
+        Mail::assertNothingSent();
+    }
+
     public function test_polish_message_targets_czech_users_and_email_variants_contain_no_pii_body_or_attachment_data(): void
     {
         [$order] = $this->visibleOrder('5C-SAFE-MAIL');

@@ -25,7 +25,7 @@ final class DiscussionNotificationOutbox
             ->first();
 
         if ($targetOrganization === null) {
-            return 0;
+            return $this->enqueueWithoutRecipient($message, new MessagePosted($message));
         }
 
         $event = new MessagePosted($message);
@@ -62,24 +62,30 @@ final class DiscussionNotificationOutbox
             });
 
         if ($eligible === 0) {
-            $outbox = OutboxEvent::query()->firstOrCreate(
-                ['deduplication_key' => 'discussion-email:'.$message->id.':no-recipient'],
-                [
-                    'event_uuid' => (string) Str::uuid(),
-                    'event_type' => MessagePosted::TYPE,
-                    'aggregate_type' => Message::class,
-                    'aggregate_id' => $message->id,
-                    'recipient_user_id' => null,
-                    'payload' => $event->payload() + ['recipient_user_id' => null],
-                    'status' => OutboxEvent::PENDING,
-                    'attempts' => 0,
-                    'available_at' => now(),
-                    'next_attempt_at' => now(),
-                ],
-            );
-            $created += $outbox->wasRecentlyCreated ? 1 : 0;
+            $created += $this->enqueueWithoutRecipient($message, $event);
         }
 
         return $created;
+    }
+
+    private function enqueueWithoutRecipient(Message $message, MessagePosted $event): int
+    {
+        $outbox = OutboxEvent::query()->firstOrCreate(
+            ['deduplication_key' => 'discussion-email:'.$message->id.':no-recipient'],
+            [
+                'event_uuid' => (string) Str::uuid(),
+                'event_type' => MessagePosted::TYPE,
+                'aggregate_type' => Message::class,
+                'aggregate_id' => $message->id,
+                'recipient_user_id' => null,
+                'payload' => $event->payload() + ['recipient_user_id' => null],
+                'status' => OutboxEvent::PENDING,
+                'attempts' => 0,
+                'available_at' => now(),
+                'next_attempt_at' => now(),
+            ],
+        );
+
+        return $outbox->wasRecentlyCreated ? 1 : 0;
     }
 }
