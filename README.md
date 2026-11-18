@@ -22,10 +22,11 @@ Samostatný transakční portál AUTOKLUBY ↔ POLSKO. Procesní pravidla určuj
   - [x] Fáze 4B – soukromé dokumenty, dobropisy, platby, UI a KPI (viz `docs/PHASE_4B.md` a `docs/DOCUMENTS.md`)
   - [x] Fáze 4C – závěrečná akceptace a deployment audit (viz `docs/PHASE_4_ACCEPTANCE.md` a `docs/PHASE_4_DEPLOYMENT.md`)
   - [x] Fáze 4D – samostatné autorizované fronty Vratky a Doklady a finance, stabilní menu a sekční navigace detailu (viz `docs/PHASE_4D.md`)
-- [ ] Fáze 5 – diskuse a notifikace
+- [x] Fáze 5 – diskuse a notifikace (automatizovaně přijata; produkční aktivace má deployment brány)
   - [x] Fáze 5A – doménové jádro diskuse, privátní přílohy, read-state a outbox bez odesílání e-mailů (viz `docs/PHASE_5A.md`)
   - [x] Fáze 5B – UI diskuse, globální a lokální unread badge, autorizovaná fronta a cursorové stránkování (viz `docs/PHASE_5B.md`)
   - [x] Fáze 5C – transakční e-mailový outbox, worker/retry, scheduler a AK_ADMIN přehled (viz `docs/PHASE_5C.md`)
+  - [x] Fáze 5D – závěrečná automatizovaná akceptace, bezpečnostní/výkonový audit a deployment plán (viz `docs/PHASE_5_ACCEPTANCE.md` a `docs/PHASE_5_DEPLOYMENT.md`)
 - [ ] Fáze 6 – reklamace a výkup
 - [ ] Fáze 7 – Pohoda bridge a přecenění
 - [ ] Fáze 8 – produkční připravenost
