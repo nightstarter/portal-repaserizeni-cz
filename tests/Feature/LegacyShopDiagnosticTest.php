@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Storage;
 use Tests\Support\InteractsWithLegacyShopFixture;
 use Tests\TestCase;
 
@@ -16,8 +17,9 @@ class LegacyShopDiagnosticTest extends TestCase
     {
         $this->configureLegacyShopFixture();
         $this->insertLegacyOrder(100, ['customer' => ['firstname' => 'Sensitive', 'lastname' => 'Person', 'email' => 'secret@example.test']]);
-        $path = storage_path('app/private/legacy-shop-test-report.json');
-        File::delete($path);
+        Storage::fake('local');
+        $realPath = storage_path('app/private/legacy-shop-test-report.json');
+        $path = Storage::disk('local')->path('legacy-shop-test-report.json');
 
         $this->artisan('legacy-shop:diagnose', ['--output' => $path])->assertSuccessful();
 
@@ -28,5 +30,6 @@ class LegacyShopDiagnosticTest extends TestCase
         self::assertStringNotContainsString('generation_expression', $report);
         self::assertStringNotContainsString('Sensitive', $report);
         self::assertStringNotContainsString('secret@example.test', $report);
+        self::assertFileDoesNotExist($realPath);
     }
 }
