@@ -12,9 +12,13 @@ use App\Integrations\LegacyShop\LegacyShopMapping;
 use App\Integrations\LegacyShop\PrestaShop14OrderReader;
 use App\Integrations\Stock\PendingStockAvailabilityResolver;
 use App\Models\Document;
+use App\Models\Message;
+use App\Models\MessageAttachment;
 use App\Models\Order;
 use App\Models\User;
 use App\Policies\DocumentPolicy;
+use App\Policies\MessageAttachmentPolicy;
+use App\Policies\MessagePolicy;
 use App\Policies\OrderPolicy;
 use App\Policies\UserPolicy;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -54,6 +58,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(User::class, UserPolicy::class);
         Gate::policy(Order::class, OrderPolicy::class);
         Gate::policy(Document::class, DocumentPolicy::class);
+        Gate::policy(Message::class, MessagePolicy::class);
+        Gate::policy(MessageAttachment::class, MessageAttachmentPolicy::class);
         Gate::define('manage-users', fn (User $user): bool => $user->isAdministrator());
 
         RateLimiter::for('login', fn (Request $request) => Limit::perMinute(5)->by(strtolower((string) $request->input('email')).'|'.$request->ip()));

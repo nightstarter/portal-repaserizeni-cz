@@ -10,6 +10,10 @@
         <span><strong>{{ __('app.routing') }}</strong><br>{{ $order->routing?->value ?: '—' }}</span>
     </div>
 </div>
+<div class="section-nav" role="navigation" aria-label="{{ __('app.order_sections') }}">
+    <a href="{{ route('orders.show', $order) }}">{{ __('app.section_overview') }}</a>
+    <a href="{{ route('orders.discussion.index', $order) }}">{{ __('app.discussion') }}</a>
+</div>
 <h2>{{ __('app.process_threads') }}</h2>
 <div class="cards">
 @foreach($order->processThreads as $thread)

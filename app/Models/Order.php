@@ -78,6 +78,11 @@ class Order extends Model
         return $this->hasMany(Document::class);
     }
 
+    public function messages(): HasMany
+    {
+        return $this->hasMany(Message::class);
+    }
+
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
         if ($user->organization->code === OrganizationCode::AUTOKLUBY) {

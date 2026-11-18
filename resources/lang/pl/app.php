@@ -188,5 +188,12 @@ return [
     'finance_queue_hints' => ['missing_invoice' => 'Gałęzie bez aktywnej faktury dostawcy.', 'waiting_deposit_decision' => 'Zwroty gotowe do decyzji o kaucji dostawcy.', 'missing_credit_note' => 'Zatwierdzone zwroty bez aktywnej noty kredytowej.', 'waiting_payment' => 'Wystawione noty oczekujące na potwierdzenie płatności.', 'reduced_settlement' => 'Zwroty z pomniejszoną kaucją dostawcy.'],
     'finance_queue_empty' => 'Brak pozycji w tej kolejce.', 'finance_queue_empty_hint' => 'Żadna czynność nie jest wymagana.', 'open_order_finance' => 'Otwórz finanse zlecenia',
     'order_sections' => 'Sekcje zlecenia', 'section_overview' => 'Przegląd', 'section_return' => 'Zwrot', 'section_documents_finance' => 'Dokumenty i finanse',
+    'discussion' => 'Dyskusja', 'back_to_order' => 'Wróć do zlecenia', 'new_message' => 'Nowa wiadomość', 'message_text' => 'Treść wiadomości', 'message_attachments' => 'Załączniki', 'send_message' => 'Wyślij wiadomość',
+    'no_messages' => 'Nie ma jeszcze żadnych wiadomości.', 'no_messages_hint' => 'Dyskusję można rozpocząć za pomocą formularza poniżej.',
+    'unread_messages' => '{1} :count nieprzeczytana wiadomość|[2,4] :count nieprzeczytane wiadomości|[5,*] :count nieprzeczytanych wiadomości', 'mark_all_read' => 'Oznacz wszystkie jako przeczytane',
+    'message_attachment_hint' => 'Maksymalnie 5 plików PDF, JPG lub PNG; każdy do 10 MB.', 'message_posted' => 'Wiadomość została wysłana.', 'messages_marked_read' => 'Wiadomości zostały oznaczone jako przeczytane.',
+    'message_idempotency_conflict' => 'Ten sam identyfikator wysłania został już użyty dla innej wiadomości.', 'message_attachment_invalid' => 'Nie udało się przesłać załącznika.',
+    'message_attachment_unsafe_name' => 'Nazwa załącznika nie jest bezpieczna.', 'message_attachment_type' => 'Ten typ załącznika nie jest dozwolony.', 'message_attachment_size' => 'Załącznik przekracza dozwolony rozmiar.',
+    'message_attachment_mime' => 'Rozszerzenie, deklarowany typ MIME i rzeczywista zawartość załącznika nie są zgodne.', 'message_attachment_store_failed' => 'Nie udało się bezpiecznie zapisać załącznika.',
     'return_kpis' => ['waiting_receipt' => 'Zwroty oczekujące na przyjęcie', 'waiting_poland_core' => 'Zwroty oczekujące na Polskę', 'missing_invoices' => 'Brakujące faktury dostawcy', 'waiting_deposit_decision' => 'Decyzje o kaucji', 'waiting_credit_notes' => 'Noty do przesłania', 'waiting_credit_payment' => 'Płatności do potwierdzenia', 'reduced_deposits' => 'Pomniejszone kaucje'],
 ];

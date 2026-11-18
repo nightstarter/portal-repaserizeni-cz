@@ -32,4 +32,9 @@ class Organization extends Model
     {
         return $this->hasMany(ThreadEvent::class, 'actor_organization_id');
     }
+
+    public function messages(): HasMany
+    {
+        return $this->hasMany(Message::class, 'author_organization_id');
+    }
 }

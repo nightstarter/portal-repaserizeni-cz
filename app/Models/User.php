@@ -50,4 +50,14 @@ class User extends Authenticatable
     {
         return $this->hasMany(AuditLog::class, 'actor_user_id');
     }
+
+    public function messages(): HasMany
+    {
+        return $this->hasMany(Message::class, 'author_user_id');
+    }
+
+    public function messageReads(): HasMany
+    {
+        return $this->hasMany(MessageRead::class);
+    }
 }

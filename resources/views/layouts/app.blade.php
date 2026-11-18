@@ -45,6 +45,8 @@
         .section-heading { display:flex; justify-content:space-between; gap:1rem; align-items:start }
         .section-heading h2 { margin:.1rem 0 } .queue-count { font-size:1.8rem; color:var(--blue) }
         .empty-state { padding:1rem .25rem } .empty-state p { margin-bottom:0 }
+        .message-card { border-left:4px solid #b7cee1 } .message-header { display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap }
+        .message-header time { color:#627180 } .message-body { white-space:normal; overflow-wrap:anywhere } .attachment-list { margin-bottom:0 }
         .branch-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(19rem,1fr)); gap:1rem; align-items:start }
         .branch-card { border-top:4px solid #d79b19 } .branch-card.completed { border-top-color:var(--green) }
         .branch-card header { display:flex; justify-content:space-between; gap:.75rem; align-items:start }

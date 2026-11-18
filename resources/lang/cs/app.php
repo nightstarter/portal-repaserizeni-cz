@@ -188,5 +188,12 @@ return [
     'finance_queue_hints' => ['missing_invoice' => 'Větve bez aktivní dodavatelské faktury.', 'waiting_deposit_decision' => 'Vratky připravené k rozhodnutí o dodavatelské záloze.', 'missing_credit_note' => 'Schválená vrácení bez aktivního dobropisu.', 'waiting_payment' => 'Vystavené dobropisy čekající na potvrzení platby.', 'reduced_settlement' => 'Vratky, u kterých byla dodavatelská záloha krácena.'],
     'finance_queue_empty' => 'V této frontě nejsou žádné položky.', 'finance_queue_empty_hint' => 'Není vyžadována žádná akce.', 'open_order_finance' => 'Otevřít finance zakázky',
     'order_sections' => 'Sekce zakázky', 'section_overview' => 'Přehled', 'section_return' => 'Vratka', 'section_documents_finance' => 'Doklady a finance',
+    'discussion' => 'Diskuse', 'back_to_order' => 'Zpět na zakázku', 'new_message' => 'Nová zpráva', 'message_text' => 'Text zprávy', 'message_attachments' => 'Přílohy', 'send_message' => 'Odeslat zprávu',
+    'no_messages' => 'Zatím zde nejsou žádné zprávy.', 'no_messages_hint' => 'Diskusi můžete zahájit formulářem níže.',
+    'unread_messages' => '{1} :count nepřečtená zpráva|[2,4] :count nepřečtené zprávy|[5,*] :count nepřečtených zpráv', 'mark_all_read' => 'Označit vše jako přečtené',
+    'message_attachment_hint' => 'Nejvýše 5 souborů PDF, JPG nebo PNG; každý maximálně 10 MB.', 'message_posted' => 'Zpráva byla odeslána.', 'messages_marked_read' => 'Zprávy byly označeny jako přečtené.',
+    'message_idempotency_conflict' => 'Stejný identifikátor odeslání už byl použit pro jinou zprávu.', 'message_attachment_invalid' => 'Přílohu se nepodařilo nahrát.',
+    'message_attachment_unsafe_name' => 'Název přílohy není bezpečný.', 'message_attachment_type' => 'Tento typ přílohy není povolen.', 'message_attachment_size' => 'Příloha překračuje povolenou velikost.',
+    'message_attachment_mime' => 'Přípona, deklarovaný MIME typ a skutečný obsah přílohy si neodpovídají.', 'message_attachment_store_failed' => 'Přílohu se nepodařilo bezpečně uložit.',
     'return_kpis' => ['waiting_receipt' => 'Vratky čekající na příjem', 'waiting_poland_core' => 'Vratky čekající na Polsko', 'missing_invoices' => 'Chybějící dodavatelské faktury', 'waiting_deposit_decision' => 'Čekající rozhodnutí o záloze', 'waiting_credit_notes' => 'Čekající dobropisy', 'waiting_credit_payment' => 'Dobropisy čekající na platbu', 'reduced_deposits' => 'Krácené zálohy'],
 ];
