@@ -24,6 +24,8 @@ final class CoreReturnActionGuard
         CoreReturnAction::APPROVE_FULL_DEPOSIT_RETURN,
         CoreReturnAction::APPROVE_REDUCED_DEPOSIT_RETURN,
         CoreReturnAction::CONFIRM_NO_SUPPLIER_DEPOSIT,
+        CoreReturnAction::ISSUE_SUPPLIER_CREDIT_NOTE,
+        CoreReturnAction::CONFIRM_CREDIT_PAID,
     ];
 
     public function assertMayPerform(User $actor, CoreReturnCommand $command): bool
@@ -62,6 +64,8 @@ final class CoreReturnActionGuard
             CoreReturnAction::APPROVE_FULL_DEPOSIT_RETURN,
             CoreReturnAction::APPROVE_REDUCED_DEPOSIT_RETURN,
             CoreReturnAction::CONFIRM_NO_SUPPLIER_DEPOSIT,
+            CoreReturnAction::ISSUE_SUPPLIER_CREDIT_NOTE,
+            CoreReturnAction::CONFIRM_CREDIT_PAID,
         ], true);
         if ($financialDecision && $actor->organization->code === OrganizationCode::AUTOKLUBY && $actor->role === UserRole::AK_ADMIN) {
             if (trim((string) ($command->data['override_reason'] ?? '')) === '') {

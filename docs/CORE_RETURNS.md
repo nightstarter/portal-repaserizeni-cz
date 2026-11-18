@@ -30,4 +30,6 @@ Z `CORE_RECEIVED_AK` lze fyzický kus vložit jen do `AK_TO_PL` zásilky s `GLS`
 
 ## Dokončení
 
-`DEPOSIT_FULL_APPROVED` a `DEPOSIT_REDUCED_APPROVED` nejsou koncové: čekají na bezpečné doklady a platbu ve Fázi 4B. `CORE_SETTLED_NO_DEPOSIT` je koncový a nastaví `completed_at`. `OrderCompletionService` uzavře objednávku teprve tehdy, když jsou dokončené všechny její povinné větve.
+`DEPOSIT_FULL_APPROVED` a `DEPOSIT_REDUCED_APPROVED` nejsou koncové: čekají na aktivní dobropis přesně ve schválené částce a měně. Jeho atomické nahrání posune větev do `CREDIT_ISSUED`; potvrzení platby serverem odvozené z aktivního dobropisu a ledgeru ji posune do koncového `CREDIT_PAID`. `CORE_SETTLED_NO_DEPOSIT` je druhý koncový stav a dobropis nepovoluje. `OrderCompletionService` uzavře objednávku teprve tehdy, když jsou dokončené všechny její povinné větve.
+
+UI detailu ukazuje fyzickou lokaci, kontrolu AUTOKLUBY, přepravu, schválenou částku, krácení, soukromé doklady, platbu a další povolenou akci. Polská projekce používá row-level scope a nenačítá zákaznické PII ani zákaznický snapshot zálohy.

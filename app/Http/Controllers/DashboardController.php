@@ -4,8 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Application\Orders\CustomRebuildPresentation;
 use App\Application\Orders\StockRebuildPresentation;
+use App\Enums\DocumentStatus;
+use App\Enums\DocumentType;
 use App\Enums\OrderType;
 use App\Enums\OrganizationCode;
+use App\Enums\ProcessThreadType;
 use App\Models\IntegrationEvent;
 use App\Models\Order;
 use App\Models\ProcessThread;
@@ -23,7 +26,7 @@ class DashboardController extends Controller
         $this->authorize('viewAny', Order::class);
         $isPoland = $user->organization->code === OrganizationCode::POLAND;
         $availableQueues = $isPoland
-            ? ['pl_new', 'pl_securing', 'pl_available', 'pl_sent', 'completed']
+            ? ['pl_new', 'pl_securing', 'pl_available', 'pl_sent', 'core_receive', 'core_decision', 'credit_upload', 'credit_payment', 'completed']
             : ['pending_stock', 'customer_fulfillment', 'stock_replenishment', 'core_return', 'waiting_ak', 'waiting_poland', 'completed'];
         $activeQueue = in_array($request->query('queue'), $availableQueues, true)
             ? (string) $request->query('queue')
@@ -67,6 +70,9 @@ class DashboardController extends Controller
         }
 
         $visibleThreadQuery = ProcessThread::query()->visibleTo($user);
+        $coreQuery = ProcessThread::query()->visibleTo($user)->where('type', ProcessThreadType::CORE_RETURN);
+        $invoiceThreads = ProcessThread::query()->visibleTo($user)
+            ->whereIn('type', [ProcessThreadType::CUSTOM_REBUILD, ProcessThreadType::STOCK_REQUEST, ProcessThreadType::STOCK_REPLENISHMENT]);
 
         return view('dashboard', [
             'rows' => $rows,
@@ -84,6 +90,15 @@ class DashboardController extends Controller
             'availableQueues' => $availableQueues,
             'activeQueue' => $activeQueue,
             'queueCounts' => $queueCounts,
+            'returnKpis' => [
+                'waiting_receipt' => (clone $coreQuery)->where('state', 'WAITING_CORE')->count(),
+                'waiting_poland_core' => (clone $coreQuery)->whereIn('state', ['SENT_TO_PL', 'CORE_INSPECTION'])->count(),
+                'missing_invoices' => (clone $invoiceThreads)->whereDoesntHave('documents', fn ($documents) => $documents->where('type', DocumentType::SUPPLIER_INVOICE)->where('status', DocumentStatus::ACTIVE))->count(),
+                'waiting_deposit_decision' => (clone $coreQuery)->where('state', 'CORE_INSPECTION')->count(),
+                'waiting_credit_notes' => (clone $coreQuery)->whereIn('state', ['DEPOSIT_FULL_APPROVED', 'DEPOSIT_REDUCED_APPROVED'])->count(),
+                'waiting_credit_payment' => (clone $coreQuery)->where('state', 'CREDIT_ISSUED')->count(),
+                'reduced_deposits' => (clone $coreQuery)->where('state', 'DEPOSIT_REDUCED_APPROVED')->count(),
+            ],
         ]);
     }
 }

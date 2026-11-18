@@ -18,6 +18,8 @@ Stabilní typy jsou:
 - `SUPPLIER_DEPOSIT_RETURN_APPROVED`;
 - `SUPPLIER_DEPOSIT_REDUCTION`;
 - `SUPPLIER_DEPOSIT_SETTLED_NO_DEPOSIT`;
+- `SUPPLIER_CREDIT_NOTE_ISSUED`;
+- `SUPPLIER_CREDIT_PAID`;
 - `CORRECTION` a `REVERSAL` s vazbou `corrects_entry_id`.
 
 Existující rozhodnutí se neupravuje. Oprava je nový `CORRECTION` nebo záporný `REVERSAL`, pouze pro `AK_ADMIN`, s povinným důvodem, stejnou měnou a auditní vazbou.
@@ -33,6 +35,12 @@ Krácené vrácení vyžaduje finální vracenou částku ve stejné měně a ne
 Finální částka musí být od nuly včetně do původní částky bez rovnosti nahoře. Rovnost vyžaduje plnou akci, vyšší či záporná částka je chyba. Vzniknou dva řádky: schválené vrácení a odvozené krácení.
 
 Bez-zálohová cesta je možná jen po samostatném `SUPPLIER_DEPOSIT_NOT_CHARGED`. `NULL`, nula bez důkazní události ani chybějící originál nestačí. `CONFIRM_NO_SUPPLIER_DEPOSIT` nevytváří dobropis; přidá pouze `SUPPLIER_DEPOSIT_SETTLED_NO_DEPOSIT`, audit a dokončí větev.
+
+## Faktura, dobropis a platba
+
+Aktivní dodavatelská faktura vytváří `SUPPLIER_PURCHASE_PRICE` a právě jeden z `SUPPLIER_DEPOSIT_ORIGINAL` nebo explicitního `SUPPLIER_DEPOSIT_NOT_CHARGED`. Měna zálohy musí odpovídat faktuře. Oprava dokumentu nepřepisuje řádky; neguje finance původní verze přes `REVERSAL` a přidá finance nové verze.
+
+Dobropis je přípustný jen po plném nebo kráceném schválení a musí částkou i měnou přesně odpovídat serverem odvozenému `SUPPLIER_DEPOSIT_RETURN_APPROVED`. Jeho vydání přidá `SUPPLIER_CREDIT_NOTE_ISSUED`. `CONFIRM_CREDIT_PAID` nepřijímá klientskou částku ani měnu, vyžaduje aktivní dobropis a přidá `SUPPLIER_CREDIT_PAID`. Varianta bez dodavatelské zálohy dobropis ani platbu nevytváří.
 
 ## Transakce a souběh
 

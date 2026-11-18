@@ -2,17 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Application\Orders\CoreReturnPresentation;
 use App\Application\Orders\CustomRebuildPresentation;
 use App\Application\Orders\CustomRebuildTimeline;
 use App\Application\Orders\StockRebuildPresentation;
 use App\Application\Orders\StockRebuildTimeline;
+use App\Enums\CoreReturnAction;
 use App\Enums\CustomRebuildAction;
 use App\Enums\CustomRebuildState;
 use App\Enums\ItemRole;
 use App\Enums\OrderType;
 use App\Enums\OrganizationCode;
 use App\Enums\ProcessThreadType;
-use App\Enums\StockRebuildAction;
 use App\Enums\UserRole;
 use App\Models\Order;
 use Illuminate\Contracts\View\View;
@@ -28,6 +29,7 @@ class OrderController extends Controller
         CustomRebuildTimeline $timeline,
         StockRebuildPresentation $stockPresentation,
         StockRebuildTimeline $stockTimeline,
+        CoreReturnPresentation $corePresentation,
     ): View {
         $this->authorize('view', $order);
 
@@ -37,7 +39,7 @@ class OrderController extends Controller
             $order->load([
                 'processThreads' => fn ($threads) => $threads
                     ->visibleTo($user)
-                    ->with(['responsibleOrganization', 'events.actorUser', 'events.actorOrganization']),
+                    ->with(['responsibleOrganization', 'events.actorUser', 'events.actorOrganization', 'coreReturnInspections', 'financeEntries.actorUser', 'documents.uploader']),
                 'items' => function ($items) use ($order, $isAutokluby, $user): void {
                     if ($isAutokluby) {
                         return;
@@ -58,10 +60,12 @@ class OrderController extends Controller
             }
 
             $branches = $order->processThreads->mapWithKeys(fn ($thread): array => [
-                $thread->id => $stockPresentation->branch($order, $thread, $user),
+                $thread->id => $thread->type === ProcessThreadType::CORE_RETURN
+                    ? $corePresentation->for($order, $thread, $user)
+                    : $stockPresentation->branch($order, $thread, $user),
             ]);
             $actions = $branches->flatMap(fn (array $branch): array => $branch['allowed_actions'])->unique(
-                fn (StockRebuildAction $action): string => $action->value,
+                fn ($action): string => $action->value,
             );
 
             return view('orders.stock-show', [
@@ -70,10 +74,12 @@ class OrderController extends Controller
                 'timeline' => $stockTimeline->for($order->processThreads, $user),
                 'stockInformation' => $stockPresentation->stockInformation($order),
                 'actionFormKeys' => $actions->mapWithKeys(
-                    fn (StockRebuildAction $action): array => [$action->value => (string) Str::uuid()],
+                    fn ($action): array => [$action->value => (string) Str::uuid()],
                 )->all(),
                 'qrMode' => false,
                 'selectedItem' => null,
+                'coreActionFormKeys' => collect(CoreReturnAction::cases())->mapWithKeys(fn ($action) => [$action->value => (string) Str::uuid()])->all(),
+                'documentFormKeys' => $order->processThreads->mapWithKeys(fn ($thread) => [$thread->id => (string) Str::uuid()])->all(),
             ]);
         }
 
@@ -88,6 +94,7 @@ class OrderController extends Controller
 
         $order->load([
             'items',
+            'documents.uploader',
             'processThreads' => fn ($threads) => $threads
                 ->where('type', ProcessThreadType::CUSTOM_REBUILD)
                 ->with(['responsibleOrganization', 'events.actorUser', 'events.actorOrganization']),
@@ -107,6 +114,7 @@ class OrderController extends Controller
             'overrideStates' => CustomRebuildState::cases(),
             'qrMode' => false,
             'selectedItem' => null,
+            'documentFormKeys' => $order->processThreads->mapWithKeys(fn ($thread) => [$thread->id => (string) Str::uuid()])->all(),
         ]);
     }
 

@@ -272,3 +272,24 @@
 - Stav: přijato pro Fázi 4A
 - Rozhodnutí: `AK_TO_PL` přijímá `CORE_RETURN/CORE_RECEIVED_AK` pro GLS i svoz. ShipmentService odvodí `SEND_TO_POLAND` a `CONFIRM_CORE_RECEIPT_PL` přes CoreReturnWorkflow ve stejné dávkové transakci.
 - Dopad: Aktivní rezervace, fyzická lokalita, idempotence, lock version a rollback celé zásilky zůstávají společné s Fází 3. `PL_TO_AK` vratku v této části odmítá.
+
+## D-040: Doklady jsou soukromé objekty, nikoli veřejné soubory
+
+- Datum: 2026-11-18
+- Stav: přijato pro Fázi 4B
+- Rozhodnutí: Dodavatelská faktura a dobropis používají náhodnou interní cestu na private disku a náhodný route token. Download vždy prochází policy a stejnou 404 odpovědí skrývá neexistující i nepovolený dokument.
+- Dopad: Uživatelský filename neurčuje storage cestu, soubory nemají veřejnou URL a odpověď vynucuje attachment a `nosniff`.
+
+## D-041: Dokumentová transakce kompenzuje filesystem
+
+- Datum: 2026-11-18
+- Stav: přijato pro Fázi 4B
+- Rozhodnutí: Soubor se uloží až po úplné validaci a před DB transakcí; selhání DB jej kompenzačně smaže. Selhání storage zastaví operaci před eventem, auditem a ledgerem.
+- Dopad: Nevznikají finance bez dokladu ani běžné osiřelé soubory. Metadata, workflow, audit a finance jsou atomické v databázi.
+
+## D-042: Oprava dokladu je nová verze a finanční reverz
+
+- Datum: 2026-11-18
+- Stav: přijato pro Fázi 4B
+- Rozhodnutí: Faktury ani dobropisy se nepřepisují. Aktivní verze se s důvodem invaliduje, nová ji odkazuje a finanční dopad se zaznamená append-only reverzem a novými entries.
+- Dopad: Jedna větev má nejvýše jeden aktivní doklad daného významu, ale původní metadata, soubor, actor a audit zůstávají dohledatelné.

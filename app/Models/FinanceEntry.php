@@ -59,4 +59,9 @@ class FinanceEntry extends Model
     {
         return $this->belongsTo(self::class, 'corrects_entry_id');
     }
+
+    public function actorUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'actor_user_id');
+    }
 }

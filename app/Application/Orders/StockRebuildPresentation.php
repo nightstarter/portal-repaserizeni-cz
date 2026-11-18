@@ -104,6 +104,15 @@ final class StockRebuildPresentation
     public function queueCodes(ProcessThread $thread, User $viewer): array
     {
         if ($viewer->organization->code === OrganizationCode::POLAND) {
+            if ($thread->type === ProcessThreadType::CORE_RETURN) {
+                return array_values(array_filter([
+                    $thread->state === 'SENT_TO_PL' ? 'core_receive' : null,
+                    $thread->state === 'CORE_INSPECTION' ? 'core_decision' : null,
+                    in_array($thread->state, ['DEPOSIT_FULL_APPROVED', 'DEPOSIT_REDUCED_APPROVED'], true) ? 'credit_upload' : null,
+                    $thread->state === 'CREDIT_ISSUED' ? 'credit_payment' : null,
+                    $thread->completed_at !== null ? 'completed' : null,
+                ]));
+            }
             $code = match ($thread->state) {
                 'WAITING_PL_STOCK' => 'pl_new',
                 'PL_SECURING_STOCK' => 'pl_securing',

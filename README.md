@@ -19,13 +19,13 @@ Samostatný transakční portál AUTOKLUBY ↔ POLSKO. Procesní pravidla určuj
   - [x] Fáze 3D – kompatibilní QR kamera s lokálním fallbackem a potvrzeným ručním browserovým scénářem; mobilní platformní kontrola zbývá
 - [ ] Fáze 4 – vratky a finance
   - [x] Fáze 4A – `CORE_RETURN`, kontrola vratného dílu, dodavatelská záloha a neměnný finanční ledger (viz `docs/PHASE_4A.md`, `docs/CORE_RETURNS.md` a `docs/FINANCE.md`)
-  - [ ] Fáze 4B – bezpečné dokumenty, dobropisy, platby a UI
+  - [x] Fáze 4B – soukromé dokumenty, dobropisy, platby, UI a KPI (viz `docs/PHASE_4B.md` a `docs/DOCUMENTS.md`)
 - [ ] Fáze 5 – diskuse a notifikace
 - [ ] Fáze 6 – reklamace a výkup
 - [ ] Fáze 7 – Pohoda bridge a přecenění
 - [ ] Fáze 8 – produkční připravenost
 
-Legacy mapování bylo ověřeno proti živé databázi a přijato ve Fázi 1F. Fáze 2 implementovala zakázkovou a skladovou repasi s paralelními větvemi, Fáze 3 atomické hromadné zásilky AUTOKLUBY ↔ POLSKO. Fáze 4A nyní doplňuje `CORE_RETURN`: neměnnou kontrolu AUTOKLUBY, přepravu do Polska přes existující ShipmentService, oddělenou dodavatelskou zálohu, plné/krácené rozhodnutí a append-only finanční ledger. Zákaznický snapshot zálohy se nepoužívá jako dodavatelská hodnota ani se v portálu nerefunduje. Dokumenty, dobropisy, platby a UI zůstávají pro 4B. Produkční import, Pohoda bridge ani portalový scheduler nejsou aktivované; `LEGACY_SHOP_IMPORT_ENABLED=false` zůstává bezpečná provozní i výchozí hodnota.
+Legacy mapování bylo ověřeno proti živé databázi a přijato ve Fázi 1F. Fáze 2 implementovala zakázkovou a skladovou repasi s paralelními větvemi, Fáze 3 atomické hromadné zásilky AUTOKLUBY ↔ POLSKO. Fáze 4 doplňuje `CORE_RETURN`, oddělenou dodavatelskou zálohu, append-only ledger, soukromé dodavatelské faktury a dobropisy, platbu, UI a odvozené KPI. Zákaznický snapshot zálohy se nepoužívá jako dodavatelská hodnota, Polsku se nezobrazuje a portál jej zákazníkovi nerefunduje. Produkční import, Pohoda bridge ani portalový scheduler nejsou aktivované; `LEGACY_SHOP_IMPORT_ENABLED=false` zůstává bezpečná provozní i výchozí hodnota.
 
 ## Instalace z čistého klonu
 

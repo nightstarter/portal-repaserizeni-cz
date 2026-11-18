@@ -3,10 +3,13 @@
 namespace App\Application\Orders;
 
 use App\Application\Audit\AuditLogger;
+use App\Application\Finance\FinancialLedgerService;
 use App\Enums\CoreInspectionPieceResult;
 use App\Enums\CoreReturnAction;
 use App\Enums\CoreReturnState;
 use App\Enums\CoreTransportCondition;
+use App\Enums\DocumentStatus;
+use App\Enums\DocumentType;
 use App\Enums\FinanceEntryStatus;
 use App\Enums\FinanceEntryType;
 use App\Enums\OrganizationCode;
@@ -14,6 +17,7 @@ use App\Enums\ProcessThreadType;
 use App\Enums\ResponsibleParty;
 use App\Exceptions\WorkflowConflictException;
 use App\Models\CoreReturnInspection;
+use App\Models\Document;
 use App\Models\FinanceEntry;
 use App\Models\Item;
 use App\Models\Order;
@@ -31,6 +35,7 @@ final class CoreReturnWorkflow
         private readonly CoreReturnStateMachine $stateMachine,
         private readonly AuditLogger $auditLogger,
         private readonly OrderCompletionService $completion,
+        private readonly FinancialLedgerService $ledger,
     ) {}
 
     public function execute(Order $order, CoreReturnCommand $command): ThreadEvent
@@ -75,6 +80,8 @@ final class CoreReturnWorkflow
                 CoreReturnAction::APPROVE_FULL_DEPOSIT_RETURN,
                 CoreReturnAction::APPROVE_REDUCED_DEPOSIT_RETURN,
                 CoreReturnAction::CONFIRM_NO_SUPPLIER_DEPOSIT,
+                CoreReturnAction::ISSUE_SUPPLIER_CREDIT_NOTE,
+                CoreReturnAction::CONFIRM_CREDIT_PAID,
             ], true)) {
                 $finance = $this->prepareSettlementFinance($thread, $command);
                 $metadata += ['finance' => $finance];
@@ -82,7 +89,7 @@ final class CoreReturnWorkflow
 
             $organization = match ($to) {
                 CoreReturnState::CORE_RECEIVED_AK => OrganizationCode::AUTOKLUBY,
-                CoreReturnState::SENT_TO_PL, CoreReturnState::CORE_INSPECTION => OrganizationCode::POLAND,
+                CoreReturnState::SENT_TO_PL, CoreReturnState::CORE_INSPECTION, CoreReturnState::CREDIT_ISSUED => OrganizationCode::POLAND,
                 default => null,
             };
             $organizationId = $organization === null ? null : DB::table('organizations')->where('code', $organization->value)->value('id');
@@ -130,7 +137,16 @@ final class CoreReturnWorkflow
                 $reason,
                 $command->actor,
             );
-            $this->persistFinance($lockedOrder, $thread, $event, $audit->id, $command, $hash, $finance);
+            $this->ledger->append(
+                $lockedOrder,
+                $thread,
+                $event,
+                $audit->id,
+                $command->actor,
+                $command->idempotencyKey,
+                $hash,
+                $finance['entries'] ?? [],
+            );
 
             if ($inspection !== null) {
                 Item::query()->whereKey($inspection->item_id)->update(['current_location' => OrganizationCode::AUTOKLUBY->value]);
@@ -217,6 +233,52 @@ final class CoreReturnWorkflow
 
     private function prepareSettlementFinance(ProcessThread $thread, CoreReturnCommand $command): array
     {
+        if (in_array($command->action, [CoreReturnAction::ISSUE_SUPPLIER_CREDIT_NOTE, CoreReturnAction::CONFIRM_CREDIT_PAID], true)) {
+            $approved = $thread->financeEntries()
+                ->where('type', FinanceEntryType::SUPPLIER_DEPOSIT_RETURN_APPROVED)
+                ->latest('id')->first();
+            if ($approved === null) {
+                throw new WorkflowConflictException('Approved supplier deposit return is required.');
+            }
+            if ($command->action === CoreReturnAction::ISSUE_SUPPLIER_CREDIT_NOTE) {
+                $data = Validator::make($command->data, [
+                    'document_id' => ['required', 'integer', 'min:1'],
+                    'amount' => ['required', 'string'],
+                    'currency' => ['required', 'string', 'regex:/^[A-Z]{3}$/'],
+                ])->validate();
+                if ($this->formatMinor($this->minor($data['amount'])) !== $approved->amount || $data['currency'] !== $approved->currency) {
+                    throw ValidationException::withMessages(['amount' => 'Credit note must exactly match the approved supplier deposit return.']);
+                }
+
+                return ['entries' => [[
+                    'type' => FinanceEntryType::SUPPLIER_CREDIT_NOTE_ISSUED,
+                    'amount' => $approved->amount,
+                    'currency' => $approved->currency,
+                    'status' => FinanceEntryStatus::CONFIRMED,
+                    'reason' => 'SUPPLIER_CREDIT_NOTE_DOCUMENT:'.$data['document_id'],
+                ]], 'document_id' => $data['document_id']];
+            }
+            if (array_key_exists('amount', $command->data) || array_key_exists('currency', $command->data)) {
+                throw ValidationException::withMessages(['amount' => 'Paid amount and currency are derived by the server.']);
+            }
+            $credit = $thread->financeEntries()->where('type', FinanceEntryType::SUPPLIER_CREDIT_NOTE_ISSUED)->latest('id')->first();
+            $activeCredit = Document::query()->where('process_thread_id', $thread->id)
+                ->where('type', DocumentType::SUPPLIER_CREDIT_NOTE)
+                ->where('status', DocumentStatus::ACTIVE)
+                ->exists();
+            if ($credit === null || ! $activeCredit) {
+                throw new WorkflowConflictException('An issued supplier credit note is required.');
+            }
+
+            return ['entries' => [[
+                'type' => FinanceEntryType::SUPPLIER_CREDIT_PAID,
+                'amount' => $credit->amount,
+                'currency' => $credit->currency,
+                'status' => FinanceEntryStatus::SETTLED,
+                'reason' => 'SUPPLIER_CREDIT_PAYMENT_CONFIRMED',
+            ]]];
+        }
+
         if ($command->action === CoreReturnAction::CONFIRM_NO_SUPPLIER_DEPOSIT) {
             $evidence = $thread->financeEntries()->where('type', FinanceEntryType::SUPPLIER_DEPOSIT_NOT_CHARGED)->latest('id')->first();
             if ($evidence === null) {
@@ -275,22 +337,6 @@ final class CoreReturnWorkflow
             'amount' => $this->formatMinor($originalMinor - $approvedMinor), 'currency' => $original->currency,
             'status' => FinanceEntryStatus::APPROVED, 'reason' => $reason,
         ]]];
-    }
-
-    private function persistFinance(Order $order, ProcessThread $thread, ThreadEvent $event, int $auditId, CoreReturnCommand $command, string $hash, array $finance): void
-    {
-        foreach (($finance['entries'] ?? []) as $index => $entry) {
-            FinanceEntry::query()->create([
-                'order_id' => $order->id, 'process_thread_id' => $thread->id,
-                'thread_event_id' => $event->id, 'audit_log_id' => $auditId,
-                'type' => $entry['type'], 'amount' => $entry['amount'], 'currency' => $entry['currency'],
-                'status' => $entry['status'], 'actor_user_id' => $command->actor->id,
-                'actor_organization_id' => $command->actor->organization_id,
-                'reason' => $entry['reason'],
-                'corrects_entry_id' => $entry['corrects_entry_id'] ?? null,
-                'idempotency_key' => $command->idempotencyKey.':'.($index + 1), 'request_hash' => $hash,
-            ]);
-        }
     }
 
     private function validateEnvelope(CoreReturnCommand $command): void

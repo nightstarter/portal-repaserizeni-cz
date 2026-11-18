@@ -17,6 +17,9 @@ final class CoreReturnStateMachine
             [CoreReturnState::CORE_INSPECTION, CoreReturnAction::APPROVE_FULL_DEPOSIT_RETURN] => CoreReturnState::DEPOSIT_FULL_APPROVED,
             [CoreReturnState::CORE_INSPECTION, CoreReturnAction::APPROVE_REDUCED_DEPOSIT_RETURN] => CoreReturnState::DEPOSIT_REDUCED_APPROVED,
             [CoreReturnState::CORE_INSPECTION, CoreReturnAction::CONFIRM_NO_SUPPLIER_DEPOSIT] => CoreReturnState::CORE_SETTLED_NO_DEPOSIT,
+            [CoreReturnState::DEPOSIT_FULL_APPROVED, CoreReturnAction::ISSUE_SUPPLIER_CREDIT_NOTE],
+            [CoreReturnState::DEPOSIT_REDUCED_APPROVED, CoreReturnAction::ISSUE_SUPPLIER_CREDIT_NOTE] => CoreReturnState::CREDIT_ISSUED,
+            [CoreReturnState::CREDIT_ISSUED, CoreReturnAction::CONFIRM_CREDIT_PAID] => CoreReturnState::CREDIT_PAID,
             default => null,
         };
 

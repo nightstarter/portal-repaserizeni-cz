@@ -55,6 +55,7 @@ return [
         'waiting_ak' => 'Čeká na AUTOKLUBY', 'waiting_poland' => 'Čeká na Polsko', 'completed' => 'Dokončené větve',
         'pl_new' => 'Nové požadavky na skladový kus', 'pl_securing' => 'Polsko zajišťuje kus',
         'pl_available' => 'Dostupné – čeká na odeslání', 'pl_sent' => 'Odeslané k AUTOKLUBY',
+        'core_receive' => 'Vratky k přijetí', 'core_decision' => 'Vratky k rozhodnutí', 'credit_upload' => 'Dobropisy k nahrání', 'credit_payment' => 'Platby k potvrzení',
     ],
     'stock_availability' => [
         'UNKNOWN' => 'Snapshot chybí', 'STALE' => 'Snapshot je zastaralý',
@@ -82,6 +83,7 @@ return [
         'APPROVE_FULL_DEPOSIT_RETURN' => 'Schválit plné vrácení dodavatelské zálohy',
         'APPROVE_REDUCED_DEPOSIT_RETURN' => 'Schválit krácené vrácení dodavatelské zálohy',
         'CONFIRM_NO_SUPPLIER_DEPOSIT' => 'Potvrdit, že dodavatelská záloha nebyla účtována',
+        'CONFIRM_CREDIT_PAID' => 'Potvrdit úhradu dobropisu',
     ],
     'metadata_labels' => [
         'inspection_result' => 'Doručený kus', 'fault_code' => 'Závada', 'axial_rods' => 'Axiální táhla',
@@ -123,6 +125,7 @@ return [
         'DEPOSIT_FULL_APPROVED' => 'Plné vrácení dodavatelské zálohy schváleno',
         'DEPOSIT_REDUCED_APPROVED' => 'Krácené vrácení dodavatelské zálohy schváleno',
         'CORE_SETTLED_NO_DEPOSIT' => 'Vratka vypořádána bez dodavatelské zálohy',
+        'CREDIT_ISSUED' => 'Dobropis vystaven', 'CREDIT_PAID' => 'Dobropis uhrazen',
     ],
     'responsible_parties' => ['CUSTOMER' => 'Zákazník', 'AUTOKLUBY' => 'AUTOKLUBY', 'POLAND' => 'Polsko', 'SYSTEM' => 'Systém'],
     'item_roles' => [
@@ -163,4 +166,15 @@ return [
     'shipment_carriers' => ['GLS' => 'GLS', 'DPD' => 'DPD', 'SVOZ_AUTOKLUBY' => 'Svoz AUTOKLUBY'],
     'shipment_statuses' => ['PREPARED' => 'Připravuje se', 'SENT' => 'Odesláno', 'DELIVERED' => 'Doručeno', 'TRANSPORT_ERROR' => 'Chyba přepravy'],
     'shipment_actions_labels' => ['CREATE_SHIPMENT' => 'Vytvořena zásilka', 'ADD_SHIPMENT_ITEM' => 'Přidán kus', 'REMOVE_SHIPMENT_ITEM' => 'Odebrán kus', 'SEND_SHIPMENT' => 'Zásilka odeslána', 'CONFIRM_SHIPMENT_DELIVERY' => 'Potvrzeno doručení', 'MARK_TRANSPORT_ERROR' => 'Nahlášena chyba přepravy'],
+    'documents' => 'Doklady', 'document_types' => ['SUPPLIER_INVOICE' => 'Dodavatelská faktura', 'SUPPLIER_CREDIT_NOTE' => 'Dodavatelský dobropis'],
+    'document_number' => 'Číslo dokladu', 'document_date' => 'Datum dokladu', 'file' => 'Soubor', 'download' => 'Stáhnout',
+    'supplier_invoice' => 'Dodavatelská faktura', 'purchase_price' => 'Nákupní cena', 'supplier_deposit_charged' => 'Dodavatelská záloha účtována',
+    'supplier_deposit_amount' => 'Výše dodavatelské zálohy', 'upload_invoice' => 'Nahrát fakturu', 'replace_invoice' => 'Nahradit fakturu',
+    'upload_credit_note' => 'Nahrát dobropis', 'replace_credit_note' => 'Nahradit dobropis', 'document_uploaded' => 'Soukromý dokument byl bezpečně uložen.', 'document_conflict' => 'Dokument nebo větev se mezitím změnily.',
+    'credit_note_required' => 'Před potvrzením platby je vyžadován aktivní dobropis.', 'currency' => 'Měna', 'amount' => 'Částka',
+    'reason' => 'Důvod', 'note' => 'Poznámka', 'yes' => 'Ano', 'no' => 'Ne', 'core_return_location' => 'Umístění vratného dílu',
+    'core_inspection' => 'Kontrola AUTOKLUBY', 'core_piece' => 'Doručený kus', 'core_piece_results' => ['CORRECT_PIECE' => 'Správný kus', 'DIFFERENT_PIECE' => 'Jiný kus'],
+    'transport_condition' => 'Stav po přepravě', 'accident' => 'Nehoda', 'disassembled' => 'Rozebrání', 'corrosion' => 'Koroze', 'axial_rods' => 'Axiální táhla',
+    'approved_return_amount' => 'Schválená vratná částka', 'finance_ledger' => 'Finanční ledger',
+    'return_kpis' => ['waiting_receipt' => 'Vratky čekající na příjem', 'waiting_poland_core' => 'Vratky čekající na Polsko', 'missing_invoices' => 'Chybějící dodavatelské faktury', 'waiting_deposit_decision' => 'Čekající rozhodnutí o záloze', 'waiting_credit_notes' => 'Čekající dobropisy', 'waiting_credit_payment' => 'Dobropisy čekající na platbu', 'reduced_deposits' => 'Krácené zálohy'],
 ];

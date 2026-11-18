@@ -55,6 +55,7 @@ return [
         'waiting_ak' => 'Oczekuje na AUTOKLUBY', 'waiting_poland' => 'Oczekuje na Polskę', 'completed' => 'Zakończone gałęzie',
         'pl_new' => 'Nowe zapotrzebowania na część', 'pl_securing' => 'Polska organizuje część',
         'pl_available' => 'Dostępne – oczekuje na wysyłkę', 'pl_sent' => 'Wysłane do AUTOKLUBY',
+        'core_receive' => 'Zwroty do przyjęcia', 'core_decision' => 'Zwroty do decyzji', 'credit_upload' => 'Noty do przesłania', 'credit_payment' => 'Płatności do potwierdzenia',
     ],
     'stock_availability' => [
         'UNKNOWN' => 'Brak snapshotu', 'STALE' => 'Snapshot jest nieaktualny',
@@ -82,6 +83,7 @@ return [
         'APPROVE_FULL_DEPOSIT_RETURN' => 'Zatwierdź pełny zwrot kaucji dostawcy',
         'APPROVE_REDUCED_DEPOSIT_RETURN' => 'Zatwierdź pomniejszony zwrot kaucji dostawcy',
         'CONFIRM_NO_SUPPLIER_DEPOSIT' => 'Potwierdź brak naliczonej kaucji dostawcy',
+        'CONFIRM_CREDIT_PAID' => 'Potwierdź zapłatę noty kredytowej',
     ],
     'metadata_labels' => [
         'inspection_result' => 'Dostarczona część', 'fault_code' => 'Usterka', 'axial_rods' => 'Drążki osiowe',
@@ -123,6 +125,7 @@ return [
         'DEPOSIT_FULL_APPROVED' => 'Zatwierdzono pełny zwrot kaucji dostawcy',
         'DEPOSIT_REDUCED_APPROVED' => 'Zatwierdzono pomniejszony zwrot kaucji dostawcy',
         'CORE_SETTLED_NO_DEPOSIT' => 'Zwrot rozliczony bez kaucji dostawcy',
+        'CREDIT_ISSUED' => 'Wystawiono notę kredytową', 'CREDIT_PAID' => 'Nota kredytowa zapłacona',
     ],
     'responsible_parties' => ['CUSTOMER' => 'Klient', 'AUTOKLUBY' => 'AUTOKLUBY', 'POLAND' => 'Polska', 'SYSTEM' => 'System'],
     'item_roles' => [
@@ -163,4 +166,15 @@ return [
     'shipment_carriers' => ['GLS' => 'GLS', 'DPD' => 'DPD', 'SVOZ_AUTOKLUBY' => 'Odbiór AUTOKLUBY'],
     'shipment_statuses' => ['PREPARED' => 'Przygotowywana', 'SENT' => 'Wysłana', 'DELIVERED' => 'Dostarczona', 'TRANSPORT_ERROR' => 'Błąd transportu'],
     'shipment_actions_labels' => ['CREATE_SHIPMENT' => 'Utworzono przesyłkę', 'ADD_SHIPMENT_ITEM' => 'Dodano część', 'REMOVE_SHIPMENT_ITEM' => 'Usunięto część', 'SEND_SHIPMENT' => 'Wysłano przesyłkę', 'CONFIRM_SHIPMENT_DELIVERY' => 'Potwierdzono dostawę', 'MARK_TRANSPORT_ERROR' => 'Zgłoszono błąd transportu'],
+    'documents' => 'Dokumenty', 'document_types' => ['SUPPLIER_INVOICE' => 'Faktura dostawcy', 'SUPPLIER_CREDIT_NOTE' => 'Nota kredytowa dostawcy'],
+    'document_number' => 'Numer dokumentu', 'document_date' => 'Data dokumentu', 'file' => 'Plik', 'download' => 'Pobierz',
+    'supplier_invoice' => 'Faktura dostawcy', 'purchase_price' => 'Cena zakupu', 'supplier_deposit_charged' => 'Naliczono kaucję dostawcy',
+    'supplier_deposit_amount' => 'Kwota kaucji dostawcy', 'upload_invoice' => 'Prześlij fakturę', 'replace_invoice' => 'Zastąp fakturę',
+    'upload_credit_note' => 'Prześlij notę kredytową', 'replace_credit_note' => 'Zastąp notę kredytową', 'document_uploaded' => 'Prywatny dokument został bezpiecznie zapisany.', 'document_conflict' => 'Dokument lub gałąź zostały zmienione.',
+    'credit_note_required' => 'Przed potwierdzeniem płatności wymagana jest aktywna nota kredytowa.', 'currency' => 'Waluta', 'amount' => 'Kwota',
+    'reason' => 'Powód', 'note' => 'Uwaga', 'yes' => 'Tak', 'no' => 'Nie', 'core_return_location' => 'Lokalizacja starej części',
+    'core_inspection' => 'Kontrola AUTOKLUBY', 'core_piece' => 'Dostarczona część', 'core_piece_results' => ['CORRECT_PIECE' => 'Właściwa część', 'DIFFERENT_PIECE' => 'Inna część'],
+    'transport_condition' => 'Stan po transporcie', 'accident' => 'Wypadek', 'disassembled' => 'Rozmontowana', 'corrosion' => 'Korozja', 'axial_rods' => 'Drążki osiowe',
+    'approved_return_amount' => 'Zatwierdzona kwota zwrotu', 'finance_ledger' => 'Rejestr finansowy',
+    'return_kpis' => ['waiting_receipt' => 'Zwroty oczekujące na przyjęcie', 'waiting_poland_core' => 'Zwroty oczekujące na Polskę', 'missing_invoices' => 'Brakujące faktury dostawcy', 'waiting_deposit_decision' => 'Decyzje o kaucji', 'waiting_credit_notes' => 'Noty do przesłania', 'waiting_credit_payment' => 'Płatności do potwierdzenia', 'reduced_deposits' => 'Pomniejszone kaucje'],
 ];

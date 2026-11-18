@@ -37,9 +37,26 @@
             <div><dt>{{ __('app.last_event') }}</dt><dd>{{ $branch['last_event']?->performed_at?->timezone(config('app.timezone'))->format('d.m.Y H:i') ?: '—' }}</dd></div>
         </dl>
         @if($thread->type === \App\Enums\ProcessThreadType::CORE_RETURN)
-            <div class="notice"><strong>{{ __('app.core_return_required') }}</strong><br>{{ __('app.core_return_later') }}</div>
+            @include('orders.partials.core-return-panel', ['workflow' => $branch])
         @else
             @include('orders.partials.stock-action-panel', ['workflow' => $branch])
+            @if(in_array($thread->type, [\App\Enums\ProcessThreadType::STOCK_REQUEST, \App\Enums\ProcessThreadType::STOCK_REPLENISHMENT], true) && (auth()->user()->organization->code === \App\Enums\OrganizationCode::POLAND || auth()->user()->role === \App\Enums\UserRole::AK_ADMIN))
+                @php($activeInvoice = $thread->documents->first(fn($document) => $document->type === \App\Enums\DocumentType::SUPPLIER_INVOICE && $document->status === \App\Enums\DocumentStatus::ACTIVE))
+                <form method="post" enctype="multipart/form-data" action="{{ $activeInvoice ? route('documents.invoice.replace', [$order, $thread, $activeInvoice]) : route('documents.invoice.store', [$order, $thread]) }}">
+                    @csrf
+                    <input type="hidden" name="idempotency_key" value="{{ $documentFormKeys[$thread->id] }}">
+                    <input type="hidden" name="expected_lock_version" value="{{ $thread->lock_version }}">
+                    <label>{{ __('app.file') }}<input type="file" name="file" accept="application/pdf,image/jpeg,image/png" required></label>
+                    <label>{{ __('app.document_number') }}<input name="document_number" required></label>
+                    <label>{{ __('app.document_date') }}<input type="date" name="document_date" required></label>
+                    <label>{{ __('app.purchase_price') }}<input name="amount" required></label>
+                    <label>{{ __('app.currency') }}<input name="currency" maxlength="3" required></label>
+                    <label>{{ __('app.supplier_deposit_charged') }}<select name="deposit_charged"><option value="0">{{ __('app.no') }}</option><option value="1">{{ __('app.yes') }}</option></select></label>
+                    <label>{{ __('app.supplier_deposit_amount') }}<input name="deposit_amount"></label>
+                    @if($activeInvoice || auth()->user()->role === \App\Enums\UserRole::AK_ADMIN)<label>{{ __('app.reason') }}<textarea name="reason" required></textarea></label>@endif
+                    <button>{{ $activeInvoice ? __('app.replace_invoice') : __('app.upload_invoice') }}</button>
+                </form>
+            @endif
         @endif
     </article>
 @endforeach

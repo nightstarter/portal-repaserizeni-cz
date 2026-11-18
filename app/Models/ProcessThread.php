@@ -71,6 +71,11 @@ class ProcessThread extends Model
         return $this->hasMany(FinanceEntry::class);
     }
 
+    public function documents(): HasMany
+    {
+        return $this->hasMany(Document::class);
+    }
+
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
         if ($user->organization->code === OrganizationCode::AUTOKLUBY) {

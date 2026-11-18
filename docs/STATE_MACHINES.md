@@ -104,8 +104,11 @@ Akční kód `SEND_TO_AUTOKLUBY` je záměrně společný s `CUSTOM_REBUILD`; je
 | `CORE_INSPECTION` | `APPROVE_FULL_DEPOSIT_RETURN` | POLAND; `AK_ADMIN` pouze s důvodem | `DEPOSIT_FULL_APPROVED` | ne; čeká 4B |
 | `CORE_INSPECTION` | `APPROVE_REDUCED_DEPOSIT_RETURN` | POLAND; `AK_ADMIN` pouze s důvodem | `DEPOSIT_REDUCED_APPROVED` | ne; čeká 4B |
 | `CORE_INSPECTION` | `CONFIRM_NO_SUPPLIER_DEPOSIT` | POLAND; `AK_ADMIN` pouze s důvodem | `CORE_SETTLED_NO_DEPOSIT` | ano |
+| `DEPOSIT_FULL_APPROVED` | `ISSUE_SUPPLIER_CREDIT_NOTE` přes bezpečný upload | POLAND; `AK_ADMIN` pouze s důvodem | `CREDIT_ISSUED` | ne |
+| `DEPOSIT_REDUCED_APPROVED` | `ISSUE_SUPPLIER_CREDIT_NOTE` přes bezpečný upload | POLAND; `AK_ADMIN` pouze s důvodem | `CREDIT_ISSUED` | ne |
+| `CREDIT_ISSUED` | `CONFIRM_CREDIT_PAID` | POLAND; `AK_ADMIN` pouze s důvodem | `CREDIT_PAID` | ano |
 
-Bez-zálohový přechod vyžaduje předchozí neměnný `SUPPLIER_DEPOSIT_NOT_CHARGED`; absence ani `NULL` není důkaz. `CREDIT_ISSUED` a `CREDIT_PAID` vzniknou až s bezpečnými dokumenty ve Fázi 4B.
+Bez-zálohový přechod vyžaduje předchozí neměnný `SUPPLIER_DEPOSIT_NOT_CHARGED`; absence ani `NULL` není důkaz. Vydání dobropisu vyžaduje jeden aktivní soukromý dokument s přesnou schválenou částkou a měnou. Platba je serverem odvozená a vyžaduje aktivní dobropis.
 
 Dokončení jedné větve neuzavírá objednávku. `orders.closed_at` přepočítává společná doménová služba až po dokončení všech povinných větví. Aktivní `CORE_RETURN`, `STOCK_REPLENISHMENT` nebo jiná povinná větev drží objednávku otevřenou.
 
@@ -133,6 +136,6 @@ Zásilka koordinuje stávající thread automaty a nevytváří alternativní p�
 
 Ve Fázi 3B klientské formuláře posílají pouze shipment command, idempotency key, očekávanou `lock_version` a případná data akce. Při skenování posílají QR token; server sám odvodí fyzický item a jeho procesní větev. UI proto nemůže určit thread akci ani cílový stav.
 
-## Mimo fáze 2A–4A
+## Mimo fáze 2A–4B
 
-Zákaznické refundace, zákaznické zásilky, carrier integrace, doklady a dobropisy, UI 4B, diskuse, notifikace, reklamace a výkupy zde nejsou implementované.
+Zákaznické refundace, carrier integrace, diskuse, notifikace, reklamace a výkupy zde nejsou implementované.

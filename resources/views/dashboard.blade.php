@@ -8,6 +8,9 @@
     <div class="card kpi"><span>{{ __('app.waiting_for_poland') }}</span><strong>{{ $waitingForPoland }}</strong></div>
     @unless($isPoland)<div class="card kpi"><span>{{ __('app.integration_errors') }}</span><strong>{{ $integrationErrors }}</strong></div>@endunless
 </div>
+<div class="kpis">
+@foreach($returnKpis as $code => $value)<div class="card kpi"><span>{{ __('app.return_kpis.'.$code) }}</span><strong>{{ $value }}</strong></div>@endforeach
+</div>
 
 <div class="queue-nav" role="navigation" aria-label="{{ __('app.stock_queues') }}">
     <a class="queue-link {{ $activeQueue === null ? 'active' : '' }}" href="{{ route('dashboard') }}">{{ __('app.all_branches') }}</a>

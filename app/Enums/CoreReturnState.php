@@ -11,9 +11,11 @@ enum CoreReturnState: string
     case DEPOSIT_FULL_APPROVED = 'DEPOSIT_FULL_APPROVED';
     case DEPOSIT_REDUCED_APPROVED = 'DEPOSIT_REDUCED_APPROVED';
     case CORE_SETTLED_NO_DEPOSIT = 'CORE_SETTLED_NO_DEPOSIT';
+    case CREDIT_ISSUED = 'CREDIT_ISSUED';
+    case CREDIT_PAID = 'CREDIT_PAID';
 
     public function completed(): bool
     {
-        return $this === self::CORE_SETTLED_NO_DEPOSIT;
+        return in_array($this, [self::CORE_SETTLED_NO_DEPOSIT, self::CREDIT_PAID], true);
     }
 }
