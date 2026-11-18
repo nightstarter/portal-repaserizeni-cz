@@ -105,7 +105,11 @@ class Phase5cDiscussionNotificationTest extends TestCase
         $result = app(DiscussionNotificationDispatcher::class)->dispatch(3);
         self::assertSame(2, $result['sent']);
         self::assertSame(1, $result['failed']);
-        self::assertSame(OutboxEvent::FAILED, OutboxEvent::query()->whereNull('recipient_user_id')->sole()->status);
+        $recipientless = OutboxEvent::query()->whereNull('recipient_user_id')->sole();
+        self::assertSame(OutboxEvent::FAILED, $recipientless->status);
+        $admin = User::factory()->create(['organization_id' => $this->ak->id, 'role' => UserRole::AK_ADMIN]);
+        $this->actingAs($admin)->get(route('admin.notifications.index'))->assertOk()
+            ->assertDontSee(route('admin.notifications.retry', $recipientless), false);
     }
 
     public function test_message_keeps_a_traceable_outbox_request_when_target_organization_is_inactive(): void

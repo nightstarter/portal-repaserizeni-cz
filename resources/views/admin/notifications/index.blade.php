@@ -31,7 +31,7 @@
                 <td data-label="{{ __('app.notification_next_attempt') }}">{{ $event->next_attempt_at?->timezone(config('app.timezone'))->format('d.m.Y H:i') ?? '—' }}</td>
                 <td class="message-preview" data-label="{{ __('app.notification_error') }}">{{ $event->last_error ?: '—' }}</td>
                 <td data-label="{{ __('app.notification_actions') }}">
-                    @if($event->status === \App\Models\OutboxEvent::FAILED)
+                    @if($event->status === \App\Models\OutboxEvent::FAILED && $event->recipient_user_id !== null)
                     <form method="post" action="{{ route('admin.notifications.retry', $event) }}">@csrf<button class="compact">{{ __('app.notification_retry') }}</button></form>
                     @else — @endif
                 </td>
