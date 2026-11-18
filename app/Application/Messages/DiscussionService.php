@@ -3,11 +3,9 @@
 namespace App\Application\Messages;
 
 use App\Application\Audit\AuditLogger;
-use App\Domain\Messages\MessagePosted;
 use App\Exceptions\WorkflowConflictException;
 use App\Models\Message;
 use App\Models\Order;
-use App\Models\OutboxEvent;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\UploadedFile;
@@ -19,7 +17,10 @@ use Illuminate\Validation\ValidationException;
 
 final class DiscussionService
 {
-    public function __construct(private readonly AuditLogger $auditLogger) {}
+    public function __construct(
+        private readonly AuditLogger $auditLogger,
+        private readonly DiscussionNotificationOutbox $notificationOutbox,
+    ) {}
 
     public function post(Order $order, PostMessageCommand $command): Message
     {
@@ -84,18 +85,7 @@ final class DiscussionService
                 }
                 $message->reads()->create(['user_id' => $command->actor->id, 'read_at' => now()]);
 
-                $event = new MessagePosted($message);
-                OutboxEvent::query()->create([
-                    'event_uuid' => (string) Str::uuid(),
-                    'event_type' => MessagePosted::TYPE,
-                    'aggregate_type' => Message::class,
-                    'aggregate_id' => $message->id,
-                    'deduplication_key' => 'message-posted:'.$message->id,
-                    'payload' => $event->payload(),
-                    'status' => 'PENDING',
-                    'attempts' => 0,
-                    'available_at' => now(),
-                ]);
+                $this->notificationOutbox->enqueue($message);
                 $this->auditLogger->record('DISCUSSION_MESSAGE_POSTED', $message, [], [
                     'attachment_count' => count($stored),
                     'attachment_checksums' => array_column($stored, 'checksum_sha256'),

@@ -63,11 +63,12 @@ HTTP VirtualHost musí pouze přesměrovat na HTTPS. TLS certifikát, HSTS a coo
 ## Cron
 
 ```cron
-* * * * * php8.5 /var/www/portal.repaserizeni.cz/web/artisan schedule:run
-* * * * * php8.5 /var/www/portal.repaserizeni.cz/web/artisan queue:work --stop-when-empty
+* * * * * cd /var/www/portal.repaserizeni.cz/web && php8.5 artisan schedule:run >> /dev/null 2>&1
 ```
 
-Ve Fázi 0 scheduler neobsahuje import objednávek.
+Scheduler spouští outbox worker diskusních notifikací každou minutu s aplikačním `withoutOverlapping`. `onOneServer` se nepoužívá. Před aktivací cronu musí být aplikovány migrace Fáze 5A/5C, nakonfigurován SMTP a ověřen `DISCUSSION_EMAIL_ENABLED`; bezpečný výchozí stav je `false`. Scheduler neobsahuje import objednávek.
+
+Konfiguraci a provozní chování notifikačního workeru dokumentuje `PHASE_5C.md`. Cron ani SMTP se nezapínají automaticky deploymentem kódu.
 
 ## Rollback
 

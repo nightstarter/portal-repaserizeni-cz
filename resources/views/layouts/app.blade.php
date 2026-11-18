@@ -80,6 +80,7 @@
     <a class="{{ request()->routeIs('finance.*') ? 'active' : '' }}" href="{{ route('finance.index') }}" @if(request()->routeIs('finance.*')) aria-current="page" @endif>{{ __('app.documents_finance') }}</a>
     <a class="{{ request()->routeIs('discussions.*', 'orders.discussion.*') ? 'active' : '' }}" href="{{ route('discussions.index') }}" @if(request()->routeIs('discussions.*', 'orders.discussion.*')) aria-current="page" @endif>{{ __('app.discussion') }} @if($globalUnreadMessages > 0)<span class="unread-badge" aria-label="{{ trans_choice('app.unread_messages', $globalUnreadMessages, ['count' => $globalUnreadMessages]) }}">{{ $globalUnreadMessages }}</span>@endif</a>
     @can('manage-users')<a class="{{ request()->routeIs('users.*') ? 'active' : '' }}" href="{{ route('users.index') }}" @if(request()->routeIs('users.*')) aria-current="page" @endif>{{ __('app.users') }}</a>@endcan
+    @can('manage-notifications')<a class="{{ request()->routeIs('admin.notifications.*') ? 'active' : '' }}" href="{{ route('admin.notifications.index') }}" @if(request()->routeIs('admin.notifications.*')) aria-current="page" @endif>{{ __('app.notification_admin') }}</a>@endcan
     <span class="spacer"></span>
     <form class="inline" method="post" action="{{ route('locale.update') }}">@csrf @method('PUT')
         <button name="locale" value="cs">CZ</button><button name="locale" value="pl">PL</button>

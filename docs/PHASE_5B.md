@@ -51,7 +51,7 @@ Finální `composer check` prošel nad izolovanou SQLite `:memory:` databází: 
 
 ## Známá omezení
 
-- Fáze 5B stále neobsahuje outbox worker, retry, skutečné e-maily ani administrátorský přehled notifikací.
+- Outbox worker, retry a administrátorský přehled jsou navazující součástí Fáze 5C (`PHASE_5C.md`).
 - Není implementován antivirus nebo content moderation příloh.
 - Ručně napsaný text a obsah příloh se automaticky nepřekládají ani nekontrolují na PII; systémová zákaznická data se však do dotazů diskuse a fronty nenačítají.
 - Fronta konverzací používá běžné stránkování po 50 zakázkách; cursorová garance bez překryvu se vztahuje na historii zpráv.

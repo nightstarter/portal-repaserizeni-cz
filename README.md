@@ -25,6 +25,7 @@ Samostatný transakční portál AUTOKLUBY ↔ POLSKO. Procesní pravidla určuj
 - [ ] Fáze 5 – diskuse a notifikace
   - [x] Fáze 5A – doménové jádro diskuse, privátní přílohy, read-state a outbox bez odesílání e-mailů (viz `docs/PHASE_5A.md`)
   - [x] Fáze 5B – UI diskuse, globální a lokální unread badge, autorizovaná fronta a cursorové stránkování (viz `docs/PHASE_5B.md`)
+  - [x] Fáze 5C – transakční e-mailový outbox, worker/retry, scheduler a AK_ADMIN přehled (viz `docs/PHASE_5C.md`)
 - [ ] Fáze 6 – reklamace a výkup
 - [ ] Fáze 7 – Pohoda bridge a přecenění
 - [ ] Fáze 8 – produkční připravenost

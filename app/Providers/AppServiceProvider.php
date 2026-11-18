@@ -7,6 +7,7 @@ use App\Application\Orders\InitialProcessThreadFactory;
 use App\Application\Security\DatabaseCommandGuard;
 use App\Contracts\CreatesInitialProcessThreads;
 use App\Contracts\ResolvesStockAvailability;
+use App\Enums\OrganizationCode;
 use App\Integrations\LegacyShop\LegacySchemaInspector;
 use App\Integrations\LegacyShop\LegacyShopDiagnosticService;
 use App\Integrations\LegacyShop\LegacyShopMapping;
@@ -63,6 +64,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Message::class, MessagePolicy::class);
         Gate::policy(MessageAttachment::class, MessageAttachmentPolicy::class);
         Gate::define('manage-users', fn (User $user): bool => $user->isAdministrator());
+        Gate::define('manage-notifications', fn (User $user): bool => $user->isAdministrator()
+            && $user->organization->code === OrganizationCode::AUTOKLUBY);
 
         View::composer('layouts.app', function ($view): void {
             $user = auth()->user();

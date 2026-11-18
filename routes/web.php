@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdminNotificationController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\CoreReturnActionController;
 use App\Http\Controllers\CustomRebuildActionController;
@@ -63,4 +64,6 @@ Route::middleware(['auth', 'active', 'password.changed'])->group(function (): vo
     Route::get('/users', [UserController::class, 'index'])->name('users.index');
     Route::post('/users', [UserController::class, 'store'])->name('users.store');
     Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
+    Route::get('/admin/notifications', [AdminNotificationController::class, 'index'])->name('admin.notifications.index');
+    Route::post('/admin/notifications/{event}/retry', [AdminNotificationController::class, 'retry'])->name('admin.notifications.retry');
 });

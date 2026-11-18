@@ -40,7 +40,7 @@ Každé odeslání má unikátní idempotency key. Request hash zahrnuje zakázk
 
 Autorova nová zpráva má ihned vlastní read záznam a dotaz `unreadFor()` současně vylučuje zprávy daného autora. Označení jako přečtené vkládá read-state pouze pro dosud nepřečtené zprávy dané zakázky.
 
-Outbox event `discussion.message-posted.v1` vzniká atomicky se zprávou. Payload obsahuje pouze technické identifikátory a čas, nikoli text, zákaznická data nebo obsah příloh. Worker, retry, administrátorský přehled a skutečné e-mailové notifikace patří do další části Fáze 5.
+Outbox event `discussion.message-posted.v1` vzniká atomicky se zprávou. Payload obsahuje pouze technické identifikátory a čas, nikoli text, zákaznická data nebo obsah příloh. Worker, retry a administrátorský přehled následně doplnila Fáze 5C popsaná v `PHASE_5C.md`.
 
 ## Bez vlivu na workflow
 
