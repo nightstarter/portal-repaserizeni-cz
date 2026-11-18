@@ -19,3 +19,7 @@ Route používá náhodný `public_token`, vyžaduje přihlášení a policy kon
 ## Verze a opravy
 
 Dokument se nepřepisuje ani fyzicky nemaže. Oprava s povinným důvodem invaliduje aktivní verzi, zachová její soubor a metadata a vytvoří novou aktivní verzi. Finanční dopad se neguje novými `REVERSAL` entries a zapisuje znovu. Dobropis lze opravovat pouze ve stavu `CREDIT_ISSUED`, tedy před potvrzením platby.
+
+## Provozní omezení
+
+DB a `storage/app/private` se zálohují a obnovují jako jeden konzistentní celek; checksum umožňuje kontrolu po obnově. Invalidované dokumenty se automaticky nemažou. Antivirová kontrola zatím není implementovaná. Produkční storage setup, PHP limity a rollback popisuje `PHASE_4_DEPLOYMENT.md`.

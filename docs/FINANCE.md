@@ -24,6 +24,8 @@ Stabilní typy jsou:
 
 Existující rozhodnutí se neupravuje. Oprava je nový `CORRECTION` nebo záporný `REVERSAL`, pouze pro `AK_ADMIN`, s povinným důvodem, stejnou měnou a auditní vazbou.
 
+Doménová rozhodnutí používají pouze účinné entries: řádek, na který míří `REVERSAL`, zůstává v historii, ale již není důkazem aktuální zálohy ani absence zálohy. Pravidlo platí i po opravě faktury mezi variantami „účtována“ a „neúčtována“.
+
 ## Rozhodnutí
 
 Plné vrácení vyžaduje potvrzený `SUPPLIER_DEPOSIT_ORIGINAL`. Klient neposílá částku; server převezme původní amount a currency a vytvoří `SUPPLIER_DEPOSIT_RETURN_APPROVED`.

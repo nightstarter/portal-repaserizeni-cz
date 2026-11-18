@@ -17,9 +17,10 @@ Samostatný transakční portál AUTOKLUBY ↔ POLSKO. Procesní pravidla určuj
   - [x] Fáze 3B – UI zásilek a QR skener (viz `docs/PHASE_3B.md`)
   - [x] Fáze 3C – akceptace a deployment audit (viz `docs/PHASE_3_ACCEPTANCE.md` a `docs/PHASE_3_DEPLOYMENT.md`)
   - [x] Fáze 3D – kompatibilní QR kamera s lokálním fallbackem a potvrzeným ručním browserovým scénářem; mobilní platformní kontrola zbývá
-- [ ] Fáze 4 – vratky a finance
+- [x] Fáze 4 – vratky a finance (automatizovaně přijata; produkční aktivace má deployment brány)
   - [x] Fáze 4A – `CORE_RETURN`, kontrola vratného dílu, dodavatelská záloha a neměnný finanční ledger (viz `docs/PHASE_4A.md`, `docs/CORE_RETURNS.md` a `docs/FINANCE.md`)
   - [x] Fáze 4B – soukromé dokumenty, dobropisy, platby, UI a KPI (viz `docs/PHASE_4B.md` a `docs/DOCUMENTS.md`)
+  - [x] Fáze 4C – závěrečná akceptace a deployment audit (viz `docs/PHASE_4_ACCEPTANCE.md` a `docs/PHASE_4_DEPLOYMENT.md`)
 - [ ] Fáze 5 – diskuse a notifikace
 - [ ] Fáze 6 – reklamace a výkup
 - [ ] Fáze 7 – Pohoda bridge a přecenění

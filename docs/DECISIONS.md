@@ -293,3 +293,17 @@
 - Stav: přijato pro Fázi 4B
 - Rozhodnutí: Faktury ani dobropisy se nepřepisují. Aktivní verze se s důvodem invaliduje, nová ji odkazuje a finanční dopad se zaznamená append-only reverzem a novými entries.
 - Dopad: Jedna větev má nejvýše jeden aktivní doklad daného významu, ale původní metadata, soubor, actor a audit zůstávají dohledatelné.
+
+## D-043: Reverzovaný finanční údaj není účinným obchodním důkazem
+
+- Datum: 2026-11-18
+- Stav: přijato při Fázi 4C
+- Rozhodnutí: Append-only ledger zachová původní řádek, ale doménové dotazy pro rozhodnutí a UI vyloučí entry, na kterou míří `REVERSAL`. Při další opravě faktury se reverzují pouze finance aktuální verze, nikoli staré reverzní řádky.
+- Dopad: Oprava faktury „se zálohou ↔ bez zálohy“ nemůže současně povolit obě vypořádací větve. Historie a audit zůstávají úplné.
+
+## D-044: Fáze 4 je automatizovaně přijata s deployment branami
+
+- Datum: 2026-11-18
+- Stav: přijato při Fázi 4C
+- Rozhodnutí: Doména, dokumenty, UI a regrese prošly 302 testy / 1191 assertions na SQLite `:memory:`. Produkční aktivace vyžaduje konzistentní DB+filesystem zálohu, private storage, PHP limity 10M/12M, schválené migrace 000007/000008 a ruční browser smoke test.
+- Dopad: Akceptace sama nemění produkci, neopravňuje push ani migraci a nezahajuje Fázi 5.
