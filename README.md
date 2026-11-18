@@ -21,6 +21,7 @@ Samostatný transakční portál AUTOKLUBY ↔ POLSKO. Procesní pravidla určuj
   - [x] Fáze 4A – `CORE_RETURN`, kontrola vratného dílu, dodavatelská záloha a neměnný finanční ledger (viz `docs/PHASE_4A.md`, `docs/CORE_RETURNS.md` a `docs/FINANCE.md`)
   - [x] Fáze 4B – soukromé dokumenty, dobropisy, platby, UI a KPI (viz `docs/PHASE_4B.md` a `docs/DOCUMENTS.md`)
   - [x] Fáze 4C – závěrečná akceptace a deployment audit (viz `docs/PHASE_4_ACCEPTANCE.md` a `docs/PHASE_4_DEPLOYMENT.md`)
+  - [x] Fáze 4D – samostatné autorizované fronty Vratky a Doklady a finance, stabilní menu a sekční navigace detailu (viz `docs/PHASE_4D.md`)
 - [ ] Fáze 5 – diskuse a notifikace
 - [ ] Fáze 6 – reklamace a výkup
 - [ ] Fáze 7 – Pohoda bridge a přecenění

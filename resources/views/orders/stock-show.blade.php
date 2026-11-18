@@ -1,6 +1,6 @@
 @extends('layouts.app')
 @section('content')
-<div class="card">
+<div class="card" id="overview">
     <a href="{{ route('dashboard') }}">← {{ __('app.dashboard') }}</a>
     <h1>#{{ $order->order_no }} · {{ __('app.order_types.STOCK_REBUILD') }}</h1>
     <div class="meta">
@@ -9,6 +9,15 @@
         <span><strong>{{ __('app.technical_type') }}</strong><br>{{ $order->technical_type ? __('app.technical_types.'.$order->technical_type->value) : '—' }}</span>
         <span><strong>{{ __('app.routing') }}</strong><br>{{ $order->routing?->value ?: '—' }}</span>
     </div>
+</div>
+
+@php($coreBranch = $branches->first(fn($branch) => $branch['thread']->type === \App\Enums\ProcessThreadType::CORE_RETURN))
+@php($mayManageBusinessFinance = auth()->user()->organization->code === \App\Enums\OrganizationCode::POLAND || auth()->user()->role === \App\Enums\UserRole::AK_ADMIN)
+@php($hasFinanceSection = (bool) $coreBranch || ($mayManageBusinessFinance && $branches->contains(fn($branch) => in_array($branch['thread']->type, [\App\Enums\ProcessThreadType::STOCK_REQUEST, \App\Enums\ProcessThreadType::STOCK_REPLENISHMENT], true))))
+<div class="section-nav" role="navigation" aria-label="{{ __('app.order_sections') }}">
+    <a href="#overview">{{ __('app.section_overview') }}</a>
+    @if($coreBranch)<a href="#thread-{{ $coreBranch['thread']->id }}">{{ __('app.section_return') }}</a>@endif
+    @if($hasFinanceSection)<a href="#finance">{{ __('app.section_documents_finance') }}</a>@endif
 </div>
 
 <section class="card stock-information">
@@ -23,6 +32,7 @@
 </section>
 
 <h2>{{ __('app.parallel_branches') }}</h2>
+@if($hasFinanceSection)<div id="finance"></div>@endif
 <div class="branch-grid">
 @foreach($branches as $branch)
     @php($thread = $branch['thread'])

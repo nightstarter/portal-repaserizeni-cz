@@ -1,6 +1,6 @@
 @extends('layouts.app')
 @section('content')
-<div class="card">
+<div class="card" id="overview">
     <a href="{{ route('dashboard') }}">← {{ __('app.dashboard') }}</a>
     <h1>#{{ $order->order_no }}</h1>
     <div class="meta">
@@ -10,12 +10,18 @@
     </div>
 </div>
 
+@php($maySeeFinanceSection = auth()->user()->organization->code === \App\Enums\OrganizationCode::POLAND || auth()->user()->role === \App\Enums\UserRole::AK_ADMIN)
+<div class="section-nav" role="navigation" aria-label="{{ __('app.order_sections') }}">
+    <a href="#overview">{{ __('app.section_overview') }}</a>
+    @if($maySeeFinanceSection)<a href="#finance">{{ __('app.section_documents_finance') }}</a>@endif
+</div>
+
 @include('orders.partials.action-panel')
 
-@if(auth()->user()->organization->code === \App\Enums\OrganizationCode::POLAND || auth()->user()->role === \App\Enums\UserRole::AK_ADMIN)
+@if($maySeeFinanceSection)
 @php($businessThread = $workflow['thread'])
 @php($activeInvoice = $order->documents->first(fn($document) => $document->process_thread_id === $businessThread->id && $document->type === \App\Enums\DocumentType::SUPPLIER_INVOICE && $document->status === \App\Enums\DocumentStatus::ACTIVE))
-<section class="card"><h2>{{ __('app.supplier_invoice') }}</h2>
+<section class="card" id="finance"><h2>{{ __('app.supplier_invoice') }}</h2>
 <form method="post" enctype="multipart/form-data" action="{{ $activeInvoice ? route('documents.invoice.replace', [$order, $businessThread, $activeInvoice]) : route('documents.invoice.store', [$order, $businessThread]) }}">@csrf
 <input type="hidden" name="idempotency_key" value="{{ $documentFormKeys[$businessThread->id] }}"><input type="hidden" name="expected_lock_version" value="{{ $businessThread->lock_version }}">
 <label>{{ __('app.file') }}<input type="file" name="file" accept="application/pdf,image/jpeg,image/png" required></label><label>{{ __('app.document_number') }}<input name="document_number" required></label><label>{{ __('app.document_date') }}<input type="date" name="document_date" required></label><label>{{ __('app.purchase_price') }}<input name="amount" required></label><label>{{ __('app.currency') }}<input name="currency" maxlength="3" required></label><label>{{ __('app.supplier_deposit_charged') }}<select name="deposit_charged"><option value="0">{{ __('app.no') }}</option><option value="1">{{ __('app.yes') }}</option></select></label><label>{{ __('app.supplier_deposit_amount') }}<input name="deposit_amount"></label>

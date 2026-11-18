@@ -9,7 +9,7 @@
         :root { color-scheme: light; font-family: Inter,system-ui,sans-serif; --blue:#174b78; --blue-dark:#103653; --red:#a21d2b; --green:#187443; --ink:#1d2935; }
         * { box-sizing:border-box } [hidden] { display:none!important } body { margin:0; background:#f3f5f7; color:#1d2935 }
         nav { background:var(--blue); color:white; padding:.8rem 1.2rem; display:flex; align-items:center; gap:1rem; flex-wrap:wrap }
-        nav a { color:white } nav .spacer { flex:1 }
+        nav a { color:white } nav a.active { font-weight:750; text-decoration-thickness:3px; text-underline-offset:.35rem } nav .spacer { flex:1 }
         main { max-width:1100px; margin:2rem auto; padding:0 1rem }
         .card { background:white; border-radius:.5rem; padding:1.25rem; box-shadow:0 1px 5px #0002; margin-bottom:1rem }
         label { display:block; font-weight:600; margin-top:.8rem } input, select, textarea { width:100%; padding:.7rem; border:1px solid #adb5bd; border-radius:.35rem; font:inherit; background:white }
@@ -40,6 +40,11 @@
         .queue-link { flex:0 0 auto; color:var(--blue); background:white; border:1px solid #b7cee1; border-radius:999px; padding:.55rem .8rem; text-decoration:none }
         .queue-link.active { color:white; background:var(--blue); border-color:var(--blue) }
         .button.compact { padding:.45rem .65rem; margin:0; font-size:.88rem }
+        .section-nav { display:flex; gap:.5rem; flex-wrap:wrap; margin:0 0 1rem }
+        .section-nav a { color:var(--blue); background:white; border:1px solid #b7cee1; border-radius:.35rem; padding:.55rem .8rem; text-decoration:none; font-weight:650 }
+        .section-heading { display:flex; justify-content:space-between; gap:1rem; align-items:start }
+        .section-heading h2 { margin:.1rem 0 } .queue-count { font-size:1.8rem; color:var(--blue) }
+        .empty-state { padding:1rem .25rem } .empty-state p { margin-bottom:0 }
         .branch-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(19rem,1fr)); gap:1rem; align-items:start }
         .branch-card { border-top:4px solid #d79b19 } .branch-card.completed { border-top-color:var(--green) }
         .branch-card header { display:flex; justify-content:space-between; gap:.75rem; align-items:start }
@@ -62,9 +67,11 @@
 @auth
 <nav>
     <strong>{{ config('app.name') }}</strong>
-    <a href="{{ route('dashboard') }}">{{ __('app.dashboard') }}</a>
-    <a href="{{ route('shipments.index') }}">{{ __('app.shipments') }}</a>
-    @can('manage-users')<a href="{{ route('users.index') }}">{{ __('app.users') }}</a>@endcan
+    <a class="{{ request()->routeIs('dashboard') ? 'active' : '' }}" href="{{ route('dashboard') }}" @if(request()->routeIs('dashboard')) aria-current="page" @endif>{{ __('app.dashboard') }}</a>
+    <a class="{{ request()->routeIs('shipments.*') ? 'active' : '' }}" href="{{ route('shipments.index') }}" @if(request()->routeIs('shipments.*')) aria-current="page" @endif>{{ __('app.shipments') }}</a>
+    <a class="{{ request()->routeIs('returns.*') ? 'active' : '' }}" href="{{ route('returns.index') }}" @if(request()->routeIs('returns.*')) aria-current="page" @endif>{{ __('app.returns') }}</a>
+    <a class="{{ request()->routeIs('finance.*') ? 'active' : '' }}" href="{{ route('finance.index') }}" @if(request()->routeIs('finance.*')) aria-current="page" @endif>{{ __('app.documents_finance') }}</a>
+    @can('manage-users')<a class="{{ request()->routeIs('users.*') ? 'active' : '' }}" href="{{ route('users.index') }}" @if(request()->routeIs('users.*')) aria-current="page" @endif>{{ __('app.users') }}</a>@endcan
     <span class="spacer"></span>
     <form class="inline" method="post" action="{{ route('locale.update') }}">@csrf @method('PUT')
         <button name="locale" value="cs">CZ</button><button name="locale" value="pl">PL</button>

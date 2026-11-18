@@ -5,10 +5,12 @@ use App\Http\Controllers\CoreReturnActionController;
 use App\Http\Controllers\CustomRebuildActionController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentDownloadController;
+use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PasswordController;
 use App\Http\Controllers\QrItemController;
+use App\Http\Controllers\ReturnController;
 use App\Http\Controllers\ShipmentActionController;
 use App\Http\Controllers\ShipmentController;
 use App\Http\Controllers\ShipmentItemController;
@@ -25,6 +27,8 @@ Route::middleware('guest')->group(function (): void {
 
 Route::middleware(['auth', 'active', 'password.changed'])->group(function (): void {
     Route::get('/', DashboardController::class)->name('dashboard');
+    Route::get('/returns', ReturnController::class)->name('returns.index');
+    Route::get('/finance', FinanceController::class)->name('finance.index');
     Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
     Route::get('/q/{randomToken}', QrItemController::class)->name('items.qr');
     Route::get('/shipments', [ShipmentController::class, 'index'])->name('shipments.index');
