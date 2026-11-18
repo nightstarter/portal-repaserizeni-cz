@@ -158,6 +158,45 @@ class Phase4bDocumentsAndFinanceTest extends TestCase
         self::assertSame('1500.00', FinanceEntry::query()->where('type', FinanceEntryType::SUPPLIER_PURCHASE_PRICE)->oldest('id')->first()->amount);
     }
 
+    public function test_reversed_invoice_terms_cannot_drive_a_later_deposit_decision(): void
+    {
+        [$noDepositOrder, $noDepositBusiness, $noDepositCore] = $this->order('replace-to-no-deposit');
+        $withDeposit = $this->documents->uploadInvoice($noDepositOrder, $noDepositBusiness, $this->invoiceCommand($noDepositBusiness, $this->validFile(), 'terms-with', true, '300.00'));
+        $this->documents->uploadInvoice($noDepositOrder, $noDepositBusiness->fresh(), new DocumentUploadCommand(
+            $this->plOperator, $this->validFile('without-deposit.pdf'), 'terms-to-without', $noDepositBusiness->fresh()->lock_version,
+            'FV-WITHOUT', '2026-11-18', '1500.00', 'PLN', ['deposit_charged' => false, 'reason' => 'Záloha nebyla účtována'],
+        ), $withDeposit);
+
+        self::assertFalse($noDepositCore->financeEntries()->effective()->where('type', FinanceEntryType::SUPPLIER_DEPOSIT_ORIGINAL)->exists());
+        self::assertTrue($noDepositCore->financeEntries()->effective()->where('type', FinanceEntryType::SUPPLIER_DEPOSIT_NOT_CHARGED)->exists());
+        try {
+            $this->core->execute($noDepositOrder, new CoreReturnCommand(CoreReturnAction::APPROVE_FULL_DEPOSIT_RETURN, $this->plOperator, 'reversed-deposit-must-not-approve', [], $noDepositCore->fresh()->lock_version));
+            self::fail('A reversed deposit must not authorize a return.');
+        } catch (WorkflowConflictException) {
+            self::assertSame(CoreReturnState::CORE_INSPECTION->value, $noDepositCore->fresh()->state);
+        }
+        $this->core->execute($noDepositOrder, new CoreReturnCommand(CoreReturnAction::CONFIRM_NO_SUPPLIER_DEPOSIT, $this->plOperator, 'effective-no-deposit', [], $noDepositCore->fresh()->lock_version));
+        self::assertSame(CoreReturnState::CORE_SETTLED_NO_DEPOSIT->value, $noDepositCore->fresh()->state);
+
+        [$depositOrder, $depositBusiness, $depositCore] = $this->order('replace-to-deposit');
+        $withoutDeposit = $this->documents->uploadInvoice($depositOrder, $depositBusiness, $this->invoiceCommand($depositBusiness, $this->validFile(), 'terms-without', false));
+        $this->documents->uploadInvoice($depositOrder, $depositBusiness->fresh(), new DocumentUploadCommand(
+            $this->plOperator, $this->validFile('with-deposit.pdf'), 'terms-to-with', $depositBusiness->fresh()->lock_version,
+            'FV-WITH', '2026-11-18', '1500.00', 'PLN', ['deposit_charged' => true, 'deposit_amount' => '300.00', 'reason' => 'Doplněna účtovaná záloha'],
+        ), $withoutDeposit);
+
+        self::assertFalse($depositCore->financeEntries()->effective()->where('type', FinanceEntryType::SUPPLIER_DEPOSIT_NOT_CHARGED)->exists());
+        self::assertTrue($depositCore->financeEntries()->effective()->where('type', FinanceEntryType::SUPPLIER_DEPOSIT_ORIGINAL)->exists());
+        try {
+            $this->core->execute($depositOrder, new CoreReturnCommand(CoreReturnAction::CONFIRM_NO_SUPPLIER_DEPOSIT, $this->plOperator, 'reversed-no-deposit-must-not-settle', [], $depositCore->fresh()->lock_version));
+            self::fail('Reversed no-deposit evidence must not settle the return.');
+        } catch (WorkflowConflictException) {
+            self::assertSame(CoreReturnState::CORE_INSPECTION->value, $depositCore->fresh()->state);
+        }
+        $this->core->execute($depositOrder, new CoreReturnCommand(CoreReturnAction::APPROVE_FULL_DEPOSIT_RETURN, $this->plOperator, 'effective-deposit', [], $depositCore->fresh()->lock_version));
+        self::assertSame(CoreReturnState::DEPOSIT_FULL_APPROVED->value, $depositCore->fresh()->state);
+    }
+
     public function test_download_is_tokenized_authorized_attached_nosniff_and_invalidated_is_hidden(): void
     {
         [$order, $business] = $this->order('download');

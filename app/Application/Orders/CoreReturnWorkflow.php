@@ -201,7 +201,7 @@ final class CoreReturnWorkflow
             default => throw new \LogicException,
         };
         if (in_array($type, [FinanceEntryType::SUPPLIER_DEPOSIT_ORIGINAL, FinanceEntryType::SUPPLIER_DEPOSIT_NOT_CHARGED], true)
-            && $thread->financeEntries()->whereIn('type', [FinanceEntryType::SUPPLIER_DEPOSIT_ORIGINAL, FinanceEntryType::SUPPLIER_DEPOSIT_NOT_CHARGED])->exists()) {
+            && $thread->financeEntries()->effective()->whereIn('type', [FinanceEntryType::SUPPLIER_DEPOSIT_ORIGINAL, FinanceEntryType::SUPPLIER_DEPOSIT_NOT_CHARGED])->exists()) {
             throw new WorkflowConflictException('Supplier deposit terms are already recorded; use an AK_ADMIN correction event.');
         }
 
@@ -234,7 +234,7 @@ final class CoreReturnWorkflow
     private function prepareSettlementFinance(ProcessThread $thread, CoreReturnCommand $command): array
     {
         if (in_array($command->action, [CoreReturnAction::ISSUE_SUPPLIER_CREDIT_NOTE, CoreReturnAction::CONFIRM_CREDIT_PAID], true)) {
-            $approved = $thread->financeEntries()
+            $approved = $thread->financeEntries()->effective()
                 ->where('type', FinanceEntryType::SUPPLIER_DEPOSIT_RETURN_APPROVED)
                 ->latest('id')->first();
             if ($approved === null) {
@@ -261,7 +261,7 @@ final class CoreReturnWorkflow
             if (array_key_exists('amount', $command->data) || array_key_exists('currency', $command->data)) {
                 throw ValidationException::withMessages(['amount' => 'Paid amount and currency are derived by the server.']);
             }
-            $credit = $thread->financeEntries()->where('type', FinanceEntryType::SUPPLIER_CREDIT_NOTE_ISSUED)->latest('id')->first();
+            $credit = $thread->financeEntries()->effective()->where('type', FinanceEntryType::SUPPLIER_CREDIT_NOTE_ISSUED)->latest('id')->first();
             $activeCredit = Document::query()->where('process_thread_id', $thread->id)
                 ->where('type', DocumentType::SUPPLIER_CREDIT_NOTE)
                 ->where('status', DocumentStatus::ACTIVE)
@@ -280,7 +280,7 @@ final class CoreReturnWorkflow
         }
 
         if ($command->action === CoreReturnAction::CONFIRM_NO_SUPPLIER_DEPOSIT) {
-            $evidence = $thread->financeEntries()->where('type', FinanceEntryType::SUPPLIER_DEPOSIT_NOT_CHARGED)->latest('id')->first();
+            $evidence = $thread->financeEntries()->effective()->where('type', FinanceEntryType::SUPPLIER_DEPOSIT_NOT_CHARGED)->latest('id')->first();
             if ($evidence === null) {
                 throw new WorkflowConflictException('Explicit supplier-deposit-not-charged evidence is required.');
             }
@@ -292,7 +292,7 @@ final class CoreReturnWorkflow
                 'reason' => $evidence->reason,
             ]]];
         }
-        $original = $thread->financeEntries()->where('type', FinanceEntryType::SUPPLIER_DEPOSIT_ORIGINAL)->latest('id')->first();
+        $original = $thread->financeEntries()->effective()->where('type', FinanceEntryType::SUPPLIER_DEPOSIT_ORIGINAL)->latest('id')->first();
         if ($original === null || $original->status !== FinanceEntryStatus::CONFIRMED) {
             throw new WorkflowConflictException('Confirmed SUPPLIER_DEPOSIT_ORIGINAL is required.');
         }

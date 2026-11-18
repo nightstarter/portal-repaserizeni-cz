@@ -22,15 +22,16 @@ final class CoreReturnPresentation
         $isAk = $viewer->organization->code === OrganizationCode::AUTOKLUBY;
         $isPl = $viewer->organization->code === OrganizationCode::POLAND;
         $isAdmin = $viewer->role === UserRole::AK_ADMIN;
+        $effectiveFinance = $thread->financeEntries()->effective()->get();
         $actions = [];
         if ($state === CoreReturnState::WAITING_CORE && $isAk) {
             $actions[] = CoreReturnAction::CONFIRM_CORE_RECEIPT_AK;
         }
         if ($state === CoreReturnState::CORE_INSPECTION && ($isPl || $isAdmin)) {
-            if ($thread->financeEntries->contains('type', FinanceEntryType::SUPPLIER_DEPOSIT_ORIGINAL)) {
+            if ($effectiveFinance->contains('type', FinanceEntryType::SUPPLIER_DEPOSIT_ORIGINAL)) {
                 $actions = [CoreReturnAction::APPROVE_FULL_DEPOSIT_RETURN, CoreReturnAction::APPROVE_REDUCED_DEPOSIT_RETURN];
             }
-            if ($thread->financeEntries->contains('type', FinanceEntryType::SUPPLIER_DEPOSIT_NOT_CHARGED)) {
+            if ($effectiveFinance->contains('type', FinanceEntryType::SUPPLIER_DEPOSIT_NOT_CHARGED)) {
                 $actions[] = CoreReturnAction::CONFIRM_NO_SUPPLIER_DEPOSIT;
             }
         }
@@ -49,9 +50,9 @@ final class CoreReturnPresentation
             'documents' => $thread->documents->sortByDesc('id'),
             'active_documents' => $thread->documents->where('status', DocumentStatus::ACTIVE),
             'finance' => $thread->financeEntries->sortBy('id'),
-            'original_deposit' => $thread->financeEntries->where('type', FinanceEntryType::SUPPLIER_DEPOSIT_ORIGINAL)->sortByDesc('id')->first(),
-            'approved_return' => $thread->financeEntries->where('type', FinanceEntryType::SUPPLIER_DEPOSIT_RETURN_APPROVED)->sortByDesc('id')->first(),
-            'reduction' => $thread->financeEntries->where('type', FinanceEntryType::SUPPLIER_DEPOSIT_REDUCTION)->sortByDesc('id')->first(),
+            'original_deposit' => $effectiveFinance->where('type', FinanceEntryType::SUPPLIER_DEPOSIT_ORIGINAL)->sortByDesc('id')->first(),
+            'approved_return' => $effectiveFinance->where('type', FinanceEntryType::SUPPLIER_DEPOSIT_RETURN_APPROVED)->sortByDesc('id')->first(),
+            'reduction' => $effectiveFinance->where('type', FinanceEntryType::SUPPLIER_DEPOSIT_REDUCTION)->sortByDesc('id')->first(),
         ];
     }
 }

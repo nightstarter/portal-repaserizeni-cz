@@ -97,16 +97,18 @@ final class PrivateDocumentService
                 $entries = [];
                 if ($replaces !== null) {
                     $oldEventId = data_get($replaces->events()->latest('id')->first()?->metadata, 'thread_event_id');
-                    FinanceEntry::query()->where('thread_event_id', $oldEventId)->orderBy('id')->get()->each(function (FinanceEntry $old) use (&$entries, $payload): void {
-                        $entries[] = [
-                            'type' => FinanceEntryType::REVERSAL,
-                            'amount' => $this->negate($old->amount),
-                            'currency' => $old->currency,
-                            'status' => FinanceEntryStatus::REVERSED,
-                            'reason' => $payload['reason'],
-                            'corrects_entry_id' => $old->id,
-                        ];
-                    });
+                    FinanceEntry::query()->where('thread_event_id', $oldEventId)
+                        ->whereIn('type', [FinanceEntryType::SUPPLIER_PURCHASE_PRICE, FinanceEntryType::SUPPLIER_DEPOSIT_ORIGINAL, FinanceEntryType::SUPPLIER_DEPOSIT_NOT_CHARGED])
+                        ->orderBy('id')->get()->each(function (FinanceEntry $old) use (&$entries, $payload): void {
+                            $entries[] = [
+                                'type' => FinanceEntryType::REVERSAL,
+                                'amount' => $this->negate($old->amount),
+                                'currency' => $old->currency,
+                                'status' => FinanceEntryStatus::REVERSED,
+                                'reason' => $payload['reason'],
+                                'corrects_entry_id' => $old->id,
+                            ];
+                        });
                 }
                 $ledgerReason = $payload['reason'] ?: 'SUPPLIER_INVOICE_DOCUMENT:'.$document->id;
                 $entries[] = ['type' => FinanceEntryType::SUPPLIER_PURCHASE_PRICE, 'amount' => $payload['amount'], 'currency' => $payload['currency'], 'status' => FinanceEntryStatus::CONFIRMED, 'reason' => $ledgerReason];
@@ -132,7 +134,7 @@ final class PrivateDocumentService
         if ($override && $reason === '') {
             throw ValidationException::withMessages(['reason' => 'Administrator override requires a reason.']);
         }
-        $approved = $coreThread->financeEntries()->where('type', FinanceEntryType::SUPPLIER_DEPOSIT_RETURN_APPROVED)->latest('id')->first();
+        $approved = $coreThread->financeEntries()->effective()->where('type', FinanceEntryType::SUPPLIER_DEPOSIT_RETURN_APPROVED)->latest('id')->first();
         if ($approved === null || $validated['amount'] !== $approved->amount || $validated['currency'] !== $approved->currency) {
             throw ValidationException::withMessages(['amount' => 'Credit note must exactly match the approved supplier deposit return.']);
         }
@@ -181,7 +183,7 @@ final class PrivateDocumentService
         if ($reason === '') {
             throw ValidationException::withMessages(['reason' => 'A credit-note replacement requires a reason.']);
         }
-        $approved = $coreThread->financeEntries()->where('type', FinanceEntryType::SUPPLIER_DEPOSIT_RETURN_APPROVED)->latest('id')->first();
+        $approved = $coreThread->financeEntries()->effective()->where('type', FinanceEntryType::SUPPLIER_DEPOSIT_RETURN_APPROVED)->latest('id')->first();
         if ($approved === null || $validated['amount'] !== $approved->amount || $validated['currency'] !== $approved->currency) {
             throw ValidationException::withMessages(['amount' => 'Credit note must exactly match the approved supplier deposit return.']);
         }
@@ -218,7 +220,7 @@ final class PrivateDocumentService
                 ]);
                 $document = $this->createDocument($lockedOrder, $thread, DocumentType::SUPPLIER_CREDIT_NOTE, $command, $payload, $disk, $path, $activeKey, $replaces);
                 [$event, $auditId] = $this->recordBusinessEvent($lockedOrder, $thread, $document, $command, $hash, 'SUPPLIER_CREDIT_NOTE_REPLACED', $payload['reason'], $override);
-                $oldEntry = $thread->financeEntries()->where('type', FinanceEntryType::SUPPLIER_CREDIT_NOTE_ISSUED)->latest('id')->firstOrFail();
+                $oldEntry = $thread->financeEntries()->effective()->where('type', FinanceEntryType::SUPPLIER_CREDIT_NOTE_ISSUED)->latest('id')->firstOrFail();
                 $this->ledger->append($lockedOrder, $thread, $event, $auditId, $command->actor, 'doc-finance:'.$command->idempotencyKey, $hash, [[
                     'type' => FinanceEntryType::REVERSAL,
                     'amount' => $this->negate($oldEntry->amount),

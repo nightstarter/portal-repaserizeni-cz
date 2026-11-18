@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\FinanceEntryStatus;
 use App\Enums\FinanceEntryType;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -33,6 +34,14 @@ class FinanceEntry extends Model
             'amount' => 'decimal:2',
             'recorded_at' => 'immutable_datetime',
         ];
+    }
+
+    public function scopeEffective(Builder $query): Builder
+    {
+        return $query->whereNotIn('finance_entries.id', self::query()
+            ->select('corrects_entry_id')
+            ->where('type', FinanceEntryType::REVERSAL)
+            ->whereNotNull('corrects_entry_id'));
     }
 
     public function order(): BelongsTo
