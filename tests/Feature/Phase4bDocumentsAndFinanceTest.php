@@ -26,7 +26,9 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
@@ -76,6 +78,22 @@ class Phase4bDocumentsAndFinanceTest extends TestCase
             self::assertDoesNotMatchRegularExpression('/invoice/i', basename($document->storage_name));
             Storage::disk('local')->assertExists($document->storage_name);
             self::assertSame([], Storage::disk('public')->allFiles());
+        }
+    }
+
+    public function test_private_disk_enforces_private_files_and_non_world_accessible_directories(): void
+    {
+        $root = sys_get_temp_dir().'/portal-private-permissions-'.Str::uuid();
+        try {
+            $disk = Storage::build(array_replace(config('filesystems.disks.local'), ['root' => $root]));
+            self::assertTrue($disk->put('nested/document.pdf', '%PDF-1.4'));
+            clearstatcache(true, $root.'/nested/document.pdf');
+            self::assertSame(0660, fileperms($root.'/nested/document.pdf') & 0777);
+            $directoryMode = fileperms($root.'/nested') & 0777;
+            self::assertSame(0, $directoryMode & 0007);
+            self::assertNotSame(0, $directoryMode & 0700);
+        } finally {
+            File::deleteDirectory($root);
         }
     }
 
