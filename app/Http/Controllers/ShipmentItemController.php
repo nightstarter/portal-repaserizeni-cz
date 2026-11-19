@@ -34,7 +34,9 @@ class ShipmentItemController extends Controller
             ItemRole::STOCK_REPLACEMENT => ProcessThreadType::STOCK_REPLENISHMENT,
             default => null,
         };
-        $thread = $threadType === null ? null : $item->order->processThreads()->where('type', $threadType)->first();
+        $thread = $item->active_warranty_thread_id === null
+            ? ($threadType === null ? null : $item->order->processThreads()->where('type', $threadType)->first())
+            : $item->activeWarrantyThread;
         if ($thread === null) {
             throw ValidationException::withMessages(['qr_token' => __('app.shipment_item_not_eligible')]);
         }

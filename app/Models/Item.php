@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ItemRole;
+use App\Enums\ProcessThreadType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,7 +15,7 @@ class Item extends Model
     use HasFactory;
 
     protected $fillable = [
-        'order_id', 'role', 'role_instance', 'active_shipment_id', 'qr_token', 'current_location', 'inspection_result',
+        'order_id', 'role', 'role_instance', 'active_shipment_id', 'active_warranty_thread_id', 'qr_token', 'current_location', 'inspection_result',
         'technical_attributes', 'note',
     ];
 
@@ -42,6 +43,16 @@ class Item extends Model
     public function activeShipment(): BelongsTo
     {
         return $this->belongsTo(Shipment::class, 'active_shipment_id');
+    }
+
+    public function activeWarrantyThread(): BelongsTo
+    {
+        return $this->belongsTo(ProcessThread::class, 'active_warranty_thread_id');
+    }
+
+    public function warrantyThreads(): HasMany
+    {
+        return $this->hasMany(ProcessThread::class)->where('type', ProcessThreadType::WARRANTY);
     }
 
     public function shipmentItems(): HasMany

@@ -18,9 +18,9 @@ class ProcessThread extends Model
     use HasFactory;
 
     protected $fillable = [
-        'order_id', 'type', 'type_instance', 'state', 'responsible_party',
+        'order_id', 'item_id', 'type', 'type_instance', 'state', 'responsible_party',
         'responsible_organization_id', 'vendor_routing', 'warranty_cycle', 'eta',
-        'completed_at', 'lock_version',
+        'created_by', 'creation_idempotency_key', 'creation_request_hash', 'completed_at', 'lock_version',
     ];
 
     protected function casts(): array
@@ -33,6 +33,7 @@ class ProcessThread extends Model
             'completed_at' => 'immutable_datetime',
             'lock_version' => 'integer',
             'type_instance' => 'integer',
+            'warranty_cycle' => 'integer',
         ];
     }
 
@@ -44,6 +45,16 @@ class ProcessThread extends Model
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);
+    }
+
+    public function item(): BelongsTo
+    {
+        return $this->belongsTo(Item::class);
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     public function responsibleOrganization(): BelongsTo
@@ -88,6 +99,7 @@ class ProcessThread extends Model
                 ProcessThreadType::STOCK_REQUEST,
                 ProcessThreadType::STOCK_REPLENISHMENT,
                 ProcessThreadType::CORE_RETURN,
+                ProcessThreadType::WARRANTY,
             ])
             ->where(function (Builder $access) use ($user): void {
                 $access

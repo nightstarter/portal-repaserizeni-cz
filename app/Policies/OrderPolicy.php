@@ -4,6 +4,7 @@ namespace App\Policies;
 
 use App\Enums\OrderType;
 use App\Enums\OrganizationCode;
+use App\Enums\ProcessThreadType;
 use App\Models\Order;
 use App\Models\User;
 
@@ -21,6 +22,13 @@ class OrderPolicy
         }
 
         if ($user->organization->code === OrganizationCode::AUTOKLUBY) {
+            return true;
+        }
+
+        if ($order->processThreads()
+            ->visibleTo($user)
+            ->where('type', ProcessThreadType::WARRANTY)
+            ->exists()) {
             return true;
         }
 

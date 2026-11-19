@@ -13,6 +13,10 @@ use App\Application\Orders\CustomRebuildWorkflow;
 use App\Application\Orders\StockRebuildActionGuard;
 use App\Application\Orders\StockRebuildCommand;
 use App\Application\Orders\StockRebuildWorkflow;
+use App\Application\Orders\WarrantyActionGuard;
+use App\Application\Orders\WarrantyCommand;
+use App\Application\Orders\WarrantyStateMachine;
+use App\Application\Orders\WarrantyWorkflow;
 use App\Enums\CoreReturnAction;
 use App\Enums\CoreReturnState;
 use App\Enums\CustomRebuildAction;
@@ -25,6 +29,8 @@ use App\Enums\ShipmentDirection;
 use App\Enums\ShipmentStatus;
 use App\Enums\StockRebuildAction;
 use App\Enums\UserRole;
+use App\Enums\WarrantyAction;
+use App\Enums\WarrantyState;
 use App\Exceptions\WorkflowConflictException;
 use App\Models\Item;
 use App\Models\Organization;
@@ -49,6 +55,9 @@ final class ShipmentService
         private readonly CoreReturnActionGuard $coreReturnGuard,
         private readonly CoreReturnStateMachine $coreReturnStateMachine,
         private readonly CoreReturnWorkflow $coreReturnWorkflow,
+        private readonly WarrantyActionGuard $warrantyGuard,
+        private readonly WarrantyStateMachine $warrantyStateMachine,
+        private readonly WarrantyWorkflow $warrantyWorkflow,
         private readonly AuditLogger $auditLogger,
     ) {}
 
@@ -391,6 +400,12 @@ final class ShipmentService
         $order = $thread->order;
 
         if ($shipment->direction === ShipmentDirection::AK_TO_PL) {
+            if ($thread->type === ProcessThreadType::WARRANTY && $thread->item_id === $item->id) {
+                $this->warrantyGuard->assertMayPerform($actor, WarrantyAction::SEND_TO_POLAND, $thread);
+                $this->warrantyStateMachine->nextState(WarrantyState::from($thread->state), WarrantyAction::SEND_TO_POLAND);
+
+                return;
+            }
             if ($thread->type === ProcessThreadType::CORE_RETURN && $item->role === ItemRole::CORE_RETURN) {
                 $this->coreReturnGuard->assertMayPerform($actor, new CoreReturnCommand(
                     CoreReturnAction::SEND_TO_POLAND, $actor, 'shipment-eligibility', [], $thread->lock_version,
@@ -408,6 +423,12 @@ final class ShipmentService
             return;
         }
 
+        if ($thread->type === ProcessThreadType::WARRANTY && $thread->item_id === $item->id) {
+            $this->warrantyGuard->assertMayPerform($actor, WarrantyAction::SEND_TO_AUTOKLUBY, $thread);
+            $this->warrantyStateMachine->nextState(WarrantyState::from($thread->state), WarrantyAction::SEND_TO_AUTOKLUBY);
+
+            return;
+        }
         if ($thread->type === ProcessThreadType::CUSTOM_REBUILD && $item->role === ItemRole::CUSTOMER_ITEM) {
             $this->customGuard->assertActorMayPerform($actor, CustomRebuildAction::SEND_TO_AUTOKLUBY);
             $this->customGuard->nextState($order, $thread, CustomRebuildAction::SEND_TO_AUTOKLUBY);
@@ -431,6 +452,22 @@ final class ShipmentService
             throw new WorkflowConflictException('Item does not belong to the supplied process thread.');
         }
         $order = $thread->order;
+        if ($shipment->direction === ShipmentDirection::AK_TO_PL
+            && $thread->type === ProcessThreadType::WARRANTY
+            && $thread->item_id === $item->id) {
+            $this->warrantyGuard->assertMayPerform($actor, WarrantyAction::CONFIRM_POLAND_RECEIPT, $thread);
+            $this->warrantyStateMachine->nextState(WarrantyState::from($thread->state), WarrantyAction::CONFIRM_POLAND_RECEIPT);
+
+            return;
+        }
+        if ($shipment->direction === ShipmentDirection::PL_TO_AK
+            && $thread->type === ProcessThreadType::WARRANTY
+            && $thread->item_id === $item->id) {
+            $this->warrantyGuard->assertMayPerform($actor, WarrantyAction::CONFIRM_AUTOKLUBY_RECEIPT, $thread);
+            $this->warrantyStateMachine->nextState(WarrantyState::from($thread->state), WarrantyAction::CONFIRM_AUTOKLUBY_RECEIPT);
+
+            return;
+        }
         if ($shipment->direction === ShipmentDirection::AK_TO_PL
             && $thread->type === ProcessThreadType::CORE_RETURN
             && $item->role === ItemRole::CORE_RETURN) {
@@ -472,7 +509,15 @@ final class ShipmentService
     private function executeDispatch(Shipment $shipment, ProcessThread $thread, ShipmentCommand $command): void
     {
         $key = $this->threadIdempotencyKey($shipment, $thread, ShipmentAction::SEND_SHIPMENT, $command);
-        $data = ['shipment_public_number' => $shipment->public_number];
+        $data = ['shipment_id' => $shipment->id, 'shipment_public_number' => $shipment->public_number];
+        if ($thread->type === ProcessThreadType::WARRANTY) {
+            $action = $shipment->direction === ShipmentDirection::AK_TO_PL
+                ? WarrantyAction::SEND_TO_POLAND
+                : WarrantyAction::SEND_TO_AUTOKLUBY;
+            $this->warrantyWorkflow->execute($thread, new WarrantyCommand($action, $command->actor, $key, $data, $thread->lock_version));
+
+            return;
+        }
         if ($thread->type === ProcessThreadType::CORE_RETURN) {
             $this->coreReturnWorkflow->execute($thread->order, new CoreReturnCommand(
                 CoreReturnAction::SEND_TO_POLAND, $command->actor, $key, $data, $thread->lock_version,
@@ -499,7 +544,15 @@ final class ShipmentService
     private function executeReceipt(Shipment $shipment, ProcessThread $thread, ShipmentCommand $command): void
     {
         $key = $this->threadIdempotencyKey($shipment, $thread, ShipmentAction::CONFIRM_SHIPMENT_DELIVERY, $command);
-        $data = ['shipment_public_number' => $shipment->public_number];
+        $data = ['shipment_id' => $shipment->id, 'shipment_public_number' => $shipment->public_number];
+        if ($thread->type === ProcessThreadType::WARRANTY) {
+            $action = $shipment->direction === ShipmentDirection::AK_TO_PL
+                ? WarrantyAction::CONFIRM_POLAND_RECEIPT
+                : WarrantyAction::CONFIRM_AUTOKLUBY_RECEIPT;
+            $this->warrantyWorkflow->execute($thread, new WarrantyCommand($action, $command->actor, $key, $data, $thread->lock_version));
+
+            return;
+        }
         if ($thread->type === ProcessThreadType::CORE_RETURN) {
             $this->coreReturnWorkflow->execute($thread->order, new CoreReturnCommand(
                 CoreReturnAction::CONFIRM_CORE_RECEIPT_PL, $command->actor, $key, $data, $thread->lock_version,

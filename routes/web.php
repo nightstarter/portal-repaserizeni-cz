@@ -22,6 +22,7 @@ use App\Http\Controllers\StockRebuildActionController;
 use App\Http\Controllers\SupplierCreditNoteController;
 use App\Http\Controllers\SupplierInvoiceController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\WarrantyController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function (): void {
@@ -52,6 +53,8 @@ Route::middleware(['auth', 'active', 'password.changed'])->group(function (): vo
     Route::post('/orders/{order}/stock-rebuild/{threadType}/actions/{action}', StockRebuildActionController::class)
         ->name('orders.stock-rebuild.actions');
     Route::post('/orders/{order}/core-return/actions/{action}', CoreReturnActionController::class)->name('orders.core-return.actions');
+    Route::post('/orders/{order}/items/{item}/warranty', [WarrantyController::class, 'store'])->name('orders.warranty.store');
+    Route::post('/orders/{order}/warranty/{thread}/actions/{action}', [WarrantyController::class, 'action'])->name('orders.warranty.actions');
     Route::post('/orders/{order}/threads/{thread}/supplier-invoice', [SupplierInvoiceController::class, 'store'])->name('documents.invoice.store');
     Route::post('/orders/{order}/threads/{thread}/supplier-invoice/{document}/replace', [SupplierInvoiceController::class, 'replace'])->name('documents.invoice.replace');
     Route::post('/orders/{order}/threads/{thread}/supplier-credit-note', [SupplierCreditNoteController::class, 'store'])->name('documents.credit.store');
