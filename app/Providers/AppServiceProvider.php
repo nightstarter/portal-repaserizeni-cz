@@ -75,5 +75,8 @@ class AppServiceProvider extends ServiceProvider
         });
 
         RateLimiter::for('login', fn (Request $request) => Limit::perMinute(5)->by(strtolower((string) $request->input('email')).'|'.$request->ip()));
+        RateLimiter::for('pohoda-bridge', fn (Request $request) => Limit::perMinute(
+            max(1, (int) config('integrations.pohoda_bridge.rate_limit_per_minute', 60)),
+        )->by((string) $request->ip()));
     }
 }

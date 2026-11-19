@@ -1,6 +1,19 @@
 <?php
 
 return [
+    'pohoda_bridge_title' => 'Pohoda bridge – diagnostyka',
+    'enabled' => 'Włączony',
+    'disabled' => 'Wyłączony',
+    'pohoda_bridge_stale_hint' => 'Dane magazynowe są starsze niż :minutes minut.',
+    'pohoda_last_heartbeat' => 'Ostatni heartbeat',
+    'pohoda_last_complete_snapshot' => 'Ostatni pełny snapshot',
+    'pohoda_last_partial_snapshot' => 'Ostatni częściowy snapshot',
+    'pohoda_latest_batch' => 'Ostatnia partia',
+    'pohoda_items_accepted' => 'Przyjęte pozycje',
+    'pohoda_items_rejected' => 'Odrzucone pozycje',
+    'pohoda_no_snapshot' => 'Nie odebrano jeszcze żadnego snapshotu.',
+    'pohoda_commands' => 'Polecenia bridge',
+    'pohoda_sanitized_errors_only' => 'Błędy są przechowywane wyłącznie jako bezpieczne kody zewnętrzne.',
     'dashboard' => 'Panel', 'users' => 'Użytkownicy', 'logout' => 'Wyloguj',
     'phase_zero_ready' => 'Bezpieczna podstawa Fazy 0 została wdrożona. Procesy operacyjne zostaną wdrożone w kolejnych fazach.',
     'phase_1a_ready' => 'Rdzeń danych Fazy 1A używa danych testowych. Import produkcyjny pozostaje wyłączony.',

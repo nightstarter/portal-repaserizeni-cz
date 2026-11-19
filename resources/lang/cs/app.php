@@ -1,6 +1,19 @@
 <?php
 
 return [
+    'pohoda_bridge_title' => 'Pohoda bridge – diagnostika',
+    'enabled' => 'Zapnuto',
+    'disabled' => 'Vypnuto',
+    'pohoda_bridge_stale_hint' => 'Skladová data jsou starší než :minutes minut.',
+    'pohoda_last_heartbeat' => 'Poslední heartbeat',
+    'pohoda_last_complete_snapshot' => 'Poslední úplný snapshot',
+    'pohoda_last_partial_snapshot' => 'Poslední částečný snapshot',
+    'pohoda_latest_batch' => 'Poslední dávka',
+    'pohoda_items_accepted' => 'Přijaté položky',
+    'pohoda_items_rejected' => 'Odmítnuté položky',
+    'pohoda_no_snapshot' => 'Dosud nebyl přijat žádný snapshot.',
+    'pohoda_commands' => 'Bridge příkazy',
+    'pohoda_sanitized_errors_only' => 'Chyby jsou uloženy pouze jako bezpečné externí kódy.',
     'dashboard' => 'Přehled', 'users' => 'Uživatelé', 'logout' => 'Odhlásit',
     'phase_zero_ready' => 'Bezpečný základ Fáze 0 je implementován. Provozní workflow bude implementováno v dalších fázích.',
     'phase_1a_ready' => 'Datové jádro Fáze 1A používá testovací data. Produkční import zůstává vypnutý.',

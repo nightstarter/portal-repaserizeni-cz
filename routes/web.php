@@ -16,6 +16,7 @@ use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\MessageAttachmentDownloadController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PasswordController;
+use App\Http\Controllers\PohodaIntegrationController;
 use App\Http\Controllers\QrItemController;
 use App\Http\Controllers\ReturnController;
 use App\Http\Controllers\ShipmentActionController;
@@ -80,4 +81,5 @@ Route::middleware(['auth', 'active', 'password.changed'])->group(function (): vo
     Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
     Route::get('/admin/notifications', [AdminNotificationController::class, 'index'])->name('admin.notifications.index');
     Route::post('/admin/notifications/{event}/retry', [AdminNotificationController::class, 'retry'])->name('admin.notifications.retry');
+    Route::get('/admin/integrations/pohoda', PohodaIntegrationController::class)->name('admin.integrations.pohoda');
 });
