@@ -168,6 +168,12 @@ class Phase6bWarrantyUiTest extends TestCase
         $this->actingAs($this->plOperator)->get(route('orders.show', $visibleOrder))->assertOk()
             ->assertSee('Reklamacja nr 1')->assertDontSee('TAJNY KLIENT')->assertDontSee('Tajná 1')->assertDontSee('interní')
             ->assertDontSee($visibleOrder->vehicle)->assertDontSee($visibleOrder->vin);
+        $foreignItem = Item::factory()->create([
+            'order_id' => $visibleOrder->id,
+            'role_instance' => 2,
+            'current_location' => OrganizationCode::AUTOKLUBY,
+        ]);
+        $this->actingAs($this->plOperator)->get(route('items.qr', $foreignItem->qr_token))->assertNotFound();
         $this->actingAs($this->plOperator)->postJson(route('orders.warranty.actions', [
             $hiddenOrder, $hidden, WarrantyAction::COMPLETE_REPAIR->value,
         ]), ['idempotency_key' => 'foreign', 'expected_lock_version' => 0])->assertNotFound();

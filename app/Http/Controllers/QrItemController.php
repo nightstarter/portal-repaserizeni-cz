@@ -55,6 +55,14 @@ class QrItemController extends Controller
             ]);
         }
 
+        if ($request->user()->organization->code === OrganizationCode::POLAND
+            && $order->order_type === OrderType::CUSTOM_REBUILD) {
+            abort_unless(
+                $order->newQuery()->customRebuildVisibleTo($request->user())->whereKey($order->id)->exists(),
+                404,
+            );
+        }
+
         if ($order->order_type === OrderType::STOCK_REBUILD) {
             $threadType = $stockPresentation->threadTypeForItem($item);
             abort_if($threadType === null, 404);
