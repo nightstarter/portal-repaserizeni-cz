@@ -48,7 +48,7 @@ class OrderController extends Controller
             $thread = $order->processThreads()->visibleTo($request->user())
                 ->where('type', ProcessThreadType::BUYOUT)
                 ->with(['item', 'responsibleOrganization', 'events.actorUser', 'events.actorOrganization',
-                    'buybackPriceQuotes.actor', 'shipmentItems.shipment', 'documents', 'financeEntries'])
+                    'buybackPriceQuotes.actor', 'shipmentItems.shipment', 'documents', 'financeEntries', 'buybackCustomerOutbox'])
                 ->firstOrFail();
             if ($request->user()->organization->code === OrganizationCode::AUTOKLUBY) {
                 $order->load('customer');

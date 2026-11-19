@@ -19,6 +19,9 @@ final class BuybackPresentation
         $state = BuybackState::from($thread->state);
         $allowed = [];
         foreach ($this->candidateActions($state) as $action) {
+            if ($action === BuybackAction::QUEUE_CUSTOMER_OFFER && $thread->buybackCustomerOutbox !== null) {
+                continue;
+            }
             if (in_array($action, [BuybackAction::SEND_TO_PL, BuybackAction::CONFIRM_PL_RECEIPT, BuybackAction::REQUIRE_INVOICE_TO_PL], true)) {
                 continue;
             }

@@ -25,7 +25,7 @@ class BuybackQueueController extends Controller
         $query = ProcessThread::query()->visibleTo($request->user())
             ->where('type', ProcessThreadType::BUYOUT)
             ->with(['order', 'item', 'responsibleOrganization', 'latestEvent', 'buybackPriceQuotes',
-                'events.actorOrganization', 'shipmentItems.shipment', 'documents', 'financeEntries'])
+                'events.actorOrganization', 'shipmentItems.shipment', 'documents', 'financeEntries', 'buybackCustomerOutbox'])
             ->orderByDesc('updated_at')->orderByDesc('id');
         $this->filter($query, $filter);
         $threads = $query->paginate(100)->withQueryString();

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Domain\Buybacks\BuybackCustomerOfferQueued;
 use App\Enums\CustomRebuildState;
 use App\Enums\OrganizationCode;
 use App\Enums\ProcessThreadType;
@@ -99,6 +100,12 @@ class ProcessThread extends Model
     public function buybackPriceQuotes(): HasMany
     {
         return $this->hasMany(BuybackPriceQuote::class);
+    }
+
+    public function buybackCustomerOutbox(): HasOne
+    {
+        return $this->hasOne(OutboxEvent::class, 'aggregate_id')
+            ->where('event_type', BuybackCustomerOfferQueued::TYPE);
     }
 
     public function scopeVisibleTo(Builder $query, User $user): Builder

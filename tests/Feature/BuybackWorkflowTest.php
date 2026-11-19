@@ -155,6 +155,9 @@ class BuybackWorkflowTest extends TestCase
         self::assertSame(OutboxEvent::PENDING, OutboxEvent::query()->firstOrFail()->status);
         self::assertSame(BuybackState::CUSTOMER_OFFER_READY->value, $thread->fresh()->state);
         self::assertEquals(['thread_event_id'], array_keys(OutboxEvent::query()->firstOrFail()->payload));
+        $queueUrl = route('orders.buyback.actions', [$thread->order, $thread, BuybackAction::QUEUE_CUSTOMER_OFFER->value]);
+        self::assertStringNotContainsString('action="'.$queueUrl.'"', $this->actingAs($this->admin)
+            ->get(route('orders.show', $thread->order))->assertOk()->getContent());
         try {
             $this->act($thread, BuybackAction::RECORD_CUSTOMER_ACCEPTANCE, $this->operator, 'accept-pending');
             self::fail('A pending customer offer must not be accepted as delivered.');
