@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\AdminNotificationController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\BuybackController;
+use App\Http\Controllers\BuybackInvoiceController;
 use App\Http\Controllers\CoreReturnActionController;
 use App\Http\Controllers\CustomRebuildActionController;
 use App\Http\Controllers\DashboardController;
@@ -37,6 +39,7 @@ Route::middleware(['auth', 'active', 'password.changed'])->group(function (): vo
     Route::get('/finance', FinanceController::class)->name('finance.index');
     Route::get('/discussions', DiscussionQueueController::class)->name('discussions.index');
     Route::get('/warranties', WarrantyQueueController::class)->name('warranties.index');
+    Route::post('/buybacks', [BuybackController::class, 'store'])->name('buybacks.store');
     Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
     Route::get('/orders/{order}/discussion', [DiscussionController::class, 'index'])->name('orders.discussion.index');
     Route::post('/orders/{order}/discussion', [DiscussionController::class, 'store'])->name('orders.discussion.store');
@@ -57,6 +60,9 @@ Route::middleware(['auth', 'active', 'password.changed'])->group(function (): vo
     Route::post('/orders/{order}/core-return/actions/{action}', CoreReturnActionController::class)->name('orders.core-return.actions');
     Route::post('/orders/{order}/items/{item}/warranty', [WarrantyController::class, 'store'])->name('orders.warranty.store');
     Route::post('/orders/{order}/warranty/{thread}/actions/{action}', [WarrantyController::class, 'action'])->name('orders.warranty.actions');
+    Route::post('/orders/{order}/buyback/{thread}/actions/{action}', [BuybackController::class, 'action'])->name('orders.buyback.actions');
+    Route::post('/orders/{order}/buyback/{thread}/invoice', [BuybackInvoiceController::class, 'store'])->name('orders.buyback.invoice.store');
+    Route::post('/orders/{order}/buyback/{thread}/invoice/{document}/replace', [BuybackInvoiceController::class, 'replace'])->name('orders.buyback.invoice.replace');
     Route::post('/orders/{order}/threads/{thread}/supplier-invoice', [SupplierInvoiceController::class, 'store'])->name('documents.invoice.store');
     Route::post('/orders/{order}/threads/{thread}/supplier-invoice/{document}/replace', [SupplierInvoiceController::class, 'replace'])->name('documents.invoice.replace');
     Route::post('/orders/{order}/threads/{thread}/supplier-credit-note', [SupplierCreditNoteController::class, 'store'])->name('documents.credit.store');

@@ -96,6 +96,11 @@ class ProcessThread extends Model
         return $this->hasMany(Document::class);
     }
 
+    public function buybackPriceQuotes(): HasMany
+    {
+        return $this->hasMany(BuybackPriceQuote::class);
+    }
+
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
         if ($user->organization->code === OrganizationCode::AUTOKLUBY) {
@@ -109,6 +114,7 @@ class ProcessThread extends Model
                 ProcessThreadType::STOCK_REPLENISHMENT,
                 ProcessThreadType::CORE_RETURN,
                 ProcessThreadType::WARRANTY,
+                ProcessThreadType::BUYOUT,
             ])
             ->where(function (Builder $access) use ($user): void {
                 $access

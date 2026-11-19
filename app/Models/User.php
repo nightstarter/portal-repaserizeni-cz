@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\Permission;
 use App\Enums\UserRole;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -39,6 +40,18 @@ class User extends Authenticatable
     public function isAdministrator(): bool
     {
         return $this->active && $this->role->isAdministrator();
+    }
+
+    public function hasPermission(Permission $permission): bool
+    {
+        if (! $this->active || ! $this->organization->active) {
+            return false;
+        }
+
+        return match ($permission) {
+            Permission::BUYBACK_FINAL_PRICE_APPROVE,
+            Permission::BUYBACK_PAYMENT_CONFIRM => $this->role === UserRole::AK_ADMIN,
+        };
     }
 
     public function threadEvents(): HasMany

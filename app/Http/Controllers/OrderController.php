@@ -9,9 +9,13 @@ use App\Application\Orders\CustomRebuildTimeline;
 use App\Application\Orders\StockRebuildPresentation;
 use App\Application\Orders\StockRebuildTimeline;
 use App\Application\Orders\WarrantyPresentation;
+use App\Enums\BuybackPriceType;
+use App\Enums\BuybackState;
 use App\Enums\CoreReturnAction;
 use App\Enums\CustomRebuildAction;
 use App\Enums\CustomRebuildState;
+use App\Enums\DocumentStatus;
+use App\Enums\DocumentType;
 use App\Enums\ItemRole;
 use App\Enums\OrderType;
 use App\Enums\OrganizationCode;
@@ -48,6 +52,28 @@ class OrderController extends Controller
             $order->load(['items' => fn ($items) => $items->whereIn('id', $visibleItemIds)]);
 
             return view('orders.warranty-show', compact('order', 'discussionUnreadCount', 'warrantiesByItem', 'warrantyCreateKeys'));
+        }
+
+        if ($request->user()->organization->code === OrganizationCode::POLAND
+            && $order->order_type === OrderType::BUYOUT) {
+            $buyback = $order->processThreads()->visibleTo($request->user())
+                ->where('type', ProcessThreadType::BUYOUT)
+                ->with([
+                    'item',
+                    'buybackPriceQuotes' => fn ($quotes) => $quotes->where('type', BuybackPriceType::POLAND_OFFER)->orderBy('version'),
+                    'documents' => fn ($documents) => $documents
+                        ->where('type', DocumentType::BUYBACK_INVOICE_TO_POLAND)
+                        ->where('status', DocumentStatus::ACTIVE),
+                ])->firstOrFail();
+            $actualState = BuybackState::from($buyback->state);
+            $state = in_array($actualState, [
+                BuybackState::WAITING_FOR_PL_OFFER, BuybackState::PL_OFFERED,
+                BuybackState::READY_TO_PL, BuybackState::SENT_TO_PL, BuybackState::RECEIVED_PL,
+                BuybackState::INVOICE_TO_PL_REQUIRED, BuybackState::WAITING_FOR_PL_PAYMENT,
+                BuybackState::PAID_BY_PL,
+            ], true) ? $actualState->value : 'BUYBACK_WAITING_AK_DECISION';
+
+            return view('orders.buyback-show', compact('order', 'buyback', 'state', 'discussionUnreadCount'));
         }
 
         if ($order->order_type === OrderType::STOCK_REBUILD) {

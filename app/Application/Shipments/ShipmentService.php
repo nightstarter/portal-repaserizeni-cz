@@ -3,6 +3,10 @@
 namespace App\Application\Shipments;
 
 use App\Application\Audit\AuditLogger;
+use App\Application\Orders\BuybackActionGuard;
+use App\Application\Orders\BuybackCommand;
+use App\Application\Orders\BuybackStateMachine;
+use App\Application\Orders\BuybackWorkflow;
 use App\Application\Orders\CoreReturnActionGuard;
 use App\Application\Orders\CoreReturnCommand;
 use App\Application\Orders\CoreReturnStateMachine;
@@ -17,6 +21,8 @@ use App\Application\Orders\WarrantyActionGuard;
 use App\Application\Orders\WarrantyCommand;
 use App\Application\Orders\WarrantyStateMachine;
 use App\Application\Orders\WarrantyWorkflow;
+use App\Enums\BuybackAction;
+use App\Enums\BuybackState;
 use App\Enums\CoreReturnAction;
 use App\Enums\CoreReturnState;
 use App\Enums\CustomRebuildAction;
@@ -58,6 +64,9 @@ final class ShipmentService
         private readonly WarrantyActionGuard $warrantyGuard,
         private readonly WarrantyStateMachine $warrantyStateMachine,
         private readonly WarrantyWorkflow $warrantyWorkflow,
+        private readonly BuybackActionGuard $buybackGuard,
+        private readonly BuybackStateMachine $buybackStateMachine,
+        private readonly BuybackWorkflow $buybackWorkflow,
         private readonly AuditLogger $auditLogger,
     ) {}
 
@@ -400,6 +409,12 @@ final class ShipmentService
         $order = $thread->order;
 
         if ($shipment->direction === ShipmentDirection::AK_TO_PL) {
+            if ($thread->type === ProcessThreadType::BUYOUT && $thread->item_id === $item->id && $item->role === ItemRole::BUYOUT_ITEM) {
+                $this->buybackGuard->assertMayPerform($actor, BuybackAction::SEND_TO_PL, $thread);
+                $this->buybackStateMachine->nextState(BuybackState::from($thread->state), BuybackAction::SEND_TO_PL);
+
+                return;
+            }
             if ($thread->type === ProcessThreadType::WARRANTY && $thread->item_id === $item->id) {
                 $this->warrantyGuard->assertMayPerform($actor, WarrantyAction::SEND_TO_POLAND, $thread);
                 $this->warrantyStateMachine->nextState(WarrantyState::from($thread->state), WarrantyAction::SEND_TO_POLAND);
@@ -452,6 +467,15 @@ final class ShipmentService
             throw new WorkflowConflictException('Item does not belong to the supplied process thread.');
         }
         $order = $thread->order;
+        if ($shipment->direction === ShipmentDirection::AK_TO_PL
+            && $thread->type === ProcessThreadType::BUYOUT
+            && $thread->item_id === $item->id
+            && $item->role === ItemRole::BUYOUT_ITEM) {
+            $this->buybackGuard->assertMayPerform($actor, BuybackAction::CONFIRM_PL_RECEIPT, $thread);
+            $this->buybackStateMachine->nextState(BuybackState::from($thread->state), BuybackAction::CONFIRM_PL_RECEIPT);
+
+            return;
+        }
         if ($shipment->direction === ShipmentDirection::AK_TO_PL
             && $thread->type === ProcessThreadType::WARRANTY
             && $thread->item_id === $item->id) {
@@ -510,6 +534,13 @@ final class ShipmentService
     {
         $key = $this->threadIdempotencyKey($shipment, $thread, ShipmentAction::SEND_SHIPMENT, $command);
         $data = ['shipment_id' => $shipment->id, 'shipment_public_number' => $shipment->public_number];
+        if ($thread->type === ProcessThreadType::BUYOUT) {
+            $this->buybackWorkflow->execute($thread, new BuybackCommand(
+                BuybackAction::SEND_TO_PL, $command->actor, $key, $data, $thread->lock_version,
+            ));
+
+            return;
+        }
         if ($thread->type === ProcessThreadType::WARRANTY) {
             $action = $shipment->direction === ShipmentDirection::AK_TO_PL
                 ? WarrantyAction::SEND_TO_POLAND
@@ -545,6 +576,17 @@ final class ShipmentService
     {
         $key = $this->threadIdempotencyKey($shipment, $thread, ShipmentAction::CONFIRM_SHIPMENT_DELIVERY, $command);
         $data = ['shipment_id' => $shipment->id, 'shipment_public_number' => $shipment->public_number];
+        if ($thread->type === ProcessThreadType::BUYOUT) {
+            $this->buybackWorkflow->execute($thread, new BuybackCommand(
+                BuybackAction::CONFIRM_PL_RECEIPT, $command->actor, $key, $data, $thread->lock_version,
+            ));
+            $thread->refresh();
+            $this->buybackWorkflow->execute($thread, new BuybackCommand(
+                BuybackAction::REQUIRE_INVOICE_TO_PL, $command->actor, $key.':invoice-required', $data, $thread->lock_version,
+            ));
+
+            return;
+        }
         if ($thread->type === ProcessThreadType::WARRANTY) {
             $action = $shipment->direction === ShipmentDirection::AK_TO_PL
                 ? WarrantyAction::CONFIRM_POLAND_RECEIPT

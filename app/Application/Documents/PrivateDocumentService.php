@@ -4,8 +4,12 @@ namespace App\Application\Documents;
 
 use App\Application\Audit\AuditLogger;
 use App\Application\Finance\FinancialLedgerService;
+use App\Application\Orders\BuybackCommand;
+use App\Application\Orders\BuybackWorkflow;
 use App\Application\Orders\CoreReturnCommand;
 use App\Application\Orders\CoreReturnWorkflow;
+use App\Enums\BuybackAction;
+use App\Enums\BuybackState;
 use App\Enums\CoreReturnAction;
 use App\Enums\CoreReturnState;
 use App\Enums\DocumentStatus;
@@ -34,7 +38,73 @@ final class PrivateDocumentService
         private readonly FinancialLedgerService $ledger,
         private readonly AuditLogger $auditLogger,
         private readonly CoreReturnWorkflow $coreWorkflow,
+        private readonly BuybackWorkflow $buybackWorkflow,
     ) {}
+
+    public function uploadBuybackInvoice(Order $order, ProcessThread $thread, DocumentUploadCommand $command, ?Document $replaces = null): Document
+    {
+        if ($thread->type !== ProcessThreadType::BUYOUT
+            || $command->actor->organization->code !== OrganizationCode::AUTOKLUBY
+            || ! in_array($command->actor->role, [UserRole::AK_ADMIN, UserRole::AK_OPERATOR], true)) {
+            throw new AuthorizationException;
+        }
+        $validated = $this->validateUpload($command);
+        $reason = trim((string) ($command->data['reason'] ?? ''));
+        if ($replaces !== null && $reason === '') {
+            throw ValidationException::withMessages(['reason' => 'An invoice replacement requires a reason.']);
+        }
+        $payload = $validated + ['reason' => $reason];
+        $hash = $this->requestHash('BUYBACK_INVOICE_TO_POLAND', $command, $payload);
+        if (($existing = $this->existing($command->idempotencyKey, $hash)) !== null) {
+            return $existing;
+        }
+        [$disk, $path] = $this->store($command, $validated['extension']);
+        try {
+            return DB::transaction(function () use ($order, $thread, $command, $replaces, $payload, $hash, $disk, $path): Document {
+                $lockedOrder = Order::query()->lockForUpdate()->findOrFail($order->id);
+                $locked = ProcessThread::query()->whereKey($thread->id)->where('order_id', $lockedOrder->id)
+                    ->where('type', ProcessThreadType::BUYOUT)->lockForUpdate()->sole();
+                $this->assertVersion($locked, $command);
+                $activeKey = 'buyback-invoice:'.$locked->id;
+                $active = Document::query()->where('active_key', $activeKey)->lockForUpdate()->first();
+                if ($replaces === null && ($active !== null || BuybackState::from($locked->state) !== BuybackState::INVOICE_TO_PL_REQUIRED)) {
+                    throw new WorkflowConflictException('The buyback is not waiting for its first invoice to Poland.');
+                }
+                if ($replaces !== null && ($active === null || $active->id !== $replaces->id
+                    || BuybackState::from($locked->state) !== BuybackState::WAITING_FOR_PL_PAYMENT)) {
+                    throw new WorkflowConflictException('Only the active unpaid buyback invoice can be replaced.');
+                }
+                if ($replaces !== null) {
+                    $replaces->update([
+                        'status' => DocumentStatus::INVALIDATED, 'active_key' => null,
+                        'invalidation_reason' => $payload['reason'], 'invalidated_at' => now(),
+                        'invalidated_by' => $command->actor->id,
+                    ]);
+                }
+                $document = $this->createDocument($lockedOrder, $locked, DocumentType::BUYBACK_INVOICE_TO_POLAND,
+                    $command, $payload, $disk, $path, $activeKey, $replaces);
+                if ($replaces === null) {
+                    $event = $this->buybackWorkflow->execute($locked, new BuybackCommand(
+                        BuybackAction::RECORD_INVOICE_TO_PL, $command->actor, 'buyback-doc:'.$command->idempotencyKey,
+                        ['document_id' => $document->id], $locked->lock_version,
+                    ));
+                    $this->auditLogger->record('BUYBACK_INVOICE_UPLOADED', $document, [], [
+                        'thread_event_id' => $event->id, 'checksum' => $document->checksum_sha256,
+                    ], null, $command->actor);
+                } else {
+                    [$event] = $this->recordBusinessEvent($lockedOrder, $locked, $document, $command, $hash,
+                        'BUYBACK_INVOICE_REPLACED', $payload['reason'], false);
+                }
+                $this->recordDocumentEvent($document, $command, $hash, $replaces ? 'REPLACED' : 'UPLOADED',
+                    $payload['reason'] ?: null, ['thread_event_id' => $event->id]);
+
+                return $document;
+            }, 3);
+        } catch (\Throwable $exception) {
+            Storage::disk($disk)->delete($path);
+            throw $exception;
+        }
+    }
 
     public function uploadInvoice(Order $order, ProcessThread $businessThread, DocumentUploadCommand $command, ?Document $replaces = null): Document
     {

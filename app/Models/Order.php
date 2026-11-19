@@ -19,7 +19,7 @@ class Order extends Model
     use HasFactory;
 
     protected $fillable = [
-        'order_no', 'source', 'source_order_id', 'order_type', 'technical_type',
+        'order_no', 'source', 'source_order_id', 'creation_idempotency_key', 'creation_request_hash', 'order_type', 'technical_type',
         'routing', 'product_code', 'product_name_snapshot', 'vin', 'vehicle',
         'customer_handover', 'product_verification_status', 'business_snapshot',
         'imported_at', 'closed_at',
