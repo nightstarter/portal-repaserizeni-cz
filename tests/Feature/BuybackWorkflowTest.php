@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Application\Documents\DocumentUploadCommand;
 use App\Application\Documents\PrivateDocumentService;
 use App\Application\Messages\DiscussionNotificationDispatcher;
+use App\Application\Messages\DiscussionService;
+use App\Application\Messages\PostMessageCommand;
 use App\Application\Orders\BuybackCommand;
 use App\Application\Orders\BuybackOrderService;
 use App\Application\Orders\BuybackWorkflow;
@@ -24,6 +26,7 @@ use App\Enums\ShipmentDirection;
 use App\Enums\UserRole;
 use App\Exceptions\WorkflowConflictException;
 use App\Mail\BuybackCustomerOfferMail;
+use App\Mail\DiscussionMessageNotificationMail;
 use App\Models\BuybackPriceQuote;
 use App\Models\Order;
 use App\Models\Organization;
@@ -421,6 +424,42 @@ class BuybackWorkflowTest extends TestCase
         self::assertSame(BuybackState::CUSTOMER_OFFER_READY->value, $thread->fresh()->state);
         self::assertSame(0, $thread->events()->where('action', BuybackAction::DELIVER_CUSTOMER_OFFER->value)->count());
 
+    }
+
+    public function test_notification_type_flags_are_independent(): void
+    {
+        Mail::fake();
+        $buyback = $this->toWaitingFinal('independent-flags');
+        $this->act($buyback, BuybackAction::APPROVE_FINAL_PRICE, $this->admin, 'flags-final', ['amount_minor' => 7000, 'currency' => 'CZK']);
+        $this->act($buyback, BuybackAction::CONFIRM_CUSTOMER_OFFER, $this->admin, 'flags-confirm');
+        $this->act($buyback, BuybackAction::QUEUE_CUSTOMER_OFFER, $this->admin, 'flags-queue');
+        $buybackEvent = OutboxEvent::query()->where('event_type', 'BUYBACK_CUSTOMER_OFFER_EMAIL')->sole();
+
+        $discussionOrder = Order::factory()->create(['order_no' => 'FLAGS-DISCUSSION', 'source_order_id' => 'FLAGS-DISCUSSION']);
+        ProcessThread::factory()->create([
+            'order_id' => $discussionOrder->id,
+            'type' => ProcessThreadType::CUSTOM_REBUILD,
+            'state' => 'SENT_TO_PL',
+            'responsible_organization_id' => $this->pl->id,
+        ]);
+        app(DiscussionService::class)->post($discussionOrder, new PostMessageCommand(
+            $this->operator, 'Independent notification type.', 'flags-discussion',
+        ));
+        $discussionEvent = OutboxEvent::query()->where('event_type', 'discussion.message-posted.v1')->sole();
+
+        config(['discussion_notifications.enabled' => true, 'buyback.customer_email_enabled' => false]);
+        self::assertSame(1, app(DiscussionNotificationDispatcher::class)->dispatch(50)['sent']);
+        self::assertSame(OutboxEvent::SENT, $discussionEvent->fresh()->status);
+        self::assertSame(OutboxEvent::PENDING, $buybackEvent->fresh()->status);
+        self::assertSame(BuybackState::CUSTOMER_OFFER_READY->value, $buyback->fresh()->state);
+        Mail::assertSent(DiscussionMessageNotificationMail::class, 1);
+        Mail::assertNotSent(BuybackCustomerOfferMail::class);
+
+        config(['discussion_notifications.enabled' => false, 'buyback.customer_email_enabled' => true]);
+        self::assertSame(1, app(DiscussionNotificationDispatcher::class)->dispatch(50)['sent']);
+        self::assertSame(OutboxEvent::SENT, $buybackEvent->fresh()->status);
+        self::assertSame(BuybackState::OFFER_SENT->value, $buyback->fresh()->state);
+        Mail::assertSent(BuybackCustomerOfferMail::class, 1);
     }
 
     private function createOrder(string $key): Order
