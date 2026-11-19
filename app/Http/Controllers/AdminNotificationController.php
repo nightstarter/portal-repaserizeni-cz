@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Application\Messages\DiscussionNotificationAdminService;
+use App\Domain\Buybacks\BuybackCustomerOfferQueued;
 use App\Domain\Messages\MessagePosted;
 use App\Models\OutboxEvent;
 use Illuminate\Http\RedirectResponse;
@@ -16,7 +17,7 @@ class AdminNotificationController extends Controller
     {
         Gate::authorize('manage-notifications');
         $base = OutboxEvent::query()
-            ->where('event_type', MessagePosted::TYPE);
+            ->whereIn('event_type', [MessagePosted::TYPE, BuybackCustomerOfferQueued::TYPE]);
         $counts = collect([
             OutboxEvent::PENDING,
             OutboxEvent::PROCESSING,
@@ -24,7 +25,7 @@ class AdminNotificationController extends Controller
             OutboxEvent::FAILED,
         ])->mapWithKeys(fn (string $status): array => [$status => (clone $base)->where('status', $status)->count()]);
         $events = (clone $base)
-            ->with(['recipient:id,email', 'message.order:id,order_no'])
+            ->with(['recipient:id,email', 'message.order:id,order_no', 'buybackThread.order:id,order_no'])
             ->orderByDesc('id')
             ->paginate(50);
 
@@ -32,7 +33,10 @@ class AdminNotificationController extends Controller
             'counts' => $counts,
             'events' => $events,
             'lastSentAt' => (clone $base)->where('status', OutboxEvent::SENT)->max('sent_at'),
-            'deliveryEnabled' => (bool) config('discussion_notifications.enabled'),
+            'deliveryEnabled' => [
+                MessagePosted::TYPE => (bool) config('discussion_notifications.enabled'),
+                BuybackCustomerOfferQueued::TYPE => (bool) config('buyback.customer_email_enabled'),
+            ],
         ]);
     }
 

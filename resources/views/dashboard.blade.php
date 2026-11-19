@@ -11,6 +11,9 @@
 <div class="kpis warranty-kpis">
 @foreach($warrantyKpis as $code => $value)<div class="card kpi"><span>{{ __('app.warranty_kpis.'.$code) }}</span><strong>{{ $value }}</strong></div>@endforeach
 </div>
+<div class="kpis buyback-kpis">
+@foreach($buybackKpis as $code => $value)<div class="card kpi"><span>{{ __('app.buyback_kpis.'.$code) }}</span><strong>{{ $value }}</strong></div>@endforeach
+</div>
 <div class="kpis">
 @foreach($returnKpis as $code => $value)<div class="card kpi"><span>{{ __('app.return_kpis.'.$code) }}</span><strong>{{ $value }}</strong></div>@endforeach
 </div>

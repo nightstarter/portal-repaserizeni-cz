@@ -4,6 +4,7 @@ use App\Http\Controllers\AdminNotificationController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\BuybackController;
 use App\Http\Controllers\BuybackInvoiceController;
+use App\Http\Controllers\BuybackQueueController;
 use App\Http\Controllers\CoreReturnActionController;
 use App\Http\Controllers\CustomRebuildActionController;
 use App\Http\Controllers\DashboardController;
@@ -39,6 +40,8 @@ Route::middleware(['auth', 'active', 'password.changed'])->group(function (): vo
     Route::get('/finance', FinanceController::class)->name('finance.index');
     Route::get('/discussions', DiscussionQueueController::class)->name('discussions.index');
     Route::get('/warranties', WarrantyQueueController::class)->name('warranties.index');
+    Route::get('/buybacks', BuybackQueueController::class)->name('buybacks.index');
+    Route::get('/buybacks/create', [BuybackController::class, 'create'])->name('buybacks.create');
     Route::post('/buybacks', [BuybackController::class, 'store'])->name('buybacks.store');
     Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
     Route::get('/orders/{order}/discussion', [DiscussionController::class, 'index'])->name('orders.discussion.index');

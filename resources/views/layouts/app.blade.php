@@ -69,6 +69,7 @@
         .warranty-actions form { max-width:32rem } .warranty-note { white-space:pre-wrap; overflow-wrap:anywhere }
         .warranty-create summary { cursor:pointer; color:var(--blue); font-weight:750; padding:.6rem 0; min-height:2.75rem }
         .warranty-create textarea { min-height:7rem } .warranty-timeline h5 { margin:.1rem 0 .3rem; font-size:1rem }
+        .buyback-note { white-space:pre-wrap; overflow-wrap:anywhere } .buyback-action form,.buyback-prices { min-width:0 }
         @media (max-width:700px) {
             main { margin:1rem auto; padding:0 .7rem } .card { padding:1rem }
             table.responsive thead { display:none } table.responsive tr { display:block; margin-bottom:1rem; border:1px solid #ddd; border-radius:.4rem; padding:.35rem }
@@ -80,6 +81,8 @@
         @media (max-width:390px) {
             .warranty-cycle,.warranty-actions,.warranty-item { min-width:0; max-width:100% }
             .warranty-cycle a,.warranty-cycle button,.warranty-cycle textarea { max-width:100%; overflow-wrap:anywhere }
+            .buyback-hero,.buyback-now,.buyback-prices,.buyback-action { min-width:0; max-width:100%; overflow-wrap:anywhere }
+            .buyback-action button,.buyback-action .button,.buyback-now .button { width:100%; min-height:3.25rem }
         }
     </style>
 </head>
@@ -91,6 +94,7 @@
     <a class="{{ request()->routeIs('shipments.*') ? 'active' : '' }}" href="{{ route('shipments.index') }}" @if(request()->routeIs('shipments.*')) aria-current="page" @endif>{{ __('app.shipments') }}</a>
     <a class="{{ request()->routeIs('returns.*') ? 'active' : '' }}" href="{{ route('returns.index') }}" @if(request()->routeIs('returns.*')) aria-current="page" @endif>{{ __('app.returns') }}</a>
     <a class="{{ request()->routeIs('warranties.*') ? 'active' : '' }}" href="{{ route('warranties.index') }}" @if(request()->routeIs('warranties.*')) aria-current="page" @endif>{{ __('app.warranties') }}</a>
+    <a class="{{ request()->routeIs('buybacks.*', 'orders.buyback.*') ? 'active' : '' }}" href="{{ route('buybacks.index') }}" @if(request()->routeIs('buybacks.*', 'orders.buyback.*')) aria-current="page" @endif>{{ __('app.buybacks') }}</a>
     <a class="{{ request()->routeIs('finance.*') ? 'active' : '' }}" href="{{ route('finance.index') }}" @if(request()->routeIs('finance.*')) aria-current="page" @endif>{{ __('app.documents_finance') }}</a>
     <a class="{{ request()->routeIs('discussions.*', 'orders.discussion.*') ? 'active' : '' }}" href="{{ route('discussions.index') }}" @if(request()->routeIs('discussions.*', 'orders.discussion.*')) aria-current="page" @endif>{{ __('app.discussion') }} @if($globalUnreadMessages > 0)<span class="unread-badge" aria-label="{{ trans_choice('app.unread_messages', $globalUnreadMessages, ['count' => $globalUnreadMessages]) }}">{{ $globalUnreadMessages }}</span>@endif</a>
     @can('manage-users')<a class="{{ request()->routeIs('users.*') ? 'active' : '' }}" href="{{ route('users.index') }}" @if(request()->routeIs('users.*')) aria-current="page" @endif>{{ __('app.users') }}</a>@endcan

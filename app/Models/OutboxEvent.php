@@ -40,4 +40,9 @@ class OutboxEvent extends Model
     {
         return $this->belongsTo(Message::class, 'aggregate_id');
     }
+
+    public function buybackThread(): BelongsTo
+    {
+        return $this->belongsTo(ProcessThread::class, 'aggregate_id');
+    }
 }

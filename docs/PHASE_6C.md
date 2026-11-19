@@ -4,7 +4,7 @@
 
 Výkup vzniká výhradně přes `BuybackOrderService` jako `OrderSource::SYSTEM_BUYOUT`, `OrderType::BUYOUT`, s `source_order_id = NULL`. Ve stejné transakci vznikne oddělený `order_customers`, fyzický `BUYOUT_ITEM`, větev `BUYOUT`, první `thread_event` a audit.
 
-Číslo má formát `VYK-RRRR-NNNNNN`. Tabulka `buyback_order_sequences` drží roční čítač. Řádek roku se zamyká `FOR UPDATE`, navýší se ve stejné transakci a `orders.order_no` zůstává unikátní databázovým omezením. `orders.creation_idempotency_key` a hash požadavku zajistí bezpečný replay a odmítnou použití stejného klíče pro jiný obsah.
+Číslo má formát `VYK-RRRR-NNNNN`. Tabulka `buyback_order_sequences` drží roční čítač. Řádek roku se zamyká `FOR UPDATE`, navýší se ve stejné transakci a `orders.order_no` zůstává unikátní databázovým omezením. `orders.creation_idempotency_key` a hash požadavku zajistí bezpečný replay a odmítnou použití stejného klíče pro jiný obsah.
 
 ## Ceny a oprávnění
 

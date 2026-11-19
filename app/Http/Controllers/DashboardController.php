@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Application\Orders\CustomRebuildPresentation;
 use App\Application\Orders\StockRebuildPresentation;
+use App\Enums\BuybackState;
 use App\Enums\DocumentStatus;
 use App\Enums\DocumentType;
 use App\Enums\OrderType;
@@ -88,6 +89,14 @@ class DashboardController extends Controller
             ->selectRaw("COUNT(CASE WHEN completed_at IS NULL AND responsible_party = 'POLAND' THEN 1 END) AS poland_count")
             ->selectRaw('COUNT(CASE WHEN state IN (?, ?) THEN 1 END) AS transport_count', [WarrantyState::SENT_TO_PL->value, WarrantyState::SENT_TO_AK->value])
             ->first();
+        $buybackKpis = ProcessThread::query()->visibleTo($user)->where('type', ProcessThreadType::BUYOUT)
+            ->selectRaw('COUNT(CASE WHEN completed_at IS NULL THEN 1 END) AS active_count')
+            ->selectRaw('COUNT(CASE WHEN state IN (?, ?) THEN 1 END) AS poland_count', [BuybackState::WAITING_FOR_PL_OFFER->value, BuybackState::PL_OFFERED->value])
+            ->selectRaw('COUNT(CASE WHEN state = ? THEN 1 END) AS final_price_count', [BuybackState::WAITING_FOR_FINAL_PRICE->value])
+            ->selectRaw('COUNT(CASE WHEN state IN (?, ?, ?) THEN 1 END) AS customer_count', [BuybackState::FINAL_PRICE_APPROVED->value, BuybackState::CUSTOMER_OFFER_READY->value, BuybackState::OFFER_SENT->value])
+            ->selectRaw('COUNT(CASE WHEN state IN (?, ?, ?) THEN 1 END) AS item_count', [BuybackState::CUSTOMER_ACCEPTED->value, BuybackState::ITEM_RECEIVED_AK->value, BuybackState::ITEM_CHECKED_AK->value])
+            ->selectRaw('COUNT(CASE WHEN state IN (?, ?) THEN 1 END) AS finance_count', [BuybackState::INVOICE_TO_PL_REQUIRED->value, BuybackState::WAITING_FOR_PL_PAYMENT->value])
+            ->first();
 
         return view('dashboard', [
             'rows' => $rows,
@@ -119,6 +128,14 @@ class DashboardController extends Controller
                 'autokluby' => (int) $warrantyKpis->autokluby_count,
                 'poland' => (int) $warrantyKpis->poland_count,
                 'transport' => (int) $warrantyKpis->transport_count,
+            ],
+            'buybackKpis' => [
+                'active' => (int) $buybackKpis->active_count,
+                'poland' => (int) $buybackKpis->poland_count,
+                'final_price' => (int) $buybackKpis->final_price_count,
+                'customer' => (int) $buybackKpis->customer_count,
+                'item' => (int) $buybackKpis->item_count,
+                'finance' => (int) $buybackKpis->finance_count,
             ],
         ]);
     }

@@ -9,7 +9,7 @@ class DispatchDiscussionNotifications extends Command
 {
     protected $signature = 'notifications:dispatch {--limit= : Maximum number of deliveries to claim}';
 
-    protected $description = 'Dispatch due discussion e-mail notifications from the transactional outbox';
+    protected $description = 'Dispatch due discussion and buyback e-mail notifications from the transactional outbox';
 
     public function handle(DiscussionNotificationDispatcher $dispatcher): int
     {

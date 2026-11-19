@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Application\Documents\DocumentUploadCommand;
 use App\Application\Documents\PrivateDocumentService;
+use App\Application\Messages\DiscussionNotificationDispatcher;
 use App\Application\Orders\BuybackCommand;
 use App\Application\Orders\BuybackOrderService;
 use App\Application\Orders\BuybackWorkflow;
@@ -22,6 +23,7 @@ use App\Enums\ShipmentCarrier;
 use App\Enums\ShipmentDirection;
 use App\Enums\UserRole;
 use App\Exceptions\WorkflowConflictException;
+use App\Mail\BuybackCustomerOfferMail;
 use App\Models\BuybackPriceQuote;
 use App\Models\Order;
 use App\Models\Organization;
@@ -90,7 +92,7 @@ class BuybackWorkflowTest extends TestCase
 
         self::assertSame($first->id, $replay->id);
         self::assertNotSame($first->order_no, $second->order_no);
-        self::assertMatchesRegularExpression('/^VYK-\d{4}-\d{6}$/', $first->order_no);
+        self::assertMatchesRegularExpression('/^VYK-\d{4}-\d{5}$/', $first->order_no);
         self::assertSame(OrderSource::SYSTEM_BUYOUT, $first->source);
         self::assertSame(OrderType::BUYOUT, $first->order_type);
         self::assertNull($first->source_order_id);
@@ -102,7 +104,11 @@ class BuybackWorkflowTest extends TestCase
 
     public function test_command_endpoint_creates_only_for_autokluby_and_replays_safely(): void
     {
-        $payload = $this->createData() + ['idempotency_key' => 'http-create'];
+        $payload = $this->createData() + [
+            'idempotency_key' => 'http-create',
+            'internal_offer_amount' => '1000,00',
+            'internal_offer_currency' => 'CZK',
+        ];
         $first = $this->actingAs($this->operator)->postJson(route('buybacks.store'), $payload)->assertCreated();
         $second = $this->actingAs($this->operator)->postJson(route('buybacks.store'), $payload)->assertCreated();
         self::assertSame($first->json('order_no'), $second->json('order_no'));
@@ -274,6 +280,117 @@ class BuybackWorkflowTest extends TestCase
             ProcessThreadType::CORE_RETURN, ProcessThreadType::STOCK_REQUEST, ProcessThreadType::STOCK_REPLENISHMENT,
         ])->count());
         self::assertSame(0, $thread->order->messages()->count());
+    }
+
+    public function test_buyback_ui_menu_empty_create_exact_money_roles_locales_and_xss_protection(): void
+    {
+        $this->actingAs($this->operator)->get(route('buybacks.index'))->assertOk()
+            ->assertSee(__('app.buyback_empty'))
+            ->assertSee('href="'.route('buybacks.index').'"', false)
+            ->assertSee('aria-current="page"', false);
+        $this->actingAs($this->operator)->get(route('buybacks.create'))->assertOk()->assertSee('data-submit-once', false);
+        $this->actingAs($this->poland)->get(route('buybacks.create'))->assertForbidden();
+        $this->actingAs($this->readOnly)->get(route('buybacks.create'))->assertForbidden();
+
+        $response = $this->actingAs($this->operator)->post(route('buybacks.store'), [
+            'idempotency_key' => 'ui-create', 'customer_name' => 'Citlivý zákazník',
+            'customer_email' => 'customer-ui@example.test', 'customer_phone' => '+420 123 456',
+            'product_code' => 'UI-001', 'product_name' => '<script>alert(1)</script>',
+            'internal_note' => '<img src=x onerror=alert(2)>',
+            'internal_offer_amount' => '1 234,56', 'internal_offer_currency' => 'czk',
+        ]);
+        $order = Order::query()->where('creation_idempotency_key', 'ui-create')->sole();
+        $response->assertRedirect(route('orders.show', $order));
+        self::assertMatchesRegularExpression('/^VYK-\d{4}-\d{5}$/', $order->order_no);
+        self::assertSame(123456, $order->processThreads()->sole()->buybackPriceQuotes()->sole()->amount_minor);
+        $html = $this->actingAs($this->operator)->get(route('orders.show', $order))->assertOk()->getContent();
+        self::assertStringContainsString('&lt;img src=x onerror=alert(2)&gt;', $html);
+        self::assertStringNotContainsString('<img src=x onerror=alert(2)>', $html);
+
+        $thread = $this->thread($order);
+        $this->act($thread, BuybackAction::REQUEST_PL_OFFER, $this->operator, 'ui-visible-pl');
+        $this->poland->update(['preferred_locale' => 'pl']);
+        $plHtml = $this->actingAs($this->poland)->get(route('buybacks.index'))->assertOk()
+            ->assertSee('Odkup')->getContent();
+        foreach (['Citlivý zákazník', 'customer-ui@example.test', '+420 123 456', 'Wewnętrzna oferta AUTOKLUBY', 'Oferta dla klienta'] as $forbidden) {
+            self::assertStringNotContainsString($forbidden, $plHtml);
+        }
+        $this->actingAs($this->poland)->get(route('orders.show', $order))->assertOk()
+            ->assertDontSee('customer-ui@example.test')->assertDontSee('1234,56')->assertDontSee('70 %');
+    }
+
+    public function test_customer_offer_worker_uses_existing_outbox_flag_mail_and_masked_admin(): void
+    {
+        Mail::fake();
+        $thread = $this->toWaitingFinal('worker-ui');
+        $this->act($thread, BuybackAction::APPROVE_FINAL_PRICE, $this->admin, 'worker-final', ['amount_minor' => 7001, 'currency' => 'CZK']);
+        $this->act($thread, BuybackAction::CONFIRM_CUSTOMER_OFFER, $this->admin, 'worker-confirm');
+        $this->act($thread, BuybackAction::QUEUE_CUSTOMER_OFFER, $this->admin, 'worker-queue');
+        $event = OutboxEvent::query()->where('event_type', 'BUYBACK_CUSTOMER_OFFER_EMAIL')->sole();
+        $before = $event->toArray();
+
+        config(['discussion_notifications.enabled' => false, 'buyback.customer_email_enabled' => false]);
+        self::assertTrue(app(DiscussionNotificationDispatcher::class)->dispatch(50)['disabled']);
+        self::assertSame($before, $event->fresh()->toArray());
+        Mail::assertNothingSent();
+
+        config(['buyback.customer_email_enabled' => true]);
+        $result = app(DiscussionNotificationDispatcher::class)->dispatch(50);
+        self::assertSame(1, $result['sent']);
+        Mail::assertSent(BuybackCustomerOfferMail::class, function (BuybackCustomerOfferMail $mail) use ($thread): bool {
+            $html = $mail->render();
+            self::assertTrue($mail->hasTo('secret@example.test'));
+            self::assertStringContainsString($thread->order->order_no, $html);
+            self::assertStringContainsString('70,01 CZK', $html);
+            foreach (['Customer Secret', '100,00', 'TAJ', 'token', 'http://', 'https://'] as $forbidden) {
+                self::assertStringNotContainsString($forbidden, $html);
+            }
+
+            return true;
+        });
+        self::assertSame(OutboxEvent::SENT, $event->fresh()->status);
+        $this->assertDatabaseHas('audit_log', ['action' => 'BUYBACK_CUSTOMER_NOTIFICATION_SENT', 'subject_id' => $thread->id]);
+
+        $event->update(['status' => OutboxEvent::FAILED, 'failed_at' => now(), 'last_error' => 'Safe failure']);
+        $adminHtml = $this->actingAs($this->admin)->get(route('admin.notifications.index'))->assertOk()->getContent();
+        self::assertStringContainsString('s***@e***', $adminHtml);
+        self::assertStringNotContainsString('secret@example.test', $adminHtml);
+        $this->actingAs($this->operator)->post(route('admin.notifications.retry', $event))->assertForbidden();
+        config(['buyback.customer_email_enabled' => false]);
+        $this->actingAs($this->admin)->post(route('admin.notifications.retry', $event))->assertRedirect();
+        self::assertSame(OutboxEvent::FAILED, $event->fresh()->status);
+        config(['buyback.customer_email_enabled' => true]);
+        $this->actingAs($this->admin)->post(route('admin.notifications.retry', $event))->assertRedirect();
+        self::assertSame(OutboxEvent::PENDING, $event->fresh()->status);
+        $this->assertDatabaseHas('audit_log', ['action' => 'BUYBACK_CUSTOMER_NOTIFICATION_MANUAL_RETRY', 'subject_id' => $thread->id]);
+    }
+
+    public function test_buyback_worker_does_not_steal_fresh_lock_and_recovers_with_sanitized_retry(): void
+    {
+        $thread = $this->toWaitingFinal('worker-lock');
+        $this->act($thread, BuybackAction::APPROVE_FINAL_PRICE, $this->admin, 'lock-final', ['amount_minor' => 7000, 'currency' => 'CZK']);
+        $this->act($thread, BuybackAction::CONFIRM_CUSTOMER_OFFER, $this->admin, 'lock-confirm');
+        $this->act($thread, BuybackAction::QUEUE_CUSTOMER_OFFER, $this->admin, 'lock-queue');
+        $event = OutboxEvent::query()->where('event_type', 'BUYBACK_CUSTOMER_OFFER_EMAIL')->sole();
+        $event->update([
+            'status' => OutboxEvent::PROCESSING, 'locked_at' => now(),
+            'lock_token' => '11111111-1111-4111-8111-111111111111',
+        ]);
+        config(['discussion_notifications.enabled' => false, 'buyback.customer_email_enabled' => true]);
+        Mail::fake();
+        self::assertSame(0, app(DiscussionNotificationDispatcher::class)->dispatch(1)['claimed']);
+        Mail::assertNothingSent();
+
+        $event->update(['locked_at' => now()->subMinutes(11)]);
+        Mail::shouldReceive('to')->once()->andThrow(new \RuntimeException('smtp://user:SECRET@host customer@example.test'));
+        self::assertSame(1, app(DiscussionNotificationDispatcher::class)->dispatch(1)['retried']);
+        $event->refresh();
+        self::assertSame(OutboxEvent::PENDING, $event->status);
+        self::assertSame(1, $event->attempts);
+        self::assertStringNotContainsString('SECRET', $event->last_error);
+        self::assertStringNotContainsString('customer@example.test', $event->last_error);
+        self::assertSame(BuybackState::OFFER_SENT->value, $thread->fresh()->state);
+
     }
 
     private function createOrder(string $key): Order

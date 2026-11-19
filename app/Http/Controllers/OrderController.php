@@ -3,19 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Application\Messages\DiscussionService;
+use App\Application\Orders\BuybackPresentation;
 use App\Application\Orders\CoreReturnPresentation;
 use App\Application\Orders\CustomRebuildPresentation;
 use App\Application\Orders\CustomRebuildTimeline;
 use App\Application\Orders\StockRebuildPresentation;
 use App\Application\Orders\StockRebuildTimeline;
 use App\Application\Orders\WarrantyPresentation;
-use App\Enums\BuybackPriceType;
-use App\Enums\BuybackState;
+use App\Enums\BuybackAction;
 use App\Enums\CoreReturnAction;
 use App\Enums\CustomRebuildAction;
 use App\Enums\CustomRebuildState;
-use App\Enums\DocumentStatus;
-use App\Enums\DocumentType;
 use App\Enums\ItemRole;
 use App\Enums\OrderType;
 use App\Enums\OrganizationCode;
@@ -38,6 +36,7 @@ class OrderController extends Controller
         CoreReturnPresentation $corePresentation,
         DiscussionService $discussion,
         WarrantyPresentation $warrantyPresentation,
+        BuybackPresentation $buybackPresentation,
     ): View {
         $this->authorize('view', $order);
         $discussionUnreadCount = $discussion->unreadCount($order, $request->user());
@@ -45,6 +44,20 @@ class OrderController extends Controller
         $warrantyCreateKeys = $order->items()->pluck('id')->mapWithKeys(
             fn (int $id): array => [$id => (string) Str::uuid()],
         )->all();
+        if ($order->order_type === OrderType::BUYOUT) {
+            $thread = $order->processThreads()->visibleTo($request->user())
+                ->where('type', ProcessThreadType::BUYOUT)
+                ->with(['item', 'responsibleOrganization', 'events.actorUser', 'events.actorOrganization',
+                    'buybackPriceQuotes.actor', 'shipmentItems.shipment', 'documents', 'financeEntries'])
+                ->firstOrFail();
+            if ($request->user()->organization->code === OrganizationCode::AUTOKLUBY) {
+                $order->load('customer');
+            }
+            $buyback = $buybackPresentation->for($thread, $request->user());
+            $actionFormKeys = collect(BuybackAction::cases())->mapWithKeys(fn ($action) => [$action->value => (string) Str::uuid()])->all();
+
+            return view('buybacks.show', compact('order', 'buyback', 'actionFormKeys', 'discussionUnreadCount'));
+        }
         if ($request->user()->organization->code === OrganizationCode::POLAND
             && $warrantiesByItem->isNotEmpty()
             && ! $order->processThreads()->visibleTo($request->user())->where('type', '!=', ProcessThreadType::WARRANTY)->exists()) {
@@ -52,28 +65,6 @@ class OrderController extends Controller
             $order->load(['items' => fn ($items) => $items->whereIn('id', $visibleItemIds)]);
 
             return view('orders.warranty-show', compact('order', 'discussionUnreadCount', 'warrantiesByItem', 'warrantyCreateKeys'));
-        }
-
-        if ($request->user()->organization->code === OrganizationCode::POLAND
-            && $order->order_type === OrderType::BUYOUT) {
-            $buyback = $order->processThreads()->visibleTo($request->user())
-                ->where('type', ProcessThreadType::BUYOUT)
-                ->with([
-                    'item',
-                    'buybackPriceQuotes' => fn ($quotes) => $quotes->where('type', BuybackPriceType::POLAND_OFFER)->orderBy('version'),
-                    'documents' => fn ($documents) => $documents
-                        ->where('type', DocumentType::BUYBACK_INVOICE_TO_POLAND)
-                        ->where('status', DocumentStatus::ACTIVE),
-                ])->firstOrFail();
-            $actualState = BuybackState::from($buyback->state);
-            $state = in_array($actualState, [
-                BuybackState::WAITING_FOR_PL_OFFER, BuybackState::PL_OFFERED,
-                BuybackState::READY_TO_PL, BuybackState::SENT_TO_PL, BuybackState::RECEIVED_PL,
-                BuybackState::INVOICE_TO_PL_REQUIRED, BuybackState::WAITING_FOR_PL_PAYMENT,
-                BuybackState::PAID_BY_PL,
-            ], true) ? $actualState->value : 'BUYBACK_WAITING_AK_DECISION';
-
-            return view('orders.buyback-show', compact('order', 'buyback', 'state', 'discussionUnreadCount'));
         }
 
         if ($order->order_type === OrderType::STOCK_REBUILD) {

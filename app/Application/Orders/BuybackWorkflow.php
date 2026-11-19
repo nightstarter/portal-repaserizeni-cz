@@ -4,6 +4,7 @@ namespace App\Application\Orders;
 
 use App\Application\Audit\AuditLogger;
 use App\Application\Finance\FinancialLedgerService;
+use App\Domain\Buybacks\BuybackCustomerOfferQueued;
 use App\Enums\BuybackAction;
 use App\Enums\BuybackPriceType;
 use App\Enums\BuybackState;
@@ -197,6 +198,10 @@ final class BuybackWorkflow
             && ! $thread->buybackPriceQuotes()->where('type', BuybackPriceType::FINAL_CUSTOMER)->exists()) {
             throw new WorkflowConflictException('A manually approved final customer price is required.');
         }
+        if ($command->action === BuybackAction::QUEUE_CUSTOMER_OFFER
+            && ! filter_var($thread->order()->with('customer')->firstOrFail()->customer?->email, FILTER_VALIDATE_EMAIL)) {
+            throw ValidationException::withMessages(['customer_email' => 'A valid customer e-mail is required.']);
+        }
         if ($command->action === BuybackAction::MARK_PAID_BY_PL && empty($command->data['document_id'])) {
             throw ValidationException::withMessages(['document_id' => 'The active invoice to Poland is required.']);
         }
@@ -217,7 +222,7 @@ final class BuybackWorkflow
         $final = $thread->buybackPriceQuotes()->where('type', BuybackPriceType::FINAL_CUSTOMER)->latest('version')->firstOrFail();
         OutboxEvent::query()->firstOrCreate(['deduplication_key' => 'buyback-customer-offer:'.$thread->id], [
             'event_uuid' => (string) Str::uuid(),
-            'event_type' => 'BUYBACK_CUSTOMER_OFFER_EMAIL',
+            'event_type' => BuybackCustomerOfferQueued::TYPE,
             'aggregate_type' => ProcessThread::class,
             'aggregate_id' => $thread->id,
             'payload' => [

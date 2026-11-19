@@ -3,9 +3,17 @@
 namespace App\Application\Messages;
 
 use App\Application\Audit\AuditLogger;
+use App\Application\Finance\MinorMoney;
+use App\Domain\Buybacks\BuybackCustomerOfferQueued;
 use App\Domain\Messages\MessagePosted;
+use App\Enums\BuybackAction;
+use App\Enums\BuybackPriceType;
+use App\Enums\BuybackState;
+use App\Enums\Permission;
+use App\Mail\BuybackCustomerOfferMail;
 use App\Mail\DiscussionMessageNotificationMail;
 use App\Models\OutboxEvent;
+use App\Models\ProcessThread;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
@@ -18,7 +26,7 @@ final class DiscussionNotificationDispatcher
     public function dispatch(int $limit): array
     {
         $result = ['claimed' => 0, 'sent' => 0, 'retried' => 0, 'failed' => 0];
-        if (! config('discussion_notifications.enabled')) {
+        if (! config('discussion_notifications.enabled') && ! config('buyback.customer_email_enabled')) {
             return $result + ['disabled' => true];
         }
 
@@ -31,25 +39,15 @@ final class DiscussionNotificationDispatcher
 
             $result['claimed']++;
             try {
-                $event->loadMissing(['recipient.organization', 'message.order']);
-                $recipient = $event->recipient;
-                $message = $event->message;
-                if ($recipient === null || $message === null || ! $recipient->active || ! $recipient->organization?->active
-                    || ! Gate::forUser($recipient)->allows('view', $message->order)) {
-                    $this->failPermanently($event, 'Recipient is no longer eligible.');
+                $eligible = $event->event_type === MessagePosted::TYPE
+                    ? $this->sendDiscussion($event)
+                    : $this->sendBuyback($event);
+                if (! $eligible) {
+                    $this->failPermanently($event, 'Notification is no longer eligible for delivery.');
                     $result['failed']++;
 
                     continue;
                 }
-
-                $locale = in_array($recipient->preferred_locale, ['cs', 'pl'], true) ? $recipient->preferred_locale : 'cs';
-                Mail::to($recipient->email)
-                    ->locale($locale)
-                    ->send(new DiscussionMessageNotificationMail(
-                        $message->order->order_no,
-                        route('orders.discussion.index', $message->order),
-                        $locale,
-                    ));
                 $this->markSent($event);
                 $result['sent']++;
             } catch (\Throwable) {
@@ -72,7 +70,7 @@ final class DiscussionNotificationDispatcher
             $now = now();
             $staleBefore = $now->copy()->subMinutes(max(1, (int) config('discussion_notifications.lock_minutes', 10)));
             $event = OutboxEvent::query()
-                ->where('event_type', MessagePosted::TYPE)
+                ->whereIn('event_type', $this->enabledTypes())
                 ->where(function ($query) use ($now, $staleBefore): void {
                     $query->where(function ($pending) use ($now): void {
                         $pending->where('status', OutboxEvent::PENDING)
@@ -125,7 +123,7 @@ final class DiscussionNotificationDispatcher
                     'updated_at' => now(),
                 ]);
             if ($updated === 1) {
-                $this->auditLogger->record('DISCUSSION_NOTIFICATION_SENT', $event->message, [], [
+                $this->auditLogger->record($event->event_type === MessagePosted::TYPE ? 'DISCUSSION_NOTIFICATION_SENT' : 'BUYBACK_CUSTOMER_NOTIFICATION_SENT', $this->subject($event), [], [
                     'outbox_event_id' => $event->id,
                     'recipient_user_id' => $event->recipient_user_id,
                     'attempts' => $event->attempts,
@@ -170,7 +168,7 @@ final class DiscussionNotificationDispatcher
                     'updated_at' => now(),
                 ]);
             if ($updated === 1) {
-                $this->auditLogger->record('DISCUSSION_NOTIFICATION_FAILED', $event->message, [], [
+                $this->auditLogger->record($event->event_type === MessagePosted::TYPE ? 'DISCUSSION_NOTIFICATION_FAILED' : 'BUYBACK_CUSTOMER_NOTIFICATION_FAILED', $this->subject($event), [], [
                     'outbox_event_id' => $event->id,
                     'recipient_user_id' => $event->recipient_user_id,
                     'attempts' => $event->attempts,
@@ -178,5 +176,60 @@ final class DiscussionNotificationDispatcher
                 ]);
             }
         }, 3);
+    }
+
+    private function enabledTypes(): array
+    {
+        $types = [];
+        if (config('discussion_notifications.enabled')) {
+            $types[] = MessagePosted::TYPE;
+        }
+        if (config('buyback.customer_email_enabled')) {
+            $types[] = BuybackCustomerOfferQueued::TYPE;
+        }
+
+        return $types;
+    }
+
+    private function sendDiscussion(OutboxEvent $event): bool
+    {
+        $event->loadMissing(['recipient.organization', 'message.order']);
+        $recipient = $event->recipient;
+        $message = $event->message;
+        if ($recipient === null || $message === null || ! $recipient->active || ! $recipient->organization?->active
+            || ! Gate::forUser($recipient)->allows('view', $message->order)) {
+            return false;
+        }
+        $locale = in_array($recipient->preferred_locale, ['cs', 'pl'], true) ? $recipient->preferred_locale : 'cs';
+        Mail::to($recipient->email)->locale($locale)->send(new DiscussionMessageNotificationMail(
+            $message->order->order_no, route('orders.discussion.index', $message->order), $locale,
+        ));
+
+        return true;
+    }
+
+    private function sendBuyback(OutboxEvent $event): bool
+    {
+        $thread = ProcessThread::query()->with(['order.customer', 'buybackPriceQuotes', 'events.actorUser.organization'])
+            ->find($event->aggregate_id);
+        $approval = $thread?->events->where('action', BuybackAction::APPROVE_FINAL_PRICE->value)->sortByDesc('id')->first();
+        $final = $thread?->buybackPriceQuotes->where('type', BuybackPriceType::FINAL_CUSTOMER)->sortByDesc('version')->first();
+        $email = $thread?->order?->customer?->email;
+        if ($thread === null || BuybackState::from($thread->state) !== BuybackState::OFFER_SENT
+            || $approval?->actorUser === null
+            || ! $approval->actorUser->hasPermission(Permission::BUYBACK_FINAL_PRICE_APPROVE)
+            || $final === null || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return false;
+        }
+        Mail::to($email)->locale('cs')->send(new BuybackCustomerOfferMail(
+            $thread->order->order_no, MinorMoney::format($final->amount_minor), $final->currency,
+        ));
+
+        return true;
+    }
+
+    private function subject(OutboxEvent $event): mixed
+    {
+        return $event->event_type === MessagePosted::TYPE ? $event->message : $event->buybackThread;
     }
 }
