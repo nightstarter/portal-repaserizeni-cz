@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class ProcessThread extends Model
 {
@@ -65,6 +66,14 @@ class ProcessThread extends Model
     public function events(): HasMany
     {
         return $this->hasMany(ThreadEvent::class);
+    }
+
+    public function latestEvent(): HasOne
+    {
+        return $this->hasOne(ThreadEvent::class)->ofMany([
+            'performed_at' => 'max',
+            'id' => 'max',
+        ]);
     }
 
     public function shipmentItems(): HasMany

@@ -15,7 +15,7 @@ class Item extends Model
     use HasFactory;
 
     protected $fillable = [
-        'order_id', 'role', 'role_instance', 'active_shipment_id', 'active_warranty_thread_id', 'qr_token', 'current_location', 'inspection_result',
+        'order_id', 'role', 'role_instance', 'active_shipment_id', 'warranty_lock_version', 'active_warranty_thread_id', 'qr_token', 'current_location', 'inspection_result',
         'technical_attributes', 'note',
     ];
 
@@ -32,6 +32,7 @@ class Item extends Model
             'role' => ItemRole::class,
             'technical_attributes' => 'array',
             'role_instance' => 'integer',
+            'warranty_lock_version' => 'integer',
         ];
     }
 

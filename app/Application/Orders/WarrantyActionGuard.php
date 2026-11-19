@@ -29,6 +29,16 @@ final class WarrantyActionGuard
 
     public function assertMayPerform(User $actor, WarrantyAction $action, ?ProcessThread $thread = null): void
     {
+        $this->assertRoleMayPerform($actor, $action);
+
+        if ($actor->organization->code === OrganizationCode::POLAND
+            && ($thread === null || ! ProcessThread::query()->visibleTo($actor)->whereKey($thread->id)->exists())) {
+            throw new AuthorizationException;
+        }
+    }
+
+    public function assertRoleMayPerform(User $actor, WarrantyAction $action): void
+    {
         if (! $actor->active || ! $actor->organization->active || $actor->role === UserRole::READ_ONLY) {
             throw new AuthorizationException;
         }
@@ -52,9 +62,5 @@ final class WarrantyActionGuard
             throw new AuthorizationException;
         }
 
-        if ($actor->organization->code === OrganizationCode::POLAND
-            && ($thread === null || ! ProcessThread::query()->visibleTo($actor)->whereKey($thread->id)->exists())) {
-            throw new AuthorizationException;
-        }
     }
 }

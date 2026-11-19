@@ -259,8 +259,9 @@ class WarrantyWorkflowTest extends TestCase
         $response = $this->actingAs($this->plOperator)->postJson(route('orders.warranty.actions', [
             $order, $thread, WarrantyAction::CONFIRM_POLAND_RECEIPT->value,
         ]), ['idempotency_key' => 'pl-receive', 'expected_lock_version' => 2]);
-        $response->assertOk()->assertJsonMissing(['name' => 'TAJNY KLIENT']);
+        $response->assertUnprocessable()->assertJsonMissing(['name' => 'TAJNY KLIENT']);
         $response->assertDontSee('secret@example.test')->assertDontSee('+420999999999');
+        $this->act($thread, WarrantyAction::CONFIRM_POLAND_RECEIPT, $this->plOperator, 'pl-receive-service');
 
         self::assertTrue(ProcessThread::query()->visibleTo($this->plOperator)->whereKey($thread->id)->exists());
         $this->assertDatabaseHas('audit_log', ['action' => 'WARRANTY_ADMIN_OVERRIDE', 'subject_id' => $thread->id]);
@@ -302,7 +303,13 @@ class WarrantyWorkflowTest extends TestCase
 
     private function createCycle(Order $order, Item $item, string $key): ProcessThread
     {
-        return $this->workflow->create($order, $item, new WarrantyCommand(WarrantyAction::CREATE_CYCLE, $this->akOperator, $key));
+        return $this->workflow->create($order, $item, new WarrantyCommand(
+            WarrantyAction::CREATE_CYCLE,
+            $this->akOperator,
+            $key,
+            ['reason' => 'Bezpečný interní důvod reklamace.'],
+            $item->warranty_lock_version ?? 0,
+        ));
     }
 
     private function act(ProcessThread $thread, WarrantyAction $action, User $actor, string $key, array $data = []): ThreadEvent

@@ -18,9 +18,10 @@ return new class extends Migration
         });
 
         Schema::table('items', function (Blueprint $table): void {
+            $table->unsignedInteger('warranty_lock_version')->default(0)->after('active_shipment_id');
             $table->foreignId('active_warranty_thread_id')
                 ->nullable()
-                ->after('active_shipment_id')
+                ->after('warranty_lock_version')
                 ->unique()
                 ->constrained('process_threads')
                 ->restrictOnDelete();
@@ -31,6 +32,7 @@ return new class extends Migration
     {
         Schema::table('items', function (Blueprint $table): void {
             $table->dropConstrainedForeignId('active_warranty_thread_id');
+            $table->dropColumn('warranty_lock_version');
         });
         Schema::table('process_threads', function (Blueprint $table): void {
             $table->dropIndex('threads_warranty_active_index');

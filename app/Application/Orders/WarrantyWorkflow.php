@@ -34,14 +34,21 @@ final class WarrantyWorkflow
             throw new WorkflowConflictException('The warranty cycle must start with CREATE_WARRANTY_CYCLE.');
         }
         $this->guard->assertMayPerform($command->actor, $command->action);
-        $this->validateEnvelope($command, false);
+        $this->validateEnvelope($command, true);
+        $validated = Validator::make($command->data, [
+            'reason' => ['required', 'string', 'max:2000'],
+        ])->validate();
+        $reason = trim($validated['reason']);
+        if ($reason === '') {
+            throw ValidationException::withMessages(['reason' => __('validation.required', ['attribute' => __('app.warranty_reason')])]);
+        }
         if ($item->order_id !== $order->id) {
             throw new WorkflowConflictException('The item does not belong to this order.');
         }
 
         $hash = $this->requestHash($command, ['order_id' => $order->id, 'item_id' => $item->id]);
 
-        return DB::transaction(function () use ($order, $item, $command, $hash): ProcessThread {
+        return DB::transaction(function () use ($order, $item, $command, $hash, $reason): ProcessThread {
             $lockedOrder = Order::query()->lockForUpdate()->findOrFail($order->id);
             $lockedItem = Item::query()->where('order_id', $lockedOrder->id)->lockForUpdate()->findOrFail($item->id);
             $existing = ProcessThread::query()->where('creation_idempotency_key', $command->idempotencyKey)->first();
@@ -51,6 +58,9 @@ final class WarrantyWorkflow
                 }
 
                 return $existing;
+            }
+            if ($command->expectedLockVersion !== $lockedItem->warranty_lock_version) {
+                throw new WorkflowConflictException(__('app.warranty_item_version_conflict'));
             }
             if ($lockedItem->active_warranty_thread_id !== null) {
                 throw new WorkflowConflictException('This physical item already has an active warranty cycle.');
@@ -85,10 +95,18 @@ final class WarrantyWorkflow
                 'creation_request_hash' => $hash,
                 'lock_version' => 0,
             ]);
-            $lockedItem->update([
-                'active_warranty_thread_id' => $thread->id,
-                'current_location' => OrganizationCode::AUTOKLUBY->value,
-            ]);
+            $updatedItem = Item::query()
+                ->whereKey($lockedItem->id)
+                ->where('warranty_lock_version', $lockedItem->warranty_lock_version)
+                ->update([
+                    'active_warranty_thread_id' => $thread->id,
+                    'current_location' => OrganizationCode::AUTOKLUBY->value,
+                    'warranty_lock_version' => $lockedItem->warranty_lock_version + 1,
+                    'updated_at' => now(),
+                ]);
+            if ($updatedItem !== 1) {
+                throw new WorkflowConflictException(__('app.warranty_item_version_conflict'));
+            }
             $event = $thread->events()->create([
                 'order_id' => $lockedOrder->id,
                 'action' => WarrantyAction::CREATE_CYCLE->value,
@@ -100,11 +118,12 @@ final class WarrantyWorkflow
                 'actor_user_id' => $command->actor->id,
                 'actor_organization_id' => $command->actor->organization_id,
                 'responsible_organization_id' => $autokluby->id,
+                'reason' => $reason,
                 'metadata' => $this->metadata($thread),
             ]);
             $this->auditLogger->record('WARRANTY_CYCLE_CREATED', $thread, [], $this->snapshot($thread) + [
                 'thread_event_id' => $event->id,
-            ], null, $command->actor);
+            ], $reason, $command->actor);
 
             return $thread;
         }, 3);
@@ -164,7 +183,11 @@ final class WarrantyWorkflow
                 $cleared = Item::query()
                     ->whereKey($item->id)
                     ->where('active_warranty_thread_id', $locked->id)
-                    ->update(['active_warranty_thread_id' => null, 'updated_at' => $now]);
+                    ->update([
+                        'active_warranty_thread_id' => null,
+                        'warranty_lock_version' => $item->warranty_lock_version + 1,
+                        'updated_at' => $now,
+                    ]);
                 if ($cleared !== 1) {
                     throw new WorkflowConflictException('The active warranty cycle reservation is inconsistent.');
                 }

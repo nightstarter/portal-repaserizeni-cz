@@ -13,6 +13,7 @@
 @php($maySeeFinanceSection = auth()->user()->organization->code === \App\Enums\OrganizationCode::POLAND || auth()->user()->role === \App\Enums\UserRole::AK_ADMIN)
 <div class="section-nav" role="navigation" aria-label="{{ __('app.order_sections') }}">
     <a href="#overview">{{ __('app.section_overview') }}</a>
+    <a href="#warranties">{{ __('app.warranties') }}</a>
     @if($maySeeFinanceSection)<a href="#finance">{{ __('app.section_documents_finance') }}</a>@endif
     <a href="{{ route('orders.discussion.index', $order) }}">{{ __('app.discussion') }} @if($discussionUnreadCount > 0)<span class="unread-badge">{{ $discussionUnreadCount }}</span>@endif</a>
 </div>
@@ -58,6 +59,8 @@
     @endforeach
     </tbody></table></div>
 </section>
+
+@include('orders.partials.warranties')
 
 @include('orders.partials.receipt-data', ['item' => $order->items->first()])
 

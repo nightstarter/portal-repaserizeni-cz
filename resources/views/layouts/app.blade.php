@@ -61,12 +61,25 @@
         .branch-actions { border:1px solid #b7cee1; border-radius:.4rem; padding:.85rem; background:#f8fbfe }
         .branch-actions h3 { font-size:1rem } .notice { background:#fff4d6; border-left:4px solid #d79b19; border-radius:.25rem; padding:.8rem }
         .closure-card ul { margin-bottom:0 }
+        .warranty-section { scroll-margin-top:1rem } .warranty-item { border-top:4px solid #5f6f7d }
+        .warranty-cycle { border:1px solid #ccd5dc; box-shadow:none; margin-top:1rem; overflow-wrap:anywhere }
+        .warranty-cycle.active { border:2px solid #c51f32; background:#fffafb } .warranty-cycle.completed { opacity:.92; background:#f8faf9 }
+        .active-label { color:#c51f32 } .warranty-cycle-list { display:grid; gap:1rem }
+        .warranty-actions { margin:1rem 0; padding:.9rem; background:#f8fbfe; border-radius:.4rem }
+        .warranty-actions form { max-width:32rem } .warranty-note { white-space:pre-wrap; overflow-wrap:anywhere }
+        .warranty-create summary { cursor:pointer; color:var(--blue); font-weight:750; padding:.6rem 0; min-height:2.75rem }
+        .warranty-create textarea { min-height:7rem } .warranty-timeline h5 { margin:.1rem 0 .3rem; font-size:1rem }
         @media (max-width:700px) {
             main { margin:1rem auto; padding:0 .7rem } .card { padding:1rem }
             table.responsive thead { display:none } table.responsive tr { display:block; margin-bottom:1rem; border:1px solid #ddd; border-radius:.4rem; padding:.35rem }
             table.responsive td { display:block; border:0; padding:.35rem .45rem } table.responsive td::before { content:attr(data-label); display:block; color:#627180; font-size:.75rem; text-transform:uppercase; font-weight:700 }
             .mobile-primary { order:-1 } .primary-action button { min-height:3.8rem; font-size:1.1rem }
             .branch-grid { grid-template-columns:1fr } .branch-card { scroll-margin-top:1rem }
+            .warranty-cycle { padding:.85rem } .warranty-actions button,.warranty-actions .button { width:100%; min-height:3.25rem }
+        }
+        @media (max-width:390px) {
+            .warranty-cycle,.warranty-actions,.warranty-item { min-width:0; max-width:100% }
+            .warranty-cycle a,.warranty-cycle button,.warranty-cycle textarea { max-width:100%; overflow-wrap:anywhere }
         }
     </style>
 </head>
@@ -77,6 +90,7 @@
     <a class="{{ request()->routeIs('dashboard') ? 'active' : '' }}" href="{{ route('dashboard') }}" @if(request()->routeIs('dashboard')) aria-current="page" @endif>{{ __('app.dashboard') }}</a>
     <a class="{{ request()->routeIs('shipments.*') ? 'active' : '' }}" href="{{ route('shipments.index') }}" @if(request()->routeIs('shipments.*')) aria-current="page" @endif>{{ __('app.shipments') }}</a>
     <a class="{{ request()->routeIs('returns.*') ? 'active' : '' }}" href="{{ route('returns.index') }}" @if(request()->routeIs('returns.*')) aria-current="page" @endif>{{ __('app.returns') }}</a>
+    <a class="{{ request()->routeIs('warranties.*') ? 'active' : '' }}" href="{{ route('warranties.index') }}" @if(request()->routeIs('warranties.*')) aria-current="page" @endif>{{ __('app.warranties') }}</a>
     <a class="{{ request()->routeIs('finance.*') ? 'active' : '' }}" href="{{ route('finance.index') }}" @if(request()->routeIs('finance.*')) aria-current="page" @endif>{{ __('app.documents_finance') }}</a>
     <a class="{{ request()->routeIs('discussions.*', 'orders.discussion.*') ? 'active' : '' }}" href="{{ route('discussions.index') }}" @if(request()->routeIs('discussions.*', 'orders.discussion.*')) aria-current="page" @endif>{{ __('app.discussion') }} @if($globalUnreadMessages > 0)<span class="unread-badge" aria-label="{{ trans_choice('app.unread_messages', $globalUnreadMessages, ['count' => $globalUnreadMessages]) }}">{{ $globalUnreadMessages }}</span>@endif</a>
     @can('manage-users')<a class="{{ request()->routeIs('users.*') ? 'active' : '' }}" href="{{ route('users.index') }}" @if(request()->routeIs('users.*')) aria-current="page" @endif>{{ __('app.users') }}</a>@endcan

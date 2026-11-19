@@ -23,6 +23,7 @@ use App\Http\Controllers\SupplierCreditNoteController;
 use App\Http\Controllers\SupplierInvoiceController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WarrantyController;
+use App\Http\Controllers\WarrantyQueueController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function (): void {
@@ -35,6 +36,7 @@ Route::middleware(['auth', 'active', 'password.changed'])->group(function (): vo
     Route::get('/returns', ReturnController::class)->name('returns.index');
     Route::get('/finance', FinanceController::class)->name('finance.index');
     Route::get('/discussions', DiscussionQueueController::class)->name('discussions.index');
+    Route::get('/warranties', WarrantyQueueController::class)->name('warranties.index');
     Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
     Route::get('/orders/{order}/discussion', [DiscussionController::class, 'index'])->name('orders.discussion.index');
     Route::post('/orders/{order}/discussion', [DiscussionController::class, 'store'])->name('orders.discussion.store');

@@ -12,6 +12,7 @@
 </div>
 <div class="section-nav" role="navigation" aria-label="{{ __('app.order_sections') }}">
     <a href="{{ route('orders.show', $order) }}">{{ __('app.section_overview') }}</a>
+    <a href="#warranties">{{ __('app.warranties') }}</a>
     <a href="{{ route('orders.discussion.index', $order) }}">{{ __('app.discussion') }} @if($discussionUnreadCount > 0)<span class="unread-badge">{{ $discussionUnreadCount }}</span>@endif</a>
 </div>
 <h2>{{ __('app.process_threads') }}</h2>
@@ -21,6 +22,7 @@
 @endforeach
 </div>
 <div class="card"><h2>{{ __('app.physical_items') }}</h2><table><tbody>@foreach($order->items as $item)<tr><td>{{ __('app.item_roles.'.$item->role->value) }}</td><td>{{ $item->current_location }}</td></tr>@endforeach</tbody></table></div>
+@include('orders.partials.warranties')
 @if(auth()->user()->organization->code === \App\Enums\OrganizationCode::AUTOKLUBY && $order->customer)<div class="card"><h2>{{ __('app.customer') }}</h2><p>{{ $order->customer->name }}<br>{{ $order->customer->email }}<br>{{ $order->customer->phone }}</p></div>@endif
 <p class="muted">{{ __('app.read_only_phase_1a') }}</p>
 @endsection

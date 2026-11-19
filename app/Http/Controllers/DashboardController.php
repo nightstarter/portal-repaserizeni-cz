@@ -9,6 +9,7 @@ use App\Enums\DocumentType;
 use App\Enums\OrderType;
 use App\Enums\OrganizationCode;
 use App\Enums\ProcessThreadType;
+use App\Enums\WarrantyState;
 use App\Models\IntegrationEvent;
 use App\Models\Order;
 use App\Models\ProcessThread;
@@ -36,6 +37,7 @@ class DashboardController extends Controller
         $orders = (clone $visibleOrders)
             ->with(['processThreads' => fn ($threads) => $threads
                 ->visibleTo($user)
+                ->where('type', '!=', ProcessThreadType::WARRANTY)
                 ->with(['responsibleOrganization', 'events'])])
             ->latest()
             ->limit(50)
@@ -43,6 +45,10 @@ class DashboardController extends Controller
 
         $rows = $orders->flatMap(function (Order $order) use ($user, $customPresentation, $stockPresentation): array {
             if ($order->order_type === OrderType::CUSTOM_REBUILD) {
+                if (! $order->processThreads->contains('type', ProcessThreadType::CUSTOM_REBUILD)) {
+                    return [];
+                }
+
                 return [[
                     'kind' => 'custom',
                     'order' => $order,
@@ -69,10 +75,19 @@ class DashboardController extends Controller
             $rows = $rows->filter(fn (array $row): bool => in_array($activeQueue, $row['queues'], true))->values();
         }
 
-        $visibleThreadQuery = ProcessThread::query()->visibleTo($user);
+        $visibleThreadQuery = ProcessThread::query()->visibleTo($user)->where('type', '!=', ProcessThreadType::WARRANTY);
         $coreQuery = ProcessThread::query()->visibleTo($user)->where('type', ProcessThreadType::CORE_RETURN);
         $invoiceThreads = ProcessThread::query()->visibleTo($user)
             ->whereIn('type', [ProcessThreadType::CUSTOM_REBUILD, ProcessThreadType::STOCK_REQUEST, ProcessThreadType::STOCK_REPLENISHMENT]);
+
+        $warrantyKpis = ProcessThread::query()
+            ->visibleTo($user)
+            ->where('type', ProcessThreadType::WARRANTY)
+            ->selectRaw('COUNT(CASE WHEN completed_at IS NULL THEN 1 END) AS active_count')
+            ->selectRaw("COUNT(CASE WHEN completed_at IS NULL AND responsible_party = 'AUTOKLUBY' THEN 1 END) AS autokluby_count")
+            ->selectRaw("COUNT(CASE WHEN completed_at IS NULL AND responsible_party = 'POLAND' THEN 1 END) AS poland_count")
+            ->selectRaw('COUNT(CASE WHEN state IN (?, ?) THEN 1 END) AS transport_count', [WarrantyState::SENT_TO_PL->value, WarrantyState::SENT_TO_AK->value])
+            ->first();
 
         return view('dashboard', [
             'rows' => $rows,
@@ -98,6 +113,12 @@ class DashboardController extends Controller
                 'waiting_credit_notes' => (clone $coreQuery)->whereIn('state', ['DEPOSIT_FULL_APPROVED', 'DEPOSIT_REDUCED_APPROVED'])->count(),
                 'waiting_credit_payment' => (clone $coreQuery)->where('state', 'CREDIT_ISSUED')->count(),
                 'reduced_deposits' => (clone $coreQuery)->where('state', 'DEPOSIT_REDUCED_APPROVED')->count(),
+            ],
+            'warrantyKpis' => [
+                'active' => (int) $warrantyKpis->active_count,
+                'autokluby' => (int) $warrantyKpis->autokluby_count,
+                'poland' => (int) $warrantyKpis->poland_count,
+                'transport' => (int) $warrantyKpis->transport_count,
             ],
         ]);
     }

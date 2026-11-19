@@ -16,6 +16,7 @@
 @php($hasFinanceSection = (bool) $coreBranch || ($mayManageBusinessFinance && $branches->contains(fn($branch) => in_array($branch['thread']->type, [\App\Enums\ProcessThreadType::STOCK_REQUEST, \App\Enums\ProcessThreadType::STOCK_REPLENISHMENT], true))))
 <div class="section-nav" role="navigation" aria-label="{{ __('app.order_sections') }}">
     <a href="#overview">{{ __('app.section_overview') }}</a>
+    <a href="#warranties">{{ __('app.warranties') }}</a>
     @if($coreBranch)<a href="#thread-{{ $coreBranch['thread']->id }}">{{ __('app.section_return') }}</a>@endif
     @if($hasFinanceSection)<a href="#finance">{{ __('app.section_documents_finance') }}</a>@endif
     <a href="{{ route('orders.discussion.index', $order) }}">{{ __('app.discussion') }} @if($discussionUnreadCount > 0)<span class="unread-badge">{{ $discussionUnreadCount }}</span>@endif</a>
@@ -89,6 +90,8 @@
     @endforelse
     </tbody></table></div>
 </section>
+
+@include('orders.partials.warranties')
 
 <section class="card closure-card">
     <h2>{{ __('app.order_completion') }}</h2>

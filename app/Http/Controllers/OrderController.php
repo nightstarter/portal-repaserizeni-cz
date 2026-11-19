@@ -8,6 +8,7 @@ use App\Application\Orders\CustomRebuildPresentation;
 use App\Application\Orders\CustomRebuildTimeline;
 use App\Application\Orders\StockRebuildPresentation;
 use App\Application\Orders\StockRebuildTimeline;
+use App\Application\Orders\WarrantyPresentation;
 use App\Enums\CoreReturnAction;
 use App\Enums\CustomRebuildAction;
 use App\Enums\CustomRebuildState;
@@ -32,9 +33,22 @@ class OrderController extends Controller
         StockRebuildTimeline $stockTimeline,
         CoreReturnPresentation $corePresentation,
         DiscussionService $discussion,
+        WarrantyPresentation $warrantyPresentation,
     ): View {
         $this->authorize('view', $order);
         $discussionUnreadCount = $discussion->unreadCount($order, $request->user());
+        $warrantiesByItem = $warrantyPresentation->forOrder($order, $request->user());
+        $warrantyCreateKeys = $order->items()->pluck('id')->mapWithKeys(
+            fn (int $id): array => [$id => (string) Str::uuid()],
+        )->all();
+        if ($request->user()->organization->code === OrganizationCode::POLAND
+            && $warrantiesByItem->isNotEmpty()
+            && ! $order->processThreads()->visibleTo($request->user())->where('type', '!=', ProcessThreadType::WARRANTY)->exists()) {
+            $visibleItemIds = $warrantiesByItem->keys();
+            $order->load(['items' => fn ($items) => $items->whereIn('id', $visibleItemIds)]);
+
+            return view('orders.warranty-show', compact('order', 'discussionUnreadCount', 'warrantiesByItem', 'warrantyCreateKeys'));
+        }
 
         if ($order->order_type === OrderType::STOCK_REBUILD) {
             $isAutokluby = $request->user()->organization->code === OrganizationCode::AUTOKLUBY;
@@ -42,6 +56,7 @@ class OrderController extends Controller
             $order->load([
                 'processThreads' => fn ($threads) => $threads
                     ->visibleTo($user)
+                    ->where('type', '!=', ProcessThreadType::WARRANTY)
                     ->with(['responsibleOrganization', 'events.actorUser', 'events.actorOrganization', 'coreReturnInspections', 'financeEntries.actorUser', 'documents.uploader']),
                 'items' => function ($items) use ($order, $isAutokluby, $user): void {
                     if ($isAutokluby) {
@@ -84,16 +99,18 @@ class OrderController extends Controller
                 'coreActionFormKeys' => collect(CoreReturnAction::cases())->mapWithKeys(fn ($action) => [$action->value => (string) Str::uuid()])->all(),
                 'documentFormKeys' => $order->processThreads->mapWithKeys(fn ($thread) => [$thread->id => (string) Str::uuid()])->all(),
                 'discussionUnreadCount' => $discussionUnreadCount,
+                'warrantiesByItem' => $warrantiesByItem,
+                'warrantyCreateKeys' => $warrantyCreateKeys,
             ]);
         }
 
         if ($order->order_type !== OrderType::CUSTOM_REBUILD) {
-            $order->load(['processThreads.responsibleOrganization', 'items']);
+            $order->load(['processThreads' => fn ($threads) => $threads->where('type', '!=', ProcessThreadType::WARRANTY)->with('responsibleOrganization'), 'items']);
             if ($request->user()->organization->code === OrganizationCode::AUTOKLUBY) {
                 $order->load('customer');
             }
 
-            return view('orders.show-readonly', compact('order', 'discussionUnreadCount'));
+            return view('orders.show-readonly', compact('order', 'discussionUnreadCount', 'warrantiesByItem', 'warrantyCreateKeys'));
         }
 
         $order->load([
@@ -120,6 +137,8 @@ class OrderController extends Controller
             'selectedItem' => null,
             'documentFormKeys' => $order->processThreads->mapWithKeys(fn ($thread) => [$thread->id => (string) Str::uuid()])->all(),
             'discussionUnreadCount' => $discussionUnreadCount,
+            'warrantiesByItem' => $warrantiesByItem,
+            'warrantyCreateKeys' => $warrantyCreateKeys,
         ]);
     }
 

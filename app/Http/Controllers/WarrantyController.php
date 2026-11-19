@@ -7,6 +7,7 @@ use App\Application\Orders\WarrantyWorkflow;
 use App\Enums\OrganizationCode;
 use App\Enums\ProcessThreadType;
 use App\Enums\WarrantyAction;
+use App\Exceptions\WorkflowConflictException;
 use App\Models\Item;
 use App\Models\Order;
 use App\Models\ProcessThread;
@@ -21,11 +22,21 @@ class WarrantyController extends Controller
     {
         $this->assertVisible($request, $order);
         abort_unless($item->order_id === $order->id, 404);
-        $thread = $workflow->create($order, $item, new WarrantyCommand(
-            WarrantyAction::CREATE_CYCLE,
-            $request->user(),
-            $this->idempotencyKey($request),
-        ));
+        $validated = $request->validate([
+            'expected_lock_version' => ['required', 'integer', 'min:0'],
+            'reason' => ['required', 'string', 'max:2000'],
+        ]);
+        try {
+            $thread = $workflow->create($order, $item, new WarrantyCommand(
+                WarrantyAction::CREATE_CYCLE,
+                $request->user(),
+                $this->idempotencyKey($request),
+                ['reason' => $validated['reason']],
+                (int) $validated['expected_lock_version'],
+            ));
+        } catch (WorkflowConflictException $exception) {
+            return $this->conflictResponse($request, $order, $item->activeWarrantyThread?->state);
+        }
 
         return $this->response($request, $order, $thread);
     }
@@ -41,17 +52,32 @@ class WarrantyController extends Controller
         if ($warrantyAction === null || $warrantyAction === WarrantyAction::CREATE_CYCLE) {
             throw ValidationException::withMessages(['action' => __('app.workflow_errors.unknown_action')]);
         }
+        if (in_array($warrantyAction, [
+            WarrantyAction::SEND_TO_POLAND,
+            WarrantyAction::CONFIRM_POLAND_RECEIPT,
+            WarrantyAction::SEND_TO_AUTOKLUBY,
+            WarrantyAction::CONFIRM_AUTOKLUBY_RECEIPT,
+        ], true)) {
+            throw ValidationException::withMessages(['action' => __('app.warranty_shipment_action_required')]);
+        }
         if ($warrantyAction === WarrantyAction::ADMIN_OVERRIDE) {
             $request->validate(['override_confirmed' => ['accepted']]);
         }
         $validated = $request->validate(['expected_lock_version' => ['required', 'integer', 'min:0']]);
-        $event = $workflow->execute($thread, new WarrantyCommand(
-            $warrantyAction,
-            $request->user(),
-            $this->idempotencyKey($request),
-            $request->only(['target_state', 'state', 'to_state', 'reason']),
-            (int) $validated['expected_lock_version'],
-        ));
+        if (in_array($warrantyAction, [WarrantyAction::SEND_TO_CUSTOMER, WarrantyAction::CONFIRM_CUSTOMER_PICKUP], true)) {
+            $request->validate(['confirmed' => ['accepted']]);
+        }
+        try {
+            $event = $workflow->execute($thread, new WarrantyCommand(
+                $warrantyAction,
+                $request->user(),
+                $this->idempotencyKey($request),
+                $request->only(['target_state', 'state', 'to_state', 'reason']),
+                (int) $validated['expected_lock_version'],
+            ));
+        } catch (WorkflowConflictException $exception) {
+            return $this->conflictResponse($request, $order, $thread->fresh()->state);
+        }
 
         return $this->response($request, $order, $event->processThread->fresh());
     }
@@ -78,6 +104,23 @@ class WarrantyController extends Controller
             ]);
         }
 
-        return redirect()->route('orders.show', $order)->with('status', __('app.action_completed'));
+        $qrToken = $request->string('return_qr_token')->toString();
+        if ($qrToken !== '' && $order->items()->where('qr_token', $qrToken)->exists()) {
+            return redirect()->route('items.qr', $qrToken)->with('status', __('app.action_completed'));
+        }
+
+        return redirect()->to(route('orders.show', $order).'#warranty-thread-'.$thread->id)->with('status', __('app.action_completed'));
+    }
+
+    private function conflictResponse(Request $request, Order $order, ?string $state): JsonResponse|RedirectResponse
+    {
+        if ($request->expectsJson()) {
+            throw new WorkflowConflictException(__('app.warranty_concurrency_error'));
+        }
+
+        return redirect()->to(route('orders.show', $order).'#warranties')
+            ->withErrors(['warranty' => __('app.warranty_concurrency_state', [
+                'state' => $state === null ? '—' : __('app.thread_states.'.$state),
+            ])]);
     }
 }
