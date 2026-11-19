@@ -34,6 +34,7 @@ use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Tests\Support\IsolatedStorageSandbox;
@@ -98,6 +99,15 @@ class BuybackWorkflowTest extends TestCase
         self::assertNull($first->source_order_id);
         self::assertSame(2, Order::query()->count());
         self::assertSame(2, ProcessThread::query()->where('type', ProcessThreadType::BUYOUT)->count());
+        self::assertSame(2, (int) DB::table('buyback_order_sequences')->value('last_number'));
+        try {
+            $different = $this->createData();
+            $different['product_code'] = 'DIFFERENT';
+            $this->orders->create(new CreateBuybackCommand($this->operator, 'create-a', $different));
+            self::fail('An idempotency key reused for different input must be rejected.');
+        } catch (WorkflowConflictException) {
+            self::assertSame(2, Order::query()->count());
+        }
         $this->expectException(AuthorizationException::class);
         $this->orders->create(new CreateBuybackCommand($this->poland, 'pl-create', $this->createData()));
     }
