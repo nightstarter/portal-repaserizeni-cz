@@ -202,6 +202,10 @@ final class BuybackWorkflow
             && ! filter_var($thread->order()->with('customer')->firstOrFail()->customer?->email, FILTER_VALIDATE_EMAIL)) {
             throw ValidationException::withMessages(['customer_email' => 'A valid customer e-mail is required.']);
         }
+        if ($command->action === BuybackAction::QUEUE_CUSTOMER_OFFER
+            && OutboxEvent::query()->where('deduplication_key', 'buyback-customer-offer:'.$thread->id)->exists()) {
+            throw new WorkflowConflictException('The customer offer is already queued.');
+        }
         if ($command->action === BuybackAction::MARK_PAID_BY_PL && empty($command->data['document_id'])) {
             throw ValidationException::withMessages(['document_id' => 'The active invoice to Poland is required.']);
         }
@@ -218,18 +222,12 @@ final class BuybackWorkflow
 
     private function createCustomerOutbox(ProcessThread $thread, ThreadEvent $event): void
     {
-        $order = $thread->order()->with('customer')->firstOrFail();
-        $final = $thread->buybackPriceQuotes()->where('type', BuybackPriceType::FINAL_CUSTOMER)->latest('version')->firstOrFail();
         OutboxEvent::query()->firstOrCreate(['deduplication_key' => 'buyback-customer-offer:'.$thread->id], [
             'event_uuid' => (string) Str::uuid(),
             'event_type' => BuybackCustomerOfferQueued::TYPE,
             'aggregate_type' => ProcessThread::class,
             'aggregate_id' => $thread->id,
             'payload' => [
-                'order_no' => $order->order_no,
-                'recipient_email' => $order->customer?->email,
-                'amount_minor' => $final->amount_minor,
-                'currency' => $final->currency,
                 'thread_event_id' => $event->id,
             ],
             'status' => OutboxEvent::PENDING,

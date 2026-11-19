@@ -34,7 +34,7 @@ final class DiscussionNotificationAdminService
                 }
                 $thread = ProcessThread::query()->with('events.actorUser.organization')->find($locked->aggregate_id);
                 $approval = $thread?->events->where('action', BuybackAction::APPROVE_FINAL_PRICE->value)->sortByDesc('id')->first();
-                if ($thread === null || BuybackState::from($thread->state) !== BuybackState::OFFER_SENT
+                if ($thread === null || BuybackState::from($thread->state) !== BuybackState::CUSTOMER_OFFER_READY
                     || $approval?->actorUser === null || ! $approval->actorUser->hasPermission(Permission::BUYBACK_FINAL_PRICE_APPROVE)) {
                     return false;
                 }

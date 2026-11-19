@@ -17,7 +17,9 @@
         <tbody>
         @forelse($events as $event)
             @php
-                $email = $event->recipient?->email ?? ($event->payload['recipient_email'] ?? '');
+                $email = $event->event_type === \App\Domain\Buybacks\BuybackCustomerOfferQueued::TYPE
+                    ? ($event->buybackThread?->order?->customer?->email ?? '')
+                    : ($event->recipient?->email ?? '');
                 [$local, $domain] = str_contains($email, '@') ? explode('@', $email, 2) : [$email, ''];
                 $masked = $email === '' ? '—' : mb_substr($local, 0, 1).'***@'.mb_substr($domain, 0, 1).'***';
             @endphp

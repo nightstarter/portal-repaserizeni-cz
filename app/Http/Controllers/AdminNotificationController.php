@@ -25,7 +25,7 @@ class AdminNotificationController extends Controller
             OutboxEvent::FAILED,
         ])->mapWithKeys(fn (string $status): array => [$status => (clone $base)->where('status', $status)->count()]);
         $events = (clone $base)
-            ->with(['recipient:id,email', 'message.order:id,order_no', 'buybackThread.order:id,order_no'])
+            ->with(['recipient:id,email', 'message.order:id,order_no', 'buybackThread.order.customer:id,order_id,email'])
             ->orderByDesc('id')
             ->paginate(50);
 

@@ -153,6 +153,14 @@ class BuybackWorkflowTest extends TestCase
 
         self::assertSame(1, OutboxEvent::query()->where('event_type', 'BUYBACK_CUSTOMER_OFFER_EMAIL')->count());
         self::assertSame(OutboxEvent::PENDING, OutboxEvent::query()->firstOrFail()->status);
+        self::assertSame(BuybackState::CUSTOMER_OFFER_READY->value, $thread->fresh()->state);
+        self::assertEquals(['thread_event_id'], array_keys(OutboxEvent::query()->firstOrFail()->payload));
+        try {
+            $this->act($thread, BuybackAction::RECORD_CUSTOMER_ACCEPTANCE, $this->operator, 'accept-pending');
+            self::fail('A pending customer offer must not be accepted as delivered.');
+        } catch (WorkflowConflictException) {
+            self::assertSame(BuybackState::CUSTOMER_OFFER_READY->value, $thread->fresh()->state);
+        }
         Mail::assertNothingSent();
         self::assertFalse(config('buyback.customer_email_enabled'));
     }
@@ -332,9 +340,20 @@ class BuybackWorkflowTest extends TestCase
         config(['discussion_notifications.enabled' => false, 'buyback.customer_email_enabled' => false]);
         self::assertTrue(app(DiscussionNotificationDispatcher::class)->dispatch(50)['disabled']);
         self::assertSame($before, $event->fresh()->toArray());
+        self::assertSame(BuybackState::CUSTOMER_OFFER_READY->value, $thread->fresh()->state);
         Mail::assertNothingSent();
 
+        $event->update(['status' => OutboxEvent::FAILED, 'failed_at' => now(), 'last_error' => 'Safe failure']);
+        $adminHtml = $this->actingAs($this->admin)->get(route('admin.notifications.index'))->assertOk()->getContent();
+        self::assertStringContainsString('s***@e***', $adminHtml);
+        self::assertStringNotContainsString('secret@example.test', $adminHtml);
+        $this->actingAs($this->operator)->post(route('admin.notifications.retry', $event))->assertForbidden();
+        $this->actingAs($this->admin)->post(route('admin.notifications.retry', $event))->assertRedirect();
+        self::assertSame(OutboxEvent::FAILED, $event->fresh()->status);
         config(['buyback.customer_email_enabled' => true]);
+        $this->actingAs($this->admin)->post(route('admin.notifications.retry', $event))->assertRedirect();
+        self::assertSame(OutboxEvent::PENDING, $event->fresh()->status);
+        $this->assertDatabaseHas('audit_log', ['action' => 'BUYBACK_CUSTOMER_NOTIFICATION_MANUAL_RETRY', 'subject_id' => $thread->id]);
         $result = app(DiscussionNotificationDispatcher::class)->dispatch(50);
         self::assertSame(1, $result['sent']);
         Mail::assertSent(BuybackCustomerOfferMail::class, function (BuybackCustomerOfferMail $mail) use ($thread): bool {
@@ -349,20 +368,9 @@ class BuybackWorkflowTest extends TestCase
             return true;
         });
         self::assertSame(OutboxEvent::SENT, $event->fresh()->status);
+        self::assertSame(BuybackState::OFFER_SENT->value, $thread->fresh()->state);
+        self::assertSame(1, $thread->events()->where('action', BuybackAction::DELIVER_CUSTOMER_OFFER->value)->count());
         $this->assertDatabaseHas('audit_log', ['action' => 'BUYBACK_CUSTOMER_NOTIFICATION_SENT', 'subject_id' => $thread->id]);
-
-        $event->update(['status' => OutboxEvent::FAILED, 'failed_at' => now(), 'last_error' => 'Safe failure']);
-        $adminHtml = $this->actingAs($this->admin)->get(route('admin.notifications.index'))->assertOk()->getContent();
-        self::assertStringContainsString('s***@e***', $adminHtml);
-        self::assertStringNotContainsString('secret@example.test', $adminHtml);
-        $this->actingAs($this->operator)->post(route('admin.notifications.retry', $event))->assertForbidden();
-        config(['buyback.customer_email_enabled' => false]);
-        $this->actingAs($this->admin)->post(route('admin.notifications.retry', $event))->assertRedirect();
-        self::assertSame(OutboxEvent::FAILED, $event->fresh()->status);
-        config(['buyback.customer_email_enabled' => true]);
-        $this->actingAs($this->admin)->post(route('admin.notifications.retry', $event))->assertRedirect();
-        self::assertSame(OutboxEvent::PENDING, $event->fresh()->status);
-        $this->assertDatabaseHas('audit_log', ['action' => 'BUYBACK_CUSTOMER_NOTIFICATION_MANUAL_RETRY', 'subject_id' => $thread->id]);
     }
 
     public function test_buyback_worker_does_not_steal_fresh_lock_and_recovers_with_sanitized_retry(): void
@@ -389,7 +397,16 @@ class BuybackWorkflowTest extends TestCase
         self::assertSame(1, $event->attempts);
         self::assertStringNotContainsString('SECRET', $event->last_error);
         self::assertStringNotContainsString('customer@example.test', $event->last_error);
-        self::assertSame(BuybackState::OFFER_SENT->value, $thread->fresh()->state);
+        self::assertSame(BuybackState::CUSTOMER_OFFER_READY->value, $thread->fresh()->state);
+        self::assertSame(0, $thread->events()->where('action', BuybackAction::DELIVER_CUSTOMER_OFFER->value)->count());
+
+        $event->update(['next_attempt_at' => now()->subMinute(), 'available_at' => now()->subMinute()]);
+        config(['discussion_notifications.max_attempts' => 2]);
+        Mail::shouldReceive('to')->once()->andThrow(new \RuntimeException('SMTP rejected the message.'));
+        self::assertSame(1, app(DiscussionNotificationDispatcher::class)->dispatch(1)['failed']);
+        self::assertSame(OutboxEvent::FAILED, $event->fresh()->status);
+        self::assertSame(BuybackState::CUSTOMER_OFFER_READY->value, $thread->fresh()->state);
+        self::assertSame(0, $thread->events()->where('action', BuybackAction::DELIVER_CUSTOMER_OFFER->value)->count());
 
     }
 
@@ -429,6 +446,10 @@ class BuybackWorkflowTest extends TestCase
         $this->act($thread, BuybackAction::APPROVE_FINAL_PRICE, $this->admin, 'finish-final-'.$thread->id, ['amount_minor' => 7000, 'currency' => 'CZK']);
         $this->act($thread, BuybackAction::CONFIRM_CUSTOMER_OFFER, $this->admin, 'finish-confirm-'.$thread->id);
         $this->act($thread, BuybackAction::QUEUE_CUSTOMER_OFFER, $this->admin, 'finish-queue-'.$thread->id);
+        Mail::fake();
+        config(['buyback.customer_email_enabled' => true]);
+        self::assertSame(1, app(DiscussionNotificationDispatcher::class)->dispatch(1)['sent']);
+        config(['buyback.customer_email_enabled' => false]);
         $this->act($thread, BuybackAction::RECORD_CUSTOMER_ACCEPTANCE, $this->operator, 'finish-accept-'.$thread->id);
         $this->act($thread, BuybackAction::RECEIVE_ITEM_AK, $this->operator, 'finish-receive-'.$thread->id);
         $this->act($thread, BuybackAction::CHECK_ITEM_AK, $this->operator, 'finish-check-'.$thread->id);

@@ -17,7 +17,7 @@ final class BuybackStateMachine
             [BuybackState::PL_OFFERED, BuybackAction::REQUEST_FINAL_PRICE] => BuybackState::WAITING_FOR_FINAL_PRICE,
             [BuybackState::WAITING_FOR_FINAL_PRICE, BuybackAction::APPROVE_FINAL_PRICE] => BuybackState::FINAL_PRICE_APPROVED,
             [BuybackState::FINAL_PRICE_APPROVED, BuybackAction::CONFIRM_CUSTOMER_OFFER] => BuybackState::CUSTOMER_OFFER_READY,
-            [BuybackState::CUSTOMER_OFFER_READY, BuybackAction::QUEUE_CUSTOMER_OFFER] => BuybackState::OFFER_SENT,
+            [BuybackState::CUSTOMER_OFFER_READY, BuybackAction::QUEUE_CUSTOMER_OFFER] => BuybackState::CUSTOMER_OFFER_READY,
             [BuybackState::OFFER_SENT, BuybackAction::RECORD_CUSTOMER_ACCEPTANCE] => BuybackState::CUSTOMER_ACCEPTED,
             [BuybackState::CUSTOMER_ACCEPTED, BuybackAction::RECEIVE_ITEM_AK] => BuybackState::ITEM_RECEIVED_AK,
             [BuybackState::ITEM_RECEIVED_AK, BuybackAction::CHECK_ITEM_AK] => BuybackState::ITEM_CHECKED_AK,

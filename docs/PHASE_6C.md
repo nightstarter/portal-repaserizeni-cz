@@ -33,9 +33,9 @@ Opakovaná polská nabídka ponechá stav `PL_OFFERED`, ale přidá další verz
 
 ## Outbox
 
-`QUEUE_BUYBACK_CUSTOMER_OFFER` vytvoří v téže transakci idempotentní event `BUYBACK_CUSTOMER_OFFER_EMAIL` ve stávajících `outbox_events`. Payload obsahuje pouze systémové číslo zakázky, nezbytný e-mail příjemce, částku/měnu a ID události; neobsahuje jméno, telefon, adresu, technické interní údaje ani storage path.
+`QUEUE_BUYBACK_CUSTOMER_OFFER` vytvoří v téže transakci idempotentní event `BUYBACK_CUSTOMER_OFFER_EMAIL` ve stávajících `outbox_events`. Payload obsahuje pouze ID doménové události; zákaznický e-mail, systémové číslo i schválená cena se načítají při odeslání z autorizovaných relací. Payload neobsahuje zákaznické PII, cenu, technické interní údaje ani storage path.
 
-`BUYBACK_CUSTOMER_EMAIL_ENABLED=false` je bezpečný výchozí stav. Fáze 6C nepřidává SMTP worker pro tento typ a neposílá skutečný e-mail. Pending event se neztrácí. Přijetí nabídky eviduje AUTOKLUBY ručně až po stavu `OFFER_SENT`; není vytvořen veřejný zákaznický odkaz.
+`BUYBACK_CUSTOMER_EMAIL_ENABLED=false` je bezpečný výchozí stav. Fáze 6C nepřidává SMTP worker pro tento typ a neposílá skutečný e-mail. Pending event se neztrácí a větev zůstává v `CUSTOMER_OFFER_READY`. Přijetí nabídky eviduje AUTOKLUBY ručně až po skutečném úspěšném odeslání a stavu `OFFER_SENT`; není vytvořen veřejný zákaznický odkaz.
 
 ## Zásilky
 

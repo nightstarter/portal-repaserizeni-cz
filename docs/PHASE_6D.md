@@ -31,9 +31,9 @@ Formuláře používají CSRF, idempotency key, `lock_version` a klientské zabr
 
 Stávající `php artisan notifications:dispatch --limit=50` nyní zpracuje také `BUYBACK_CUSTOMER_OFFER_EMAIL`. Nevznikl druhý worker ani cron. Používá stejné atomické claimy, lock token, ochranu souběhu, obnovu opuštěného locku, exponenciální retry, limit pokusů, sanitizaci chyb a audit jako diskusní notifikace.
 
-Před odesláním znovu ověří stav `BUYBACK_OFFER_SENT`, ručně schválenou finální cenu, oprávnění schvalujícího a validní zákaznický e-mail. E-mail je česky, obsahuje pouze systémové číslo, finální cenu/měnu a kontaktní instrukci. Neobsahuje polskou nabídku, interní poznámky, přílohy, token ani veřejný potvrzovací odkaz.
+Před odesláním znovu ověří stav `BUYBACK_CUSTOMER_OFFER_READY`, ručně schválenou finální cenu, oprávnění schvalujícího a validní zákaznický e-mail. E-mail je česky, obsahuje pouze systémové číslo, finální cenu/měnu a kontaktní instrukci. Neobsahuje polskou nabídku, interní poznámky, přílohy, token ani veřejný potvrzovací odkaz.
 
-Při `BUYBACK_CUSTOMER_EMAIL_ENABLED=false` se typ neclaimuje, SMTP se nekontaktuje a pending event zůstane zachován. `/admin/notifications` rozlišuje oba typy, maskuje příjemce, ukazuje oddělený feature-flag stav a dovolí auditovaný retry pouze `AK_ADMIN`; retry výkupu neobejde vypnutý flag ani chybějící schválení.
+Při `BUYBACK_CUSTOMER_EMAIL_ENABLED=false` se typ neclaimuje, SMTP se nekontaktuje, pending event zůstane zachován a workflow zůstává v `CUSTOMER_OFFER_READY`. Stav `OFFER_SENT` spolu se systémovou auditní událostí vznikne atomicky s označením outboxu jako `sent` až poté, co mail transport úspěšně přijme zprávu. `/admin/notifications` rozlišuje oba typy, maskuje příjemce, ukazuje oddělený feature-flag stav a dovolí auditovaný retry pouze `AK_ADMIN`; retry výkupu neobejde vypnutý flag ani chybějící schválení.
 
 ## Výkup Polskem, doklady a finance
 

@@ -10,6 +10,7 @@ use App\Enums\BuybackAction;
 use App\Enums\BuybackPriceType;
 use App\Enums\BuybackState;
 use App\Enums\Permission;
+use App\Enums\ResponsibleParty;
 use App\Mail\BuybackCustomerOfferMail;
 use App\Mail\DiscussionMessageNotificationMail;
 use App\Models\OutboxEvent;
@@ -107,29 +108,66 @@ final class DiscussionNotificationDispatcher
     private function markSent(OutboxEvent $event): void
     {
         DB::transaction(function () use ($event): void {
-            $updated = OutboxEvent::query()
+            $lockedEvent = OutboxEvent::query()
                 ->whereKey($event->id)
                 ->where('status', OutboxEvent::PROCESSING)
                 ->where('lock_token', $event->lock_token)
-                ->update([
-                    'status' => OutboxEvent::SENT,
-                    'processed_at' => now(),
-                    'sent_at' => now(),
-                    'failed_at' => null,
-                    'next_attempt_at' => null,
-                    'locked_at' => null,
-                    'lock_token' => null,
-                    'last_error' => null,
-                    'updated_at' => now(),
-                ]);
-            if ($updated === 1) {
-                $this->auditLogger->record($event->event_type === MessagePosted::TYPE ? 'DISCUSSION_NOTIFICATION_SENT' : 'BUYBACK_CUSTOMER_NOTIFICATION_SENT', $this->subject($event), [], [
-                    'outbox_event_id' => $event->id,
-                    'recipient_user_id' => $event->recipient_user_id,
-                    'attempts' => $event->attempts,
-                ]);
+                ->lockForUpdate()
+                ->first();
+            if ($lockedEvent === null) {
+                return;
             }
+
+            $subject = $event->event_type === MessagePosted::TYPE
+                ? $event->message
+                : $this->markBuybackOfferDelivered($lockedEvent);
+            $lockedEvent->forceFill([
+                'status' => OutboxEvent::SENT,
+                'processed_at' => now(),
+                'sent_at' => now(),
+                'failed_at' => null,
+                'next_attempt_at' => null,
+                'locked_at' => null,
+                'lock_token' => null,
+                'last_error' => null,
+            ])->save();
+            $this->auditLogger->record($event->event_type === MessagePosted::TYPE ? 'DISCUSSION_NOTIFICATION_SENT' : 'BUYBACK_CUSTOMER_NOTIFICATION_SENT', $subject, [], [
+                'outbox_event_id' => $event->id,
+                'recipient_user_id' => $event->recipient_user_id,
+                'attempts' => $event->attempts,
+            ]);
         }, 3);
+    }
+
+    private function markBuybackOfferDelivered(OutboxEvent $event): ProcessThread
+    {
+        $thread = ProcessThread::query()->whereKey($event->aggregate_id)->lockForUpdate()->firstOrFail();
+        $idempotencyKey = 'buyback-email-delivered:'.$event->id;
+        if ($thread->events()->where('idempotency_key', $idempotencyKey)->exists()) {
+            return $thread;
+        }
+        if (BuybackState::from($thread->state) !== BuybackState::CUSTOMER_OFFER_READY) {
+            throw new \LogicException('Buyback customer offer is not ready for delivery completion.');
+        }
+
+        $thread->forceFill([
+            'state' => BuybackState::OFFER_SENT->value,
+            'responsible_party' => ResponsibleParty::CUSTOMER->value,
+            'responsible_organization_id' => null,
+            'lock_version' => $thread->lock_version + 1,
+        ])->save();
+        $thread->events()->create([
+            'order_id' => $thread->order_id,
+            'action' => BuybackAction::DELIVER_CUSTOMER_OFFER->value,
+            'idempotency_key' => $idempotencyKey,
+            'request_hash' => hash('sha256', $event->event_uuid),
+            'from_state' => BuybackState::CUSTOMER_OFFER_READY->value,
+            'to_state' => BuybackState::OFFER_SENT->value,
+            'actor_type' => 'SYSTEM',
+            'metadata' => ['outbox_event_id' => $event->id],
+        ]);
+
+        return $thread->fresh();
     }
 
     private function scheduleRetry(OutboxEvent $event): void
@@ -215,7 +253,7 @@ final class DiscussionNotificationDispatcher
         $approval = $thread?->events->where('action', BuybackAction::APPROVE_FINAL_PRICE->value)->sortByDesc('id')->first();
         $final = $thread?->buybackPriceQuotes->where('type', BuybackPriceType::FINAL_CUSTOMER)->sortByDesc('version')->first();
         $email = $thread?->order?->customer?->email;
-        if ($thread === null || BuybackState::from($thread->state) !== BuybackState::OFFER_SENT
+        if ($thread === null || BuybackState::from($thread->state) !== BuybackState::CUSTOMER_OFFER_READY
             || $approval?->actorUser === null
             || ! $approval->actorUser->hasPermission(Permission::BUYBACK_FINAL_PRICE_APPROVE)
             || $final === null || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
