@@ -72,7 +72,7 @@ Lokální `flock` zabrání dvěma instancím `sync:once`. Log rotuje podle veli
 
 ```text
 Program:   C:\wamp64\bin\php\php7.4.33\php.exe
-Arguments: C:\Services\portal-repase-bridge\bin\bridge.php sync:once
+Arguments: -d xdebug.mode=off C:\Services\portal-repase-bridge\bin\bridge.php sync:once
 Start in:  C:\Services\portal-repase-bridge
 ```
 

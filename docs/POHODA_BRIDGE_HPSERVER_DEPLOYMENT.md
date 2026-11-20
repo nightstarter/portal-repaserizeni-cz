@@ -34,7 +34,7 @@ Tento dokument je runbook pro pozdější kontrolované nasazení. Fáze 7B žá
 
 ```text
 Program:   C:\wamp64\bin\php\php7.4.33\php.exe
-Arguments: C:\Services\portal-repase-bridge\bin\bridge.php sync:once
+Arguments: -d xdebug.mode=off C:\Services\portal-repase-bridge\bin\bridge.php sync:once
 Start in:  C:\Services\portal-repase-bridge
 Repeat:    every 5 minutes
 Policy:    do not start a new instance if one is running
