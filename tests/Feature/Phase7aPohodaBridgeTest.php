@@ -483,11 +483,14 @@ class Phase7aPohodaBridgeTest extends TestCase
         self::assertSame(1, StockSnapshotConfirmation::query()->count());
         self::assertSame($itemCount, StockSnapshotItem::query()->count());
         self::assertSame(StockAvailabilityStatus::AVAILABLE_IN_AK, app(ResolvesStockAvailability::class)->resolve($order)->status);
+        config(['integrations.pohoda_bridge.allowed_command_types' => []]);
         $html = $this->actingAs($this->admin)->get(route('admin.integrations.pohoda'))->assertOk()->getContent();
         self::assertStringContainsString('Poslední potvrzení beze změny', $html);
         self::assertStringContainsString(substr($fingerprint, 0, 12).'…', $html);
-        self::assertStringContainsString('Plné snapshoty za 24 hodin: 1', $html);
+        self::assertStringContainsString('Plné přenosy za 24 hodin: 1', $html);
         self::assertStringContainsString('Potvrzení za 24 hodin: 1', $html);
+        self::assertStringContainsString('Poslední použitelný snapshot', $html);
+        self::assertStringContainsString('Produkční command whitelist: prázdný', $html);
 
         Carbon::setTestNow('2026-11-20 16:00:01 UTC');
         self::assertSame(StockAvailabilityStatus::STALE, app(ResolvesStockAvailability::class)->resolve($order)->status);
@@ -565,6 +568,80 @@ class Phase7aPohodaBridgeTest extends TestCase
         self::assertSame(BridgeCommand::PENDING, $command->fresh()->status);
         self::assertArrayNotHasKey('pohoda', config('database.connections'));
         self::assertStringNotContainsString('repric', strtolower(file_get_contents(base_path('routes/api.php'))));
+    }
+
+    public function test_capacity_for_2484_rows_five_chunks_and_288_daily_confirmations_is_bounded(): void
+    {
+        Carbon::setTestNow('2026-11-20 23:55:00 UTC');
+        $items = [];
+        for ($index = 1; $index <= 2482; $index++) {
+            $items[] = [
+                'product_reference' => 'RRCAP'.str_pad((string) $index, 4, '0', STR_PAD_LEFT),
+                'available_quantity' => $index % 3,
+                'reserved_quantity' => $index % 2,
+                'source_row_version' => 'capacity-'.$index,
+            ];
+        }
+        $items[] = ['product_reference' => 'RRCAP0001', 'available_quantity' => 1, 'reserved_quantity' => 0, 'source_row_version' => 'duplicate-1'];
+        $items[] = ['product_reference' => 'RRCAP0002', 'available_quantity' => 1, 'reserved_quantity' => 0, 'source_row_version' => 'duplicate-2'];
+        $chunks = array_chunk($items, 500);
+        self::assertCount(5, $chunks);
+        $runId = (string) Str::uuid();
+        $fingerprint = hash('sha256', 'capacity-2484');
+        $sourceAt = now()->utc()->format('Y-m-d\TH:i:s\Z');
+        foreach ($chunks as $index => $chunk) {
+            $payload = $this->snapshot($chunk, [
+                'snapshot_run_id' => $runId,
+                'chunk_index' => $index,
+                'chunk_count' => 5,
+                'final_chunk' => $index === 4,
+                'dataset_fingerprint' => $fingerprint,
+                'source_generated_at' => $sourceAt,
+            ]);
+            $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($payload, JSON_THROW_ON_ERROR))->assertAccepted();
+        }
+        $run = StockSnapshotRun::query()->where('run_id', $runId)->firstOrFail();
+        self::assertSame(StockSnapshotRun::PARTIAL, $run->status);
+        self::assertSame(2482, $run->accepted_count);
+        self::assertSame(2, $run->rejected_count);
+        self::assertSame(2484, StockSnapshotItem::query()->count());
+
+        $confirmation = $this->confirmation($runId, $fingerprint);
+        $this->signed('POST', '/api/internal/v1/stock-snapshots/confirm-unchanged', json_encode($confirmation, JSON_THROW_ON_ERROR))->assertAccepted();
+        self::assertSame(2484, StockSnapshotItem::query()->count());
+        self::assertSame(1, StockSnapshotRun::query()->count());
+
+        $rows = [];
+        for ($index = 1; $index < 288; $index++) {
+            $receivedAt = now()->subMinutes($index * 5);
+            $rows[] = [
+                'confirmation_id' => (string) Str::uuid(),
+                'stock_snapshot_run_id' => $run->id,
+                'key_id' => 'current-test-key',
+                'warehouse_code' => 'DECIN',
+                'dataset_fingerprint' => $fingerprint,
+                'source_generated_at' => $receivedAt,
+                'received_at' => $receivedAt,
+                'created_at' => $receivedAt,
+                'updated_at' => $receivedAt,
+            ];
+        }
+        foreach (array_chunk($rows, 100) as $chunk) {
+            StockSnapshotConfirmation::query()->insert($chunk);
+        }
+        self::assertSame(288, StockSnapshotConfirmation::query()->count());
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $html = $this->actingAs($this->admin)->get(route('admin.integrations.pohoda'))->assertOk()->getContent();
+        $queries = count(DB::getQueryLog());
+        DB::disableQueryLog();
+        self::assertLessThanOrEqual(15, $queries);
+        self::assertStringContainsString('Potvrzení za 24 hodin: 288', $html);
+        self::assertStringContainsString('Nenamapované: 2482', $html);
+        self::assertStringContainsString('Odmítnuté položky: 2', $html);
+        self::assertStringContainsString('DUPLICATE_PRODUCT_REFERENCE: 2', $html);
+        self::assertStringContainsString('receiving: 0 · failed: 0', $html);
     }
 
     private function signed(

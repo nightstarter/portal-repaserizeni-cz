@@ -18,7 +18,6 @@ class PohodaIntegrationController extends Controller
             && $request->user()->organization->code->value === 'AUTOKLUBY', 404);
         $heartbeat = BridgeHeartbeat::query()->latest('occurred_at')->first();
         $complete = StockSnapshotRun::query()->where('status', StockSnapshotRun::COMPLETE)->latest('source_generated_at')->first();
-        $partial = StockSnapshotRun::query()->where('status', StockSnapshotRun::PARTIAL)->latest('source_generated_at')->first();
         $latest = StockSnapshotRun::query()->whereIn('status', [StockSnapshotRun::COMPLETE, StockSnapshotRun::PARTIAL])
             ->latest('source_generated_at')->first();
         $latestConfirmation = $latest === null ? null : StockSnapshotConfirmation::query()
@@ -26,9 +25,10 @@ class PohodaIntegrationController extends Controller
         $verifiedAt = $latestConfirmation?->received_at ?? $latest?->completed_at ?? $latest?->source_generated_at;
         $staleMinutes = max(1, (int) config('integrations.pohoda_bridge.stale_minutes', 30));
         $stale = $verifiedAt === null || $verifiedAt->lt(now()->subMinutes($staleMinutes));
-        $fullSnapshots24h = StockSnapshotRun::query()->whereIn('status', [StockSnapshotRun::COMPLETE, StockSnapshotRun::PARTIAL])
+        $fullTransfers24h = StockSnapshotRun::query()->whereIn('status', [StockSnapshotRun::COMPLETE, StockSnapshotRun::PARTIAL])
             ->where('completed_at', '>=', now()->subDay())->count();
         $confirmations24h = StockSnapshotConfirmation::query()->where('received_at', '>=', now()->subDay())->count();
+        $commandWhitelist = array_values((array) config('integrations.pohoda_bridge.allowed_command_types', []));
         $runCounts = StockSnapshotRun::query()->selectRaw('status, COUNT(*) total')->groupBy('status')->pluck('total', 'status');
         $counts = BridgeCommand::query()->selectRaw('status, COUNT(*) total')->groupBy('status')->pluck('total', 'status');
         $latestItemCounts = ['mapped' => 0, 'unmapped' => 0, 'rejected' => 0];
@@ -54,8 +54,9 @@ class PohodaIntegrationController extends Controller
         }
 
         return view('admin.integrations.pohoda', compact(
-            'heartbeat', 'complete', 'partial', 'latest', 'stale', 'staleMinutes', 'counts', 'runCounts',
-            'latestItemCounts', 'rejectionCodes', 'latestConfirmation', 'verifiedAt', 'fullSnapshots24h', 'confirmations24h',
+            'heartbeat', 'complete', 'latest', 'stale', 'staleMinutes', 'counts', 'runCounts',
+            'latestItemCounts', 'rejectionCodes', 'latestConfirmation', 'verifiedAt', 'fullTransfers24h', 'confirmations24h',
+            'commandWhitelist',
         ));
     }
 }
