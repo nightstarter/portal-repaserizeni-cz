@@ -370,3 +370,10 @@
 - Stav: přijato pro opravu Fáze 8B
 - Rozhodnutí: `backup:create` v produkci automaticky aktivuje Laravel maintenance, vyčká konfigurovaný drain interval a v sourozeneckém privátním stagingu vytvoří transakční MariaDB dump, TAR private storage a sanitizovaná metadata. Všechny části se nejprve ověří proti neveřejnému nekompletnímu manifestu; COMPLETE manifest se zapíše atomicky až poté, celý staging znovu projde stejným verifierem a finální adresář vznikne až rename ověřeného stagingu.
 - Dopad: DB heslo je pouze v dočasném mode-0600 option file a není v argv. Chyba nikdy nezveřejní COMPLETE cíl a uklidí jen vlastní staging. Maintenance se ve `finally` vrací do původního stavu. Externí CLI writery musí provozovatel během okna vyloučit; příkaz nemění cron ani Task Scheduler.
+
+## D-054: Dump chyby mají bezpečnou klasifikaci a logical objects se zálohují podmíněně
+
+- Datum: 2026-11-21
+- Stav: přijato pro opravu Fáze 8B
+- Rozhodnutí: `backup:create` nezveřejňuje raw stderr, přihlašovací údaje, host ani DSN, ale vrací stabilní bezpečný kód, fázi a exit code dump klienta. `backup:diagnose` provádí pouze schema-only probe ve vlastním dočasném sandboxu. Přepínače pro triggery, routines a events se použijí jen tehdy, pokud odpovídající objekty v portálové DB existují; existující objekt se nikdy potichu nevynechá.
+- Dopad: `--defaults-extra-file` je první volba klienta, heslo zůstává v dočasném souboru s mode 0600 a stdout se streamuje do chráněného `database.sql`. Základní dump používá `--single-transaction`, `--quick`, `--skip-lock-tables` a MariaDB-kompatibilní `--no-tablespaces`. Nedostatečné oprávnění pro skutečně existující logical objects je bezpečný `ERROR`, nikoli důvod automaticky rozšířit práva aplikačního účtu.

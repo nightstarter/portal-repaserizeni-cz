@@ -4,15 +4,17 @@ Tento postup je výhradně pro izolovaný test nebo disaster-recovery náhradu. 
 
 ## Příprava
 
-1. Vyhlaste krátké maintenance okno, ověřte nepřítomnost externích zápisových CLI procesů a spusťte `php8.5 artisan backup:create --target=/absolute/new-backup --json`. Zaznamenejte začátek/konec, backup ID a exit code. Příkaz sám vrátí aplikaci z Laravel maintenance i při chybě.
-2. Na webserveru spusťte `php8.5 artisan backup:verify /absolute/new-backup --json`. Nenulový exit zastavuje postup.
-3. Přeneste kompletní adresář šifrovaným kanálem na úložiště mimo webserver s oddělenými credentials.
-4. Na off-server kopii znovu spusťte kompatibilní `backup:verify`; nekopírujte jen manifest.
-5. Získejte oddělené secret escrow pouze pro izolovanou obnovu; klíč držte mimo balíček.
-6. Zaznamenejte incident/change ID, osoby a začátek restore měření.
-7. Připravte nový izolovaný host/namespace, `APP_ENV=restore-test`, nový prázdný DB název, jiný účet a nový prázdný storage adresář mimo produkční storage.
-8. Nastavte `BACKUP_PRODUCTION_DB_HOST/PORT/DATABASE` na identitu produkce, aby guard mohl odmítnout shodu. Použijte oddělenou config cache; nekopírujte produkční cache.
-9. Ověřte `LEGACY_SHOP_IMPORT_ENABLED=false`, `DISCUSSION_EMAIL_ENABLED=false`, `BUYBACK_CUSTOMER_EMAIL_ENABLED=false`, `POHODA_BRIDGE_ENABLED=false`, prázdný command whitelist a `PRODUCT_REPRICING=DEFERRED_EXTERNAL_SYSTEM`. Neinstalujte cron ani Task Scheduler.
+1. Mimo maintenance okno spusťte read-only `php8.5 artisan backup:diagnose --json`. Vyžadujte exit `0` a `schema_only_probe=OK`; při chybě nic neopravujte automaticky a nepřidávejte DB granty bez schválení DBA.
+2. Vyhlaste krátké maintenance okno, ověřte nepřítomnost externích zápisových CLI procesů a spusťte právě jeden `php8.5 artisan backup:create --target=/absolute/new-backup --json`. Cíl musí být nový. Zaznamenejte začátek/konec, backup ID nebo bezpečný error code a exit code. Příkaz sám vrátí aplikaci z Laravel maintenance i při chybě.
+3. Při nenulovém exit další create neopakujte. Kód `DUMP_*`, fáze, dump exit code a doporučení jsou bezpečné pro incident evidenci; raw stderr, command line, host, username, DSN a credentials se neevidují. `DUMP_PERMISSION_DENIED` se řeší jen minimálním DBA-schváleným oprávněním a pouze pokud diagnostika prokáže existující logical objekty.
+4. Na webserveru spusťte `php8.5 artisan backup:verify /absolute/new-backup --json`. Nenulový exit zastavuje postup.
+5. Přeneste kompletní adresář šifrovaným kanálem na úložiště mimo webserver s oddělenými credentials.
+6. Na off-server kopii znovu spusťte kompatibilní `backup:verify`; nekopírujte jen manifest.
+7. Získejte oddělené secret escrow pouze pro izolovanou obnovu; klíč držte mimo balíček.
+8. Zaznamenejte incident/change ID, osoby a začátek restore měření.
+9. Připravte nový izolovaný host/namespace, `APP_ENV=restore-test`, nový prázdný DB název, jiný účet a nový prázdný storage adresář mimo produkční storage.
+10. Nastavte `BACKUP_PRODUCTION_DB_HOST/PORT/DATABASE` na identitu produkce, aby guard mohl odmítnout shodu. Použijte oddělenou config cache; nekopírujte produkční cache.
+11. Ověřte `LEGACY_SHOP_IMPORT_ENABLED=false`, `DISCUSSION_EMAIL_ENABLED=false`, `BUYBACK_CUSTOMER_EMAIL_ENABLED=false`, `POHODA_BRIDGE_ENABLED=false`, prázdný command whitelist a `PRODUCT_REPRICING=DEFERRED_EXTERNAL_SYSTEM`. Neinstalujte cron ani Task Scheduler.
 
 ## Obnova a kontrola
 
