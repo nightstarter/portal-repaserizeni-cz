@@ -2,6 +2,7 @@
 
 namespace Tests\Support;
 
+use App\Backup\Contracts\PrivateStorageArchiver;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
@@ -22,46 +23,61 @@ final class BackupFixture
             throw new RuntimeException('Unable to create backup fixture.');
         }
         file_put_contents($root.'/database.sql', '-- isolated fixture, not a production dump');
-        file_put_contents($root.'/operations.age', 'externally encrypted fixture placeholder');
-
-        $parts = [
-            self::part($root, 'database.sql', 'database-dump'),
-            self::part($root, 'operations.age', 'operations-config') + ['encrypted' => true],
-        ];
+        $source = $root.'/.private-source';
+        mkdir($source, 0700);
         foreach ($privateFiles as $sourcePath => $contents) {
-            $path = 'private/'.hash('sha256', $sourcePath).'.bin';
-            if (! is_dir(dirname($root.'/'.$path))) {
-                mkdir(dirname($root.'/'.$path), 0700, true);
+            $path = $source.'/'.$sourcePath;
+            if (! is_dir(dirname($path))) {
+                mkdir(dirname($path), 0700, true);
             }
-            file_put_contents($root.'/'.$path, $contents);
-            chmod($root.'/'.$path, 0600);
-            $parts[] = self::part($root, $path, 'private-file') + ['source_path' => $sourcePath, 'mode' => '0600'];
+            file_put_contents($path, $contents);
+            chmod($path, 0600);
         }
+        $entries = app(PrivateStorageArchiver::class)->archive($source, $root.'/private-storage.tar');
+        File::deleteDirectory($source);
 
         $migrations = DB::table('migrations')->orderBy('migration')->pluck('migration')->all();
         $counts = [];
         foreach ((array) config('backups.critical_tables') as $table) {
             $counts[$table] = DB::table($table)->count();
         }
+        $backupId = 'fixture-'.Str::uuid();
+        $createdAt = now()->utc()->format('Y-m-d\TH:i:s\Z');
+        $gitCommit = str_repeat('a', 40);
+        $schema = ['migrations' => $migrations, 'fingerprint' => hash('sha256', json_encode($migrations))];
+        $metadata = [
+            'backup_id' => $backupId, 'created_at_utc' => $createdAt, 'git_commit' => $gitCommit,
+            'runtime' => ['portal_php' => '8.5', 'mariadb' => 'fixture', 'connector_php' => '7.4.33', 'connector_os' => 'Windows Server 2012 R2'],
+            'schema' => $schema, 'critical_counts' => $counts, 'private_file_count' => count($entries),
+        ];
+        file_put_contents($root.'/metadata.json', json_encode($metadata, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        chmod($root.'/metadata.json', 0600);
+        $parts = [
+            self::part($root, 'database.sql', 'database-dump'),
+            self::part($root, 'private-storage.tar', 'private-archive') + ['entries' => $entries],
+            self::part($root, 'metadata.json', 'metadata'),
+        ];
         $manifest = [
             'format_version' => 1,
-            'backup_id' => 'fixture-'.Str::uuid(),
-            'created_at_utc' => now()->utc()->format('Y-m-d\TH:i:s\Z'),
+            'backup_id' => $backupId,
+            'created_at_utc' => $createdAt,
             'environment' => 'production',
             'status' => 'COMPLETE',
-            'git_commit' => str_repeat('a', 40),
-            'schema' => ['migrations' => $migrations, 'fingerprint' => hash('sha256', json_encode($migrations))],
+            'git_commit' => $gitCommit,
+            'schema' => $schema,
             'database' => [
                 'engine' => 'mariadb', 'version' => 'fixture',
                 'source_identity_sha256' => hash('sha256', 'production-source-fixture'),
                 'critical_counts' => $counts,
             ],
-            'components' => array_fill_keys([
-                'database', 'private_storage', 'apache_php_configuration', 'webserver_cron_export',
-                'windows_task_scheduler_export', 'connector_config_state', 'deployed_revision',
-                'runtime_versions', 'protected_secret_escrow',
-            ], true),
-            'runtime' => ['portal_php' => '8.5', 'connector_php' => '7.4.33', 'connector_os' => 'Windows Server 2012 R2'],
+            'components' => [
+                'database' => true, 'private_storage' => true, 'schema_metadata' => true,
+                'deployed_revision' => true, 'runtime_versions' => true,
+                'apache_php_configuration' => false, 'webserver_cron_export' => false,
+                'windows_task_scheduler_export' => false, 'connector_config_state' => false,
+                'protected_secret_escrow' => false,
+            ],
+            'runtime' => $metadata['runtime'],
             'parts' => $parts,
             'off_server' => ['confirmed' => false, 'confirmed_at_utc' => null],
             'restore_test' => ['status' => 'NOT_RUN', 'completed_at_utc' => null],

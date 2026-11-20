@@ -17,9 +17,12 @@ final class BackupPlan extends Command
             'writes_data' => false,
             'format_version' => (int) config('backups.format_version'),
             'included' => [
-                'portal_mariadb', 'private_storage', 'protected_secret_escrow', 'apache_php_configuration',
-                'webserver_cron_export', 'windows_task_scheduler_export', 'connector_protected_config_and_state',
-                'deployed_git_revision', 'runtime_versions',
+                'portal_mariadb', 'private_storage_archive', 'schema_and_row_counts',
+                'deployed_git_revision', 'runtime_versions', 'sha256_manifest',
+            ],
+            'separate_protected_escrow' => [
+                'env_and_app_key', 'apache_php_configuration', 'webserver_cron_export',
+                'windows_task_scheduler_export', 'connector_protected_config_and_state',
             ],
             'excluded' => ['vendor', 'cache', 'sessions', 'temporary_files', 'test_artifacts', 'routine_logs', 'connector_spool'],
             'rules' => [

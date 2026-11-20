@@ -6,6 +6,27 @@ use RuntimeException;
 
 final class BackupPathGuard
 {
+    public function newBackupTarget(string $path): string
+    {
+        if (! $this->absolute($path) || $path === DIRECTORY_SEPARATOR || file_exists($path) || is_link($path)) {
+            throw new RuntimeException('Backup target must be a new absolute non-root path.');
+        }
+        $inputParent = rtrim(dirname($path), DIRECTORY_SEPARATOR);
+        $parent = realpath($inputParent);
+        if ($parent === false || ! is_dir($parent) || is_link($inputParent) || $parent !== $inputParent
+            || in_array(basename($path), ['.', '..'], true)) {
+            throw new RuntimeException('Backup target parent must be a canonical non-symlink directory.');
+        }
+        if ($parent === realpath(sys_get_temp_dir())
+            && preg_match('/\Aportal-backup-[A-Za-z0-9._-]{8,}\z/', basename($path)) !== 1) {
+            throw new RuntimeException('A backup under the system temporary directory requires a unique portal-backup-* subdirectory.');
+        }
+        $candidate = $parent.DIRECTORY_SEPARATOR.basename($path);
+        $this->rejectProtected($candidate);
+
+        return $candidate;
+    }
+
     public function existingBackup(string $path): string
     {
         if (! $this->absolute($path) || is_link($path)) {

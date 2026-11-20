@@ -5,6 +5,7 @@ namespace App\Backup;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
+use PharData;
 use RuntimeException;
 use Throwable;
 
@@ -33,6 +34,7 @@ final class RestoreCheckService
         $copied = [];
         $createdDirectories = [];
         try {
+            $this->extractPrivateArchive($verification->manifest, $verification->root, $targetState['path'], $copied, $createdDirectories);
             $this->copyPrivateParts($verification->manifest, $verification->root, $targetState['path'], $copied, $createdDirectories);
             $checks = $this->verifyDatabaseAndStorage($verification->manifest, $targetState['path'], $copied);
 
@@ -47,6 +49,42 @@ final class RestoreCheckService
         } catch (Throwable $exception) {
             $this->cleanupOwnFiles($targetState['path'], $targetState['created'], $copied, $createdDirectories);
             throw $exception;
+        }
+    }
+
+    private function extractPrivateArchive(array $manifest, string $backupRoot, string $target, array &$copied, array &$createdDirectories): void
+    {
+        $part = collect($manifest['parts'])->firstWhere('kind', 'private-archive');
+        if (! is_array($part)) {
+            return;
+        }
+        $entries = $part['entries'] ?? [];
+        foreach ($entries as $entry) {
+            $path = $target.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $entry['path']);
+            $copied[] = $path;
+            $directory = dirname($path);
+            while ($directory !== $target && $this->paths->isWithin($directory, $target)) {
+                $createdDirectories[] = $directory;
+                $directory = dirname($directory);
+            }
+        }
+        try {
+            $archive = new PharData($backupRoot.DIRECTORY_SEPARATOR.$part['path']);
+            if (! $archive->extractTo($target, null, false)) {
+                throw new RuntimeException;
+            }
+        } catch (Throwable) {
+            throw new RuntimeException('Private storage archive extraction failed.');
+        }
+        foreach ($entries as $entry) {
+            $path = $target.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $entry['path']);
+            if (! is_file($path) || ! chmod($path, octdec($entry['mode']))) {
+                throw new RuntimeException('Extracted private file is missing or has invalid permissions.');
+            }
+            $failAfter = $this->isTestingProcess() ? config('backups.testing_fail_after_copied_parts') : null;
+            if (is_numeric($failAfter) && count($copied) >= (int) $failAfter) {
+                throw new RuntimeException('Simulated restore interruption.');
+            }
         }
     }
 

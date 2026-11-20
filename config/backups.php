@@ -2,6 +2,9 @@
 
 return [
     'format_version' => 1,
+    'dump_binary' => env('BACKUP_DUMP_BINARY', 'mariadb-dump'),
+    'dump_timeout_seconds' => (int) env('BACKUP_DUMP_TIMEOUT_SECONDS', 3600),
+    'request_drain_seconds' => (int) env('BACKUP_REQUEST_DRAIN_SECONDS', 10),
     'latest_manifest' => env('BACKUP_LATEST_MANIFEST'),
     'maximum_age_hours' => (int) env('BACKUP_MAX_AGE_HOURS', 26),
     'restore_test_maximum_age_days' => (int) env('BACKUP_RESTORE_TEST_MAX_AGE_DAYS', 100),
@@ -23,4 +26,6 @@ return [
     ],
     // Test-only failure seam; ignored unless the process environment is testing.
     'testing_fail_after_copied_parts' => null,
+    'testing_tamper_after_manifest' => false,
+    'testing_git_commit' => null,
 ];

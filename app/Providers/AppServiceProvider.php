@@ -5,6 +5,12 @@ namespace App\Providers;
 use App\Application\Messages\DiscussionService;
 use App\Application\Orders\InitialProcessThreadFactory;
 use App\Application\Security\DatabaseCommandGuard;
+use App\Backup\Contracts\BackupMaintenance;
+use App\Backup\Contracts\DatabaseDumpRunner;
+use App\Backup\Contracts\PrivateStorageArchiver;
+use App\Backup\LaravelBackupMaintenance;
+use App\Backup\MariaDbDumpRunner;
+use App\Backup\PharPrivateStorageArchiver;
 use App\Contracts\CreatesInitialProcessThreads;
 use App\Contracts\ResolvesStockAvailability;
 use App\Enums\OrganizationCode;
@@ -37,6 +43,9 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        $this->app->bind(DatabaseDumpRunner::class, MariaDbDumpRunner::class);
+        $this->app->bind(PrivateStorageArchiver::class, PharPrivateStorageArchiver::class);
+        $this->app->bind(BackupMaintenance::class, LaravelBackupMaintenance::class);
         $this->app->bind(CreatesInitialProcessThreads::class, InitialProcessThreadFactory::class);
         $this->app->bind(ResolvesStockAvailability::class, PendingStockAvailabilityResolver::class);
         $this->app->bind(LegacyShopMapping::class, fn (): LegacyShopMapping => LegacyShopMapping::fromConfig());

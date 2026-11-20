@@ -3,6 +3,8 @@
 namespace App\Backup;
 
 use DateTimeImmutable;
+use PharData;
+use RecursiveIteratorIterator;
 use Throwable;
 
 final class BackupManifestVerifier
@@ -49,9 +51,13 @@ final class BackupManifestVerifier
                 $errors[] = 'Manifest contains duplicate private restore paths.';
             }
             $kinds = array_column($parts, 'kind');
-            if (! in_array('database-dump', $kinds, true) || ! in_array('operations-config', $kinds, true)) {
-                $errors[] = 'Required database and operations parts are missing.';
+            $newPackage = in_array('private-archive', $kinds, true);
+            if (! in_array('database-dump', $kinds, true)
+                || ($newPackage && (! in_array('metadata', $kinds, true)))
+                || (! $newPackage && ! in_array('operations-config', $kinds, true))) {
+                $errors[] = 'Required backup package parts are missing.';
             }
+            $this->validatePackageContents($root, $parts, $manifest, $errors);
         }
 
         if (($manifest['status'] ?? null) !== 'COMPLETE') {
@@ -111,11 +117,14 @@ final class BackupManifestVerifier
                 break;
             }
         }
-        foreach ([
-            'database', 'private_storage', 'apache_php_configuration', 'webserver_cron_export',
-            'windows_task_scheduler_export', 'connector_config_state', 'deployed_revision',
-            'runtime_versions', 'protected_secret_escrow',
-        ] as $component) {
+        $requiredComponents = array_key_exists('schema_metadata', (array) ($manifest['components'] ?? []))
+            ? ['database', 'private_storage', 'schema_metadata', 'deployed_revision', 'runtime_versions']
+            : [
+                'database', 'private_storage', 'apache_php_configuration', 'webserver_cron_export',
+                'windows_task_scheduler_export', 'connector_config_state', 'deployed_revision',
+                'runtime_versions', 'protected_secret_escrow',
+            ];
+        foreach ($requiredComponents as $component) {
             if (data_get($manifest, 'components.'.$component) !== true) {
                 $errors[] = 'Required backup component confirmations are incomplete.';
                 break;
@@ -129,7 +138,7 @@ final class BackupManifestVerifier
             '' => ['format_version', 'backup_id', 'created_at_utc', 'environment', 'status', 'git_commit', 'schema', 'database', 'components', 'runtime', 'parts', 'off_server', 'restore_test'],
             'schema' => ['migrations', 'fingerprint'],
             'database' => ['engine', 'version', 'source_identity_sha256', 'critical_counts'],
-            'components' => ['database', 'private_storage', 'apache_php_configuration', 'webserver_cron_export', 'windows_task_scheduler_export', 'connector_config_state', 'deployed_revision', 'runtime_versions', 'protected_secret_escrow'],
+            'components' => ['database', 'private_storage', 'schema_metadata', 'apache_php_configuration', 'webserver_cron_export', 'windows_task_scheduler_export', 'connector_config_state', 'deployed_revision', 'runtime_versions', 'protected_secret_escrow'],
             'runtime' => ['portal_php', 'connector_php', 'connector_os', 'mariadb'],
             'off_server' => ['confirmed', 'confirmed_at_utc', 'evidence_id'],
             'restore_test' => ['status', 'completed_at_utc', 'duration_seconds', 'evidence_id'],
@@ -147,7 +156,7 @@ final class BackupManifestVerifier
             $errors[] = 'Manifest contains an unknown critical table count.';
         }
         foreach ((array) ($manifest['parts'] ?? []) as $part) {
-            if (is_array($part) && array_diff(array_keys($part), ['name', 'kind', 'path', 'size', 'sha256', 'source_path', 'mode', 'encrypted']) !== []) {
+            if (is_array($part) && array_diff(array_keys($part), ['name', 'kind', 'path', 'size', 'sha256', 'source_path', 'mode', 'encrypted', 'entries']) !== []) {
                 $errors[] = 'Manifest part contains an unknown metadata field.';
 
                 return;
@@ -193,8 +202,11 @@ final class BackupManifestVerifier
         if (! is_string($part['sha256'] ?? null) || ! hash_equals(strtolower($part['sha256']), $checksum)) {
             $errors[] = "Part {$index} checksum does not match.";
         }
-        if (! in_array($part['kind'] ?? null, ['database-dump', 'private-file', 'operations-config'], true)) {
+        if (! in_array($part['kind'] ?? null, ['database-dump', 'private-file', 'private-archive', 'metadata', 'operations-config'], true)) {
             $errors[] = "Part {$index} kind is invalid.";
+        }
+        if (($part['kind'] ?? null) === 'database-dump' && $size < 1) {
+            $errors[] = "Part {$index} database dump is empty.";
         }
         if (($part['kind'] ?? null) === 'operations-config' && ($part['encrypted'] ?? null) !== true) {
             $errors[] = "Part {$index} operations configuration must be externally encrypted.";
@@ -208,6 +220,99 @@ final class BackupManifestVerifier
             if (! is_string($part['mode'] ?? null) || preg_match('/\A0[0-7]{3}\z/', $part['mode']) !== 1) {
                 $errors[] = "Part {$index} private file mode is invalid.";
             }
+        }
+    }
+
+    private function validatePackageContents(string $root, array $parts, array $manifest, array &$errors): void
+    {
+        $archivePart = collect($parts)->firstWhere('kind', 'private-archive');
+        if (is_array($archivePart)) {
+            $this->validateArchive($root, $archivePart, $errors);
+        }
+        $metadataPart = collect($parts)->firstWhere('kind', 'metadata');
+        if (is_array($metadataPart) && is_string($metadataPart['path'] ?? null)) {
+            try {
+                $metadata = json_decode((string) file_get_contents($root.DIRECTORY_SEPARATOR.$metadataPart['path']), true, flags: JSON_THROW_ON_ERROR);
+                if (! is_array($metadata)) {
+                    throw new \RuntimeException;
+                }
+                $metadataErrors = [];
+                $this->detectSecrets($metadata, $metadataErrors);
+                if ($metadataErrors !== []
+                    || ($metadata['backup_id'] ?? null) !== ($manifest['backup_id'] ?? null)
+                    || ($metadata['git_commit'] ?? null) !== ($manifest['git_commit'] ?? null)
+                    || ($metadata['schema'] ?? null) !== ($manifest['schema'] ?? null)
+                    || ($metadata['critical_counts'] ?? null) !== data_get($manifest, 'database.critical_counts')) {
+                    $errors[] = 'Sanitized metadata content is invalid or inconsistent.';
+                }
+            } catch (Throwable) {
+                $errors[] = 'Sanitized metadata file is not valid JSON.';
+            }
+        }
+    }
+
+    private function validateArchive(string $root, array $part, array &$errors): void
+    {
+        $declared = $part['entries'] ?? null;
+        if (! is_array($declared)) {
+            $errors[] = 'Private archive entry inventory is missing.';
+
+            return;
+        }
+        $expected = [];
+        foreach ($declared as $entry) {
+            if (! is_array($entry) || array_diff(array_keys($entry), ['path', 'size', 'sha256', 'mode']) !== []) {
+                $errors[] = 'Private archive entry metadata is invalid.';
+
+                return;
+            }
+            $path = $entry['path'] ?? null;
+            if (! is_string($path) || preg_match('/\A[A-Za-z0-9._\/-]+\z/', $path) !== 1
+                || str_starts_with($path, '/') || preg_match('/(^|\/)\.\.($|\/)/', $path) === 1
+                || ! is_int($entry['size'] ?? null) || $entry['size'] < 0
+                || ! is_string($entry['sha256'] ?? null) || preg_match('/\A[0-9a-f]{64}\z/', $entry['sha256']) !== 1
+                || ! is_string($entry['mode'] ?? null) || preg_match('/\A0[0-7]{3}\z/', $entry['mode']) !== 1) {
+                $errors[] = 'Private archive entry metadata is invalid.';
+
+                return;
+            }
+            $expected[$path] = $entry;
+        }
+        if (count($expected) !== count($declared)) {
+            $errors[] = 'Private archive contains duplicate declared paths.';
+
+            return;
+        }
+        try {
+            $archivePath = $root.DIRECTORY_SEPARATOR.$part['path'];
+            $archive = new PharData($archivePath);
+            $actual = [];
+            $prefix = 'phar://'.$archivePath.'/';
+            foreach (new RecursiveIteratorIterator($archive) as $key => $file) {
+                if ($file->isLink() || ! $file->isFile() || ! str_starts_with((string) $key, $prefix)) {
+                    throw new \RuntimeException;
+                }
+                $path = substr((string) $key, strlen($prefix));
+                $contents = file_get_contents((string) $key);
+                if (! is_string($contents)) {
+                    throw new \RuntimeException;
+                }
+                $actual[$path] = ['size' => strlen($contents), 'sha256' => hash('sha256', $contents)];
+            }
+            if (array_keys($actual) !== array_keys($expected)) {
+                $errors[] = 'Private archive file list does not match its manifest inventory.';
+
+                return;
+            }
+            foreach ($actual as $path => $value) {
+                if ($value['size'] !== $expected[$path]['size'] || ! hash_equals($expected[$path]['sha256'], $value['sha256'])) {
+                    $errors[] = 'Private archive entry checksum or size does not match.';
+
+                    return;
+                }
+            }
+        } catch (Throwable) {
+            $errors[] = 'Private storage archive is unreadable or unsafe.';
         }
     }
 
