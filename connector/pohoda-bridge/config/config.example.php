@@ -6,7 +6,7 @@ return array(
     'bridge_key_id' => '',
     'bridge_secret_base64' => '',
     'connector_id' => 'hpserver-pohoda-1',
-    'connector_version' => '7B.1-1.1.0',
+    'connector_version' => '7C-1.2.0',
     'sql_dsn' => 'sqlsrv:Server=127.0.0.1;Database=POHODA',
     'sql_username' => 'portal_bridge_readonly',
     'sql_password' => '',

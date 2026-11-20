@@ -307,3 +307,17 @@
 - Stav: přijato při Fázi 4C
 - Rozhodnutí: Doména, dokumenty, UI a regrese prošly 302 testy / 1191 assertions na SQLite `:memory:`. Produkční aktivace vyžaduje konzistentní DB+filesystem zálohu, private storage, PHP limity 10M/12M, schválené migrace 000007/000008 a ruční browser smoke test.
 - Dopad: Akceptace sama nemění produkci, neopravňuje push ani migraci a nezahajuje Fázi 5.
+
+## D-045: Přecenění zůstává v externím systému
+
+- Datum: 2026-11-20
+- Stav: přijato vlastníkem pro Fázi 7C
+- Rozhodnutí: `PRODUCT_REPRICING = DEFERRED_EXTERNAL_SYSTEM`. Portál ani HPSERVER bridge nezapisují `SKz.NakupC`, `SKz.NakupDPH`, `SKz.CMKodNC`, `ps_product.wholesale_price` ani jinou cenu Pohody nebo e-shopu. Produkční bridge command whitelist zůstává prázdný, konektor používá pouze read-only SQL účet a existující objednávky se nikdy zpětně nepřecení.
+- Dopad: Nevzniká záložka Přecenění, cenový endpoint ani cenový command. TODO pro případné sjednocení: nové samostatné zadání musí určit cílový systém, autoritativní měnu a DPH, oprávnění, schvalovací workflow, audit, idempotenci a bezpečný rollback; bez něj zůstává přecenění mimo portál.
+
+## D-046: Nezměněný sklad se potvrzuje fingerprintem
+
+- Datum: 2026-11-20
+- Stav: přijato pro Fázi 7C
+- Rozhodnutí: První nebo změněný RR dataset vytvoří plný chunkovaný snapshot. Stejný deterministický fingerprint následně vytvoří pouze append-only potvrzení vůči nejnovějšímu použitelnému COMPLETE/PARTIAL runu; množství zůstává vždy v base runu.
+- Dopad: Potvrzení obnoví čas ověření bez tisíců nových položek, nemění PARTIAL na COMPLETE a při konfliktu nebo ztrátě lokálního stavu konektor bezpečně odešle nový plný snapshot.

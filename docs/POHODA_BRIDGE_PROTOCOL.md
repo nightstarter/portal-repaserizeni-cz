@@ -92,6 +92,7 @@ Maximální velikost těla je standardně 2 MiB a chunk má nejvýše 500 polož
   "final_chunk": false,
   "source_generated_at": "2026-11-19T09:30:00Z",
   "warehouse_code": "DECIN",
+  "dataset_fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "items": [
     {
       "product_reference": "TRW-123",
@@ -103,13 +104,29 @@ Maximální velikost těla je standardně 2 MiB a chunk má nejvýše 500 polož
 }
 ```
 
-`chunk_index` je nula-based a musí být menší než `chunk_count`. `final_chunk=true` je povoleno právě pro index `chunk_count - 1`. Všechny chunky runu mají stejné `snapshot_run_id`, `chunk_count`, `source_generated_at` a `warehouse_code`; každý má vlastní stabilní `batch_id`. Při retry musí konektor poslat přesně stejné raw payload bytes a stejné ID, ale nový nonce/timestamp.
+`chunk_index` je nula-based a musí být menší než `chunk_count`. `final_chunk=true` je povoleno právě pro index `chunk_count - 1`. Všechny chunky runu mají stejné `snapshot_run_id`, `chunk_count`, `source_generated_at`, `warehouse_code` a `dataset_fingerprint`; každý má vlastní stabilní `batch_id`. Při retry musí konektor poslat přesně stejné raw payload bytes a stejné ID, ale nový nonce/timestamp.
 
-Odpověď `202` obsahuje `snapshot_run_id`, `batch_id`, stav chunku, `run_status`, index/počet, počty, `idempotent_replay` a pro každou pozici pouze `ACCEPTED` nebo `REJECTED` s bezpečným kódem (`INVALID_ITEM`, `DUPLICATE_PRODUCT_REFERENCE`, `UNKNOWN_PRODUCT_REFERENCE`). Chybná položka nevrací zpět správné položky.
+Odpověď `202` obsahuje `snapshot_run_id`, `batch_id`, stav chunku, `run_status`, index/počet, počty, `idempotent_replay` a pro každou pozici pouze `ACCEPTED` nebo `REJECTED` s bezpečným kódem (`INVALID_ITEM`, `DUPLICATE_PRODUCT_REFERENCE`, `PRODUCT_REFERENCE_NOT_ALLOWED`). Chybná položka nevrací zpět správné položky.
 
 Run zůstává `RECEIVING`, dokud nejsou přijaté všechny pozice a finální marker. Teprve potom se atomicky změní na `COMPLETE` (bez položkových chyb) nebo `PARTIAL` (alespoň jedna položková chyba). `RECEIVING` ani timeoutovaný `FAILED` run se nikdy nepoužije pro aktuální dostupnost. Timeout se vyhodnotí při následujícím validním snapshotu nebo heartbeat. Starší dokončený run nepřepíše novější. Pokud je produkt v posledním `COMPLETE` runu nepřítomný, je nedostupný; u `PARTIAL` runu je nepřítomnost nekonkluzivní. Data starší než `POHODA_BRIDGE_STALE_MINUTES` vrací `STALE`, takže rozhodnutí zůstane `PENDING_STOCK_CHECK`.
 
 Pro zpětnou kompatibilitu lze vynechat všechna čtyři chunk pole (`snapshot_run_id`, `chunk_index`, `chunk_count`, `final_chunk`); server takový 7A payload interpretuje jako jednodílný run. Částečné uvedení chunk polí je chyba 422.
+
+### Dataset fingerprint a `POST /stock-snapshots/confirm-unchanged`
+
+Fingerprint je lowercase hex SHA-256 nad deterministickým JSON manifestem verze 1. Manifest obsahuje `warehouse_code`, seznam trojic `product_reference`, `available_quantity`, `reserved_quantity` seřazený podle těchto polí a mapu agregovaných bezpečných kódů zdrojových anomálií seřazenou podle kódu. Neobsahuje SQL ID, `DatSave`, ceny ani jiná neskladová pole.
+
+```json
+{
+  "confirmation_id": "00000000-0000-4000-8000-000000000021",
+  "base_snapshot_run_id": "00000000-0000-4000-8000-000000000010",
+  "dataset_fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "warehouse_code": "DECIN",
+  "source_generated_at": "2026-11-20T10:05:00Z"
+}
+```
+
+Endpoint vyžaduje standardní HMAC a nový nonce. `confirmation_id` je doménový idempotency klíč. Base run musí být nejnovější použitelný COMPLETE/PARTIAL run stejného warehouse a fingerprint se musí shodovat. Potvrzení je append-only, nevytváří items, nemění status ani množství base runu a pouze obnovuje čas ověření. `409 DATASET_FINGERPRINT_MISMATCH`, idempotency konflikt nebo odmítnutý starý timestamp znamenají, že konektor musí vytvořit nový plný snapshot. PARTIAL zůstává PARTIAL.
 
 ### `POST /heartbeat`
 

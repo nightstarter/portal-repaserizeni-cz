@@ -7,6 +7,7 @@ use PortalRepase\Bridge\BridgeException;
 use PortalRepase\Bridge\CanonicalRequest;
 use PortalRepase\Bridge\CommandHandler;
 use PortalRepase\Bridge\Config;
+use PortalRepase\Bridge\DatasetFingerprint;
 use PortalRepase\Bridge\FileSpool;
 use PortalRepase\Bridge\HttpClient;
 use PortalRepase\Bridge\ProcessLock;
@@ -199,6 +200,23 @@ try {
         bridge_assert($first['items'][0]['product_reference'] === 'RRNR123456', 'Reference was normalized beyond trim');
         bridge_assert($first['final_chunk'] === false && $last['final_chunk'] === true, 'Finalization marker mismatch');
         bridge_assert($first['snapshot_run_id'] === $last['snapshot_run_id'], 'Run ID mismatch');
+        bridge_assert($first['dataset_fingerprint'] === $last['dataset_fingerprint'], 'Dataset fingerprint differs by chunk');
+    });
+
+    bridge_test('dataset fingerprint ignores row order and non-stock fields but detects quantity changes', function () {
+        $config = array('quantity_mode' => 'physical', 'warehouse_code' => 'DECIN');
+        $rows = array(
+            array('ID' => 1, 'IDS' => 'RR-A', 'StavZ' => 5, 'Rezer' => 1, 'DatSave' => 'old', 'NakupC' => 100),
+            array('ID' => 2, 'IDS' => 'RR-B', 'StavZ' => 2, 'Rezer' => 0, 'DatSave' => 'old', 'NakupC' => 200),
+        );
+        $first = DatasetFingerprint::calculate($rows, $config)['fingerprint'];
+        $reordered = array_reverse($rows);
+        $reordered[0]['ID'] = 999;
+        $reordered[0]['DatSave'] = 'new';
+        $reordered[0]['NakupC'] = 999999;
+        bridge_assert(DatasetFingerprint::calculate($reordered, $config)['fingerprint'] === $first, 'Order or non-stock field changed fingerprint');
+        $reordered[0]['StavZ'] = 3;
+        bridge_assert(DatasetFingerprint::calculate($reordered, $config)['fingerprint'] !== $first, 'Quantity did not change fingerprint');
     });
 
     bridge_test('spool preserves exact payload and stable batch id over retry', function () {
@@ -435,7 +453,7 @@ try {
                 array('ID' => 1, 'IDS' => 'ONE', 'StavZ' => 1, 'Rezer' => 0, 'DatSave' => 'v1', 'RefSklad' => 1, 'RelSkTyp' => 1),
             ));
             $result = (new BridgeApplication($config, $reader, $http))->syncOnce(true);
-            bridge_assert($result['status'] === 'DRY_RUN' && $result['chunks'] === 1, 'Dry run report invalid');
+            bridge_assert($result['status'] === 'FULL_SNAPSHOT_REQUIRED' && $result['item_count'] === 1, 'Dry run report invalid');
             bridge_assert($networkCalls === 0, 'Dry run used network');
         } finally {
             bridge_remove_dir($directory);
@@ -464,6 +482,66 @@ try {
             $result = (new BridgeApplication($config, $reader, $http))->syncOnce(false);
             bridge_assert($result['status'] === 'SENT', 'Mapping metadata changed successful sync');
             bridge_assert($responses === 2, 'Snapshot and heartbeat were not both sent');
+        } finally {
+            bridge_remove_dir($directory);
+        }
+    });
+
+    bridge_test('first and changed sync send full snapshot while unchanged sends only confirmation', function () {
+        $directory = bridge_temp_dir();
+        try {
+            $config = bridge_config($directory);
+            $paths = array();
+            $http = new HttpClient($config, function ($request) use (&$paths) {
+                $paths[] = parse_url($request['url'], PHP_URL_PATH);
+                return array('status' => 202, 'headers' => array(), 'body' => '{}');
+            });
+            $reader = new BridgeFakeStockReader(array(
+                array('ID' => 1, 'IDS' => 'RRSTABLE', 'StavZ' => 3, 'Rezer' => 1, 'DatSave' => 'v1'),
+            ));
+            $first = (new BridgeApplication($config, $reader, $http))->syncOnce(false);
+            $second = (new BridgeApplication($config, $reader, $http))->syncOnce(false);
+            $changedReader = new BridgeFakeStockReader(array(
+                array('ID' => 1, 'IDS' => 'RRSTABLE', 'StavZ' => 4, 'Rezer' => 1, 'DatSave' => 'v2'),
+            ));
+            $third = (new BridgeApplication($config, $changedReader, $http))->syncOnce(false);
+            bridge_assert($first['mode'] === 'FULL_SNAPSHOT_REQUIRED', 'First run was not full');
+            bridge_assert($second['mode'] === 'UNCHANGED_CONFIRMATION_ONLY', 'Second run was not confirmation-only');
+            bridge_assert($third['mode'] === 'FULL_SNAPSHOT_REQUIRED', 'Changed run was not full');
+            $full = array_values(array_filter($paths, function ($path) { return $path === '/api/internal/v1/stock-snapshots'; }));
+            $confirm = array_values(array_filter($paths, function ($path) { return $path === '/api/internal/v1/stock-snapshots/confirm-unchanged'; }));
+            bridge_assert(count($full) === 2 && count($confirm) === 1, 'Unexpected full/confirmation request counts');
+            $state = json_decode(file_get_contents($config['state_file']), true);
+            bridge_assert(isset($state['last_successful_snapshot_run_id'], $state['dataset_fingerprint'], $state['last_dataset_confirmed_at']), 'Confirmed dataset state missing');
+        } finally {
+            bridge_remove_dir($directory);
+        }
+    });
+
+    bridge_test('confirmation mismatch falls back to a new full snapshot', function () {
+        $directory = bridge_temp_dir();
+        try {
+            $config = bridge_config($directory);
+            $fullCount = 0;
+            $confirmationCount = 0;
+            $http = new HttpClient($config, function ($request) use (&$fullCount, &$confirmationCount) {
+                $path = parse_url($request['url'], PHP_URL_PATH);
+                if ($path === '/api/internal/v1/stock-snapshots/confirm-unchanged') {
+                    $confirmationCount++;
+                    return array('status' => 409, 'headers' => array(), 'body' => '{"error":{"code":"DATASET_FINGERPRINT_MISMATCH"}}');
+                }
+                if ($path === '/api/internal/v1/stock-snapshots') {
+                    $fullCount++;
+                }
+                return array('status' => 202, 'headers' => array(), 'body' => '{}');
+            });
+            $reader = new BridgeFakeStockReader(array(
+                array('ID' => 1, 'IDS' => 'RRMISMATCH', 'StavZ' => 1, 'Rezer' => 0, 'DatSave' => 'v1'),
+            ));
+            (new BridgeApplication($config, $reader, $http))->syncOnce(false);
+            $result = (new BridgeApplication($config, $reader, $http))->syncOnce(false);
+            bridge_assert($confirmationCount === 1 && $fullCount === 2, 'Mismatch did not cause exactly one replacement full snapshot');
+            bridge_assert($result['mode'] === 'FULL_SNAPSHOT_REQUIRED' && $result['status'] === 'SENT', 'Mismatch fallback status invalid');
         } finally {
             bridge_remove_dir($directory);
         }

@@ -11,6 +11,9 @@
 <section class="card"><h2>{{ __('app.pohoda_latest_batch') }}</h2>
 @if($latest)
 <p>{{ $latest->run_id }} · {{ $latest->warehouse_code }} · {{ $latest->received_chunks }}/{{ $latest->chunk_count }}</p>
+<p>{{ __('app.pohoda_base_run_status') }}: {{ $latest->status }} · {{ __('app.pohoda_dataset_fingerprint') }}: {{ $latest->dataset_fingerprint ? substr($latest->dataset_fingerprint, 0, 12).'…' : '—' }}</p>
+<p>{{ __('app.pohoda_last_unchanged_confirmation') }}: {{ $latestConfirmation?->received_at?->timezone(config('app.timezone'))->format('d.m.Y H:i') ?? '—' }} · {{ __('app.pohoda_verified_age') }}: {{ $verifiedAt?->diffForHumans() ?? '—' }}</p>
+<p>{{ __('app.pohoda_full_snapshots_24h') }}: {{ $fullSnapshots24h }} · {{ __('app.pohoda_confirmations_24h') }}: {{ $confirmations24h }}</p>
 <p>{{ __('app.pohoda_items_accepted') }}: {{ $latest->accepted_count }} · {{ __('app.pohoda_items_mapped') }}: {{ $latestItemCounts['mapped'] }} · {{ __('app.pohoda_items_unmapped') }}: {{ $latestItemCounts['unmapped'] }} · {{ __('app.pohoda_items_rejected') }}: {{ $latestItemCounts['rejected'] }}</p>
 @if($rejectionCodes->isNotEmpty())<p>{{ __('app.pohoda_rejection_codes') }}: {{ $rejectionCodes->map(fn($total, $code) => $code.': '.$total)->implode(' · ') }}</p>@endif
 @else<p>{{ __('app.pohoda_no_snapshot') }}</p>@endif

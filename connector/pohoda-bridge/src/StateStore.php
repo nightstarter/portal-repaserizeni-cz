@@ -25,8 +25,21 @@ final class StateStore
 
     public function set($key, $value)
     {
+        $this->setMany(array($key => $value));
+    }
+
+    public function setMany(array $values)
+    {
+        $state = array_merge($this->read(), $values);
+        Util::atomicWrite($this->path, Util::json($state));
+    }
+
+    public function remove(array $keys)
+    {
         $state = $this->read();
-        $state[$key] = $value;
+        foreach ($keys as $key) {
+            unset($state[$key]);
+        }
         Util::atomicWrite($this->path, Util::json($state));
     }
 }

@@ -7,8 +7,10 @@ use App\Contracts\ResolvesStockAvailability;
 use App\Enums\StockAvailabilityStatus;
 use App\Models\Order;
 use App\Models\StockSnapshotBatch;
+use App\Models\StockSnapshotConfirmation;
 use App\Models\StockSnapshotItem;
 use App\Models\StockSnapshotRun;
+use Carbon\CarbonImmutable;
 
 final class PendingStockAvailabilityResolver implements ResolvesStockAvailability
 {
@@ -20,10 +22,21 @@ final class PendingStockAvailabilityResolver implements ResolvesStockAvailabilit
             ->orderByDesc('source_generated_at')->orderByDesc('id')->first();
         if ($run !== null) {
             $source = 'pohoda:'.$run->run_id;
-            if ($run->source_generated_at->lt(now()->subMinutes(
+            $verifiedAt = StockSnapshotConfirmation::query()->where('stock_snapshot_run_id', $run->id)
+                ->latest('received_at')->value('received_at') ?? $run->completed_at ?? $run->source_generated_at;
+            $verifiedAt = CarbonImmutable::parse($verifiedAt);
+            if ($verifiedAt->lt(now()->subMinutes(
                 max(1, (int) config('integrations.pohoda_bridge.stale_minutes', 30)),
             ))) {
-                return new StockAvailabilityDecision(StockAvailabilityStatus::STALE, $source, $run->source_generated_at);
+                return new StockAvailabilityDecision(StockAvailabilityStatus::STALE, $source, $verifiedAt);
+            }
+            $duplicateRejected = StockSnapshotItem::query()
+                ->where('product_reference', $order->product_code)
+                ->where('rejection_code', 'DUPLICATE_PRODUCT_REFERENCE')
+                ->whereHas('batch', fn ($query) => $query->where('stock_snapshot_run_id', $run->id))
+                ->exists();
+            if ($duplicateRejected) {
+                return new StockAvailabilityDecision(StockAvailabilityStatus::UNKNOWN, $source, $verifiedAt);
             }
             $snapshot = StockSnapshotItem::query()
                 ->where('product_reference', $order->product_code)
@@ -36,7 +49,7 @@ final class PendingStockAvailabilityResolver implements ResolvesStockAvailabilit
                         ? StockAvailabilityStatus::NOT_AVAILABLE_IN_AK
                         : StockAvailabilityStatus::UNKNOWN,
                     $source,
-                    $run->source_generated_at,
+                    $verifiedAt,
                 );
             }
 
@@ -45,7 +58,7 @@ final class PendingStockAvailabilityResolver implements ResolvesStockAvailabilit
                     ? StockAvailabilityStatus::AVAILABLE_IN_AK
                     : StockAvailabilityStatus::NOT_AVAILABLE_IN_AK,
                 $source.':'.$snapshot->source_row_version,
-                $run->source_generated_at,
+                $verifiedAt,
             );
         }
 

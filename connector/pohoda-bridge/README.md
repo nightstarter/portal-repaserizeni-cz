@@ -54,13 +54,17 @@ php bin\bridge.php commands:poll
 
 `diagnose` provede pouze read-only SQL dotazy a HTTPS HEAD. Nezapisuje do Pohody ani portálu. `stock:inspect` zobrazí omezený RR vzorek IDS/StavZ/Rezer a obě varianty množství; výstup chraňte jako provozní data. `stock:dry-run` uvádí prefix, počet RR karet, unikátní a duplicitní IDS, necelá/záporná množství, rezervace a rozdíl physical/free. `stock:anomalies` přidá konkrétní provozní IDS s anomálií. `commands:poll --dry-run` záměrně neclaimuje lease a nepoužívá síť, proto hlásí nulový lokální náhled.
 
-Pro ostrý sync musí být současně potvrzen `quantity_mode`, nastaveno `dry_run=false`, platný HMAC klíč a portálový feature flag. Retry používá stejný raw payload a `batch_id`, ale vždy nový timestamp a nonce.
+Pro ostrý sync musí být současně potvrzen `quantity_mode`, nastaveno `dry_run=false`, platný HMAC klíč a portálový feature flag. První nebo změněný dataset odešle plný chunkovaný snapshot. Nezměněný dataset odešle pouze malé `confirm-unchanged`; dry-run hlásí `FULL_SNAPSHOT_REQUIRED` nebo `UNCHANGED_CONFIRMATION_ONLY`. Fingerprint nezávisí na pořadí SQL řádků, ID, `DatSave` ani cenách. Retry používá stejný raw payload a doménové ID, ale vždy nový timestamp a nonce.
 
 ## Spool, retry a logy
 
 Každý chunk má samostatný immutable `.payload` a `.meta.json`. Konektor posílá nejstarší pending chunk první. Timeout, HTTP 408/429/5xx používají exponenciální backoff s ±20% jitterem; `Retry-After` má přednost. Ostatní 4xx položku zablokují pro ruční zásah a automaticky ji neopakují. Při překročení velikosti nebo stáří spoolu se tvorba dalších snapshotů zastaví a nic neodeslaného se nemaže.
 
 Spool metadata obsahují fingerprint SQL scope. Payload vytvořený pro jiný nebo starý neidentifikovaný rozsah se bezpečně zablokuje jako `SPOOL_SCOPE_MISMATCH`; konektor jej nesmaže ani neodešle.
+
+State soubor obsahuje pouze poslední úspěšný `snapshot_run_id`, dataset fingerprint a čas potvrzení portálem. Při jeho ztrátě, konfliktu nebo `DATASET_FINGERPRINT_MISMATCH` vznikne nový plný snapshot. Confirmation je spoolováno a retryováno stejně bezpečně jako full snapshot.
+
+Konektor je trvale read-only. `PRODUCT_REPRICING = DEFERRED_EXTERNAL_SYSTEM`: nezapisuje `SKz.NakupC`, `SKz.NakupDPH`, `SKz.CMKodNC` ani ceny PrestaShopu a produkční command whitelist je prázdný.
 
 Lokální `flock` zabrání dvěma instancím `sync:once`. Log rotuje podle velikosti a retence a obsahuje jen run/batch ID, časy, počty, HTTP status a bezpečné kódy. Neukládá secret, DSN, SQL heslo, request/response body ani stack trace.
 

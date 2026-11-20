@@ -12,7 +12,7 @@ Tento dokument je runbook pro pozdější kontrolované nasazení. Fáze 7B žá
 ## Portál nejprve vypnutý
 
 1. Nasaďte aplikační kód.
-2. Aplikujte migrace 000014 a 000015 standardním kontrolovaným postupem.
+2. Aplikujte migrace 000014, 000015 a 000016 standardním kontrolovaným postupem.
 3. Ponechte `POHODA_BRIDGE_ENABLED=false`, nastavte serverový allowlist `POHODA_BRIDGE_PRODUCT_PREFIXES=RR` a `POHODA_BRIDGE_WAREHOUSES=DECIN` a ponechte `LEGACY_SHOP_IMPORT_ENABLED=false`, `DISCUSSION_EMAIL_ENABLED=false` a `BUYBACK_CUSTOMER_EMAIL_ENABLED=false`.
 4. Obnovte config/route/view cache a ověřte migration status a `/admin/integrations/pohoda`.
 

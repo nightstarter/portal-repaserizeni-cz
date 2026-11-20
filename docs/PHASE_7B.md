@@ -39,4 +39,4 @@ Standalone connector test runner ověřuje HMAC vektor, raw body, nonce, quantit
 - Nebyl vytvořen skutečný secret ani `config.local.php`.
 - Migrace 000014/000015 nebyly aplikovány do produkce a bridge zůstává vypnutý.
 
-Známým omezením 7B je produkční command whitelist prázdný a neexistují cenové příkazy; ty patří do 7C. PHP 7.4 je EOL a musí být ve fázi 8 nahrazeno PHP CLI 8.2+.
+Fáze 7C formálně rozhodla, že cenové příkazy nevzniknou: `PRODUCT_REPRICING = DEFERRED_EXTERNAL_SYSTEM`. Produkční command whitelist zůstává prázdný a konektor read-only. PHP 7.4 je EOL a musí být ve fázi 8 nahrazeno PHP CLI 8.2+.

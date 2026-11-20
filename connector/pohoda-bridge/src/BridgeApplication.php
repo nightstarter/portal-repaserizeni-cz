@@ -141,7 +141,11 @@ final class BridgeApplication
                 throw new BridgeException('QUANTITY_MODE_UNCONFIRMED');
             }
             if (! $dryRun) {
-                $this->drainSpool($runId);
+                $drained = $this->drainSpool($runId);
+                if ($drained['fingerprint_mismatch']) {
+                    $this->state->remove(array('last_successful_snapshot_run_id', 'dataset_fingerprint', 'last_dataset_confirmed_at'));
+                }
+                $this->applyDrainedState($drained);
                 if ($this->spool->count() > 0) {
                     $this->sendHeartbeatStatus('DEGRADED', array('SNAPSHOT_PENDING_RETRY'));
                     return array('status' => 'DEFERRED_PENDING_SPOOL', 'spool_count' => $this->spool->count());
@@ -151,18 +155,50 @@ final class BridgeApplication
             if (! $dryRun) {
                 $this->state->set('last_successful_sql_read_at', Util::utcNow());
             }
-            $built = (new SnapshotChunker())->build($rows, $this->config);
+            $fingerprint = DatasetFingerprint::calculate($rows, $this->config);
+            $state = $this->state->read();
+            $unchanged = isset($state['last_successful_snapshot_run_id'], $state['dataset_fingerprint'])
+                && preg_match('/^[a-f0-9-]{36}$/i', (string) $state['last_successful_snapshot_run_id'])
+                && preg_match('/^[a-f0-9]{64}$/', (string) $state['dataset_fingerprint'])
+                && hash_equals((string) $state['dataset_fingerprint'], $fingerprint['fingerprint']);
             if ($dryRun) {
-                return array('status' => 'DRY_RUN', 'run_id' => $built['run_id'], 'chunks' => count($built['chunks']), 'accepted_local' => $built['accepted_local'], 'rejected_local' => $built['rejected_local']);
+                return array(
+                    'status' => $unchanged ? 'UNCHANGED_CONFIRMATION_ONLY' : 'FULL_SNAPSHOT_REQUIRED',
+                    'dataset_fingerprint' => $fingerprint['fingerprint'],
+                    'item_count' => $fingerprint['item_count'],
+                    'anomalies' => $fingerprint['anomalies'],
+                );
             }
-            $this->spool->enqueueMany($built['chunks']);
-            $this->logger->write('INFO', 'SNAPSHOT_SPOOLED', array('run_id' => $built['run_id'], 'chunks' => count($built['chunks'])));
-            $this->drainSpool($runId);
+            $mode = $unchanged ? 'UNCHANGED_CONFIRMATION_ONLY' : 'FULL_SNAPSHOT_REQUIRED';
+            if ($unchanged) {
+                $confirmation = $this->confirmationEntry($state['last_successful_snapshot_run_id'], $fingerprint['fingerprint']);
+                $this->spool->enqueue($confirmation);
+                $this->logger->write('INFO', 'STOCK_CONFIRMATION_SPOOLED', array('run_id' => $state['last_successful_snapshot_run_id'], 'batch_id' => $confirmation['batch_id']));
+            } else {
+                $built = (new SnapshotChunker())->build($rows, $this->config, null, null, $fingerprint['fingerprint']);
+                $this->spool->enqueueMany($built['chunks']);
+                $this->logger->write('INFO', 'SNAPSHOT_SPOOLED', array('run_id' => $built['run_id'], 'chunks' => count($built['chunks'])));
+            }
+            $drained = $this->drainSpool($runId);
+            if ($drained['fingerprint_mismatch']) {
+                $this->state->remove(array('last_successful_snapshot_run_id', 'dataset_fingerprint', 'last_dataset_confirmed_at'));
+                $built = (new SnapshotChunker())->build($rows, $this->config, null, null, $fingerprint['fingerprint']);
+                $this->spool->enqueueMany($built['chunks']);
+                $mode = 'FULL_SNAPSHOT_REQUIRED';
+                $drained = $this->drainSpool($runId);
+            }
+            $this->applyDrainedState($drained);
             if ($this->spool->count() === 0) {
                 $this->state->set('last_successful_snapshot_at', Util::utcNow());
             }
             $this->sendHeartbeatStatus($this->spool->count() === 0 ? 'OK' : 'DEGRADED', $this->spool->count() === 0 ? array() : array('SNAPSHOT_PENDING_RETRY'));
-            return array('status' => $this->spool->count() === 0 ? 'SENT' : 'PENDING_RETRY', 'run_id' => $built['run_id'], 'spool_count' => $this->spool->count());
+            $current = $this->state->read();
+            return array(
+                'status' => $this->spool->count() === 0 ? 'SENT' : 'PENDING_RETRY',
+                'mode' => $mode,
+                'run_id' => isset($current['last_successful_snapshot_run_id']) ? $current['last_successful_snapshot_run_id'] : null,
+                'spool_count' => $this->spool->count(),
+            );
         } catch (BridgeException $exception) {
             if (! $dryRun && empty($this->config['dry_run'])) {
                 try {
@@ -179,25 +215,39 @@ final class BridgeApplication
 
     private function drainSpool($runId)
     {
+        $lastAcknowledged = null;
+        $fingerprintMismatch = false;
         while (($entry = $this->spool->oldestReady()) !== null) {
             $expectedScope = Config::productScopeFingerprint($this->config);
             if (! isset($entry['meta']['scope_fingerprint']) || ! hash_equals($expectedScope, (string) $entry['meta']['scope_fingerprint'])) {
                 $this->spool->block($entry, 'SPOOL_SCOPE_MISMATCH');
                 $this->logger->write('ERROR', 'SPOOL_SCOPE_MISMATCH', array('run_id' => $runId, 'batch_id' => $entry['meta']['batch_id']));
-                return;
+                return array('last_acknowledged' => $lastAcknowledged, 'fingerprint_mismatch' => $fingerprintMismatch);
             }
             try {
-                $response = $this->http->signed('POST', '/api/internal/v1/stock-snapshots', array(), $entry['payload']);
+                $response = $this->http->signed('POST', $entry['meta']['endpoint'], array(), $entry['payload']);
             } catch (BridgeException $exception) {
                 $delay = Util::backoffSeconds((int) $entry['meta']['attempts'] + 1, $this->config['retry_base_seconds'], $this->config['retry_max_seconds']);
                 $this->spool->retry($entry, $delay);
                 $this->logger->write('WARN', $exception->safeCode(), array('run_id' => $runId, 'batch_id' => $entry['meta']['batch_id']));
-                return;
+                return array('last_acknowledged' => $lastAcknowledged, 'fingerprint_mismatch' => $fingerprintMismatch);
             }
             $this->logger->write('INFO', 'SNAPSHOT_HTTP', array('run_id' => $entry['meta']['run_id'], 'batch_id' => $entry['meta']['batch_id'], 'http_status' => $response['status']));
             if ($response['status'] >= 200 && $response['status'] < 300) {
                 $this->spool->acknowledge($entry);
+                $lastAcknowledged = $entry['meta'];
                 continue;
+            }
+            $decoded = json_decode($response['body'], true);
+            if ($entry['meta']['kind'] === 'UNCHANGED_CONFIRMATION'
+                && ($response['status'] === 422
+                    || ($response['status'] === 409
+                        && is_array($decoded)
+                        && isset($decoded['error']['code'])
+                        && in_array($decoded['error']['code'], array('DATASET_FINGERPRINT_MISMATCH', 'IDEMPOTENCY_CONFLICT'), true)))) {
+                $this->spool->acknowledge($entry);
+                $fingerprintMismatch = true;
+                break;
             }
             if (HttpClient::shouldRetry($response['status'])) {
                 $fallback = Util::backoffSeconds((int) $entry['meta']['attempts'] + 1, $this->config['retry_base_seconds'], $this->config['retry_max_seconds']);
@@ -205,8 +255,48 @@ final class BridgeApplication
             } else {
                 $this->spool->block($entry, 'HTTP_'.$response['status']);
             }
+            return array('last_acknowledged' => $lastAcknowledged, 'fingerprint_mismatch' => $fingerprintMismatch);
+        }
+
+        return array('last_acknowledged' => $lastAcknowledged, 'fingerprint_mismatch' => $fingerprintMismatch);
+    }
+
+    private function confirmationEntry($baseRunId, $fingerprint)
+    {
+        $confirmationId = Util::uuid();
+        return array(
+            'batch_id' => $confirmationId,
+            'run_id' => $baseRunId,
+            'scope_fingerprint' => Config::productScopeFingerprint($this->config),
+            'dataset_fingerprint' => $fingerprint,
+            'kind' => 'UNCHANGED_CONFIRMATION',
+            'endpoint' => '/api/internal/v1/stock-snapshots/confirm-unchanged',
+            'payload' => Util::json(array(
+                'confirmation_id' => $confirmationId,
+                'base_snapshot_run_id' => $baseRunId,
+                'dataset_fingerprint' => $fingerprint,
+                'warehouse_code' => $this->config['warehouse_code'],
+                'source_generated_at' => Util::utcNow(),
+            )),
+        );
+    }
+
+    private function applyDrainedState(array $drained)
+    {
+        if ($this->spool->count() !== 0 || $drained['last_acknowledged'] === null) {
             return;
         }
+        $meta = $drained['last_acknowledged'];
+        if (! isset($meta['run_id'], $meta['dataset_fingerprint'])
+            || ! preg_match('/^[a-f0-9-]{36}$/i', (string) $meta['run_id'])
+            || ! preg_match('/^[a-f0-9]{64}$/', (string) $meta['dataset_fingerprint'])) {
+            return;
+        }
+        $this->state->setMany(array(
+            'last_successful_snapshot_run_id' => $meta['run_id'],
+            'dataset_fingerprint' => $meta['dataset_fingerprint'],
+            'last_dataset_confirmed_at' => Util::utcNow(),
+        ));
     }
 
     public function heartbeatPayload($status, array $errorCodes)

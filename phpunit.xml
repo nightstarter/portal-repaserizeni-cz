@@ -20,5 +20,6 @@
         <env name="LEGACY_SHOP_IMPORT_ENABLED" value="false"/>
         <env name="LEGACY_SHOP_MAPPING_VERIFIED" value="false"/>
         <env name="POHODA_BRIDGE_ENABLED" value="false"/>
+        <env name="APP_ROUTES_CACHE" value="/tmp/portal-repase-testing-routes.php"/>
     </php>
 </phpunit>

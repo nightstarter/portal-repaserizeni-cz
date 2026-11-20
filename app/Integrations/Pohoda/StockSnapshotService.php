@@ -31,7 +31,7 @@ final class StockSnapshotService
         }
         if (array_diff(array_keys($input), [
             'snapshot_run_id', 'batch_id', 'chunk_index', 'chunk_count', 'final_chunk',
-            'source_generated_at', 'warehouse_code', 'items',
+            'source_generated_at', 'warehouse_code', 'dataset_fingerprint', 'items',
         ]) !== []) {
             throw ValidationException::withMessages(['payload' => 'Unsupported snapshot fields.']);
         }
@@ -43,6 +43,7 @@ final class StockSnapshotService
             'final_chunk' => ['nullable', 'boolean'],
             'source_generated_at' => ['required', 'date'],
             'warehouse_code' => ['required', 'string', 'max:32', 'regex:/^[A-Z0-9_-]+$/'],
+            'dataset_fingerprint' => ['nullable', 'regex:/^[a-f0-9]{64}$/'],
             'items' => ['present', 'array', 'max:'.max(1, (int) config('integrations.pohoda_bridge.max_batch_items', 500))],
         ])->validate();
         $allowedWarehouses = $this->allowedWarehouses();
@@ -133,6 +134,7 @@ final class StockSnapshotService
                         'warehouse_code' => $data['warehouse_code'],
                         'source_generated_at' => $sourceAt->setTimezone(config('app.timezone')),
                         'chunk_count' => $chunkCount,
+                        'dataset_fingerprint' => $data['dataset_fingerprint'] ?? null,
                         'status' => StockSnapshotRun::RECEIVING,
                         'expires_at' => now()->addMinutes(max(1, (int) config('integrations.pohoda_bridge.snapshot_run_timeout_minutes', 30))),
                     ],
@@ -141,7 +143,8 @@ final class StockSnapshotService
                 if ($run->status === StockSnapshotRun::FAILED
                     || $run->warehouse_code !== $data['warehouse_code']
                     || ! $run->source_generated_at->equalTo($sourceAt->setTimezone(config('app.timezone')))
-                    || $run->chunk_count !== $chunkCount) {
+                    || $run->chunk_count !== $chunkCount
+                    || $run->dataset_fingerprint !== ($data['dataset_fingerprint'] ?? null)) {
                     throw new WorkflowConflictException('Snapshot run metadata conflict.');
                 }
                 $existing = StockSnapshotBatch::query()->where('batch_id', $data['batch_id'])->lockForUpdate()->first();
@@ -250,6 +253,7 @@ final class StockSnapshotService
             'chunk_count' => $batch->chunk_count,
             'accepted_count' => $batch->accepted_count,
             'rejected_count' => $batch->rejected_count,
+            'dataset_fingerprint' => $batch->run?->dataset_fingerprint,
             'idempotent_replay' => $idempotent,
             'items' => $batch->items->sortBy('item_index')->map(fn ($item): array => [
                 'index' => $item->item_index,

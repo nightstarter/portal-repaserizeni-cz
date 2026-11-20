@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\BridgeCommand;
 use App\Models\BridgeHeartbeat;
+use App\Models\StockSnapshotConfirmation;
 use App\Models\StockSnapshotItem;
 use App\Models\StockSnapshotRun;
 use Illuminate\Http\Request;
@@ -20,8 +21,14 @@ class PohodaIntegrationController extends Controller
         $partial = StockSnapshotRun::query()->where('status', StockSnapshotRun::PARTIAL)->latest('source_generated_at')->first();
         $latest = StockSnapshotRun::query()->whereIn('status', [StockSnapshotRun::COMPLETE, StockSnapshotRun::PARTIAL])
             ->latest('source_generated_at')->first();
+        $latestConfirmation = $latest === null ? null : StockSnapshotConfirmation::query()
+            ->where('stock_snapshot_run_id', $latest->id)->latest('received_at')->first();
+        $verifiedAt = $latestConfirmation?->received_at ?? $latest?->completed_at ?? $latest?->source_generated_at;
         $staleMinutes = max(1, (int) config('integrations.pohoda_bridge.stale_minutes', 30));
-        $stale = $latest === null || $latest->source_generated_at->lt(now()->subMinutes($staleMinutes));
+        $stale = $verifiedAt === null || $verifiedAt->lt(now()->subMinutes($staleMinutes));
+        $fullSnapshots24h = StockSnapshotRun::query()->whereIn('status', [StockSnapshotRun::COMPLETE, StockSnapshotRun::PARTIAL])
+            ->where('completed_at', '>=', now()->subDay())->count();
+        $confirmations24h = StockSnapshotConfirmation::query()->where('received_at', '>=', now()->subDay())->count();
         $runCounts = StockSnapshotRun::query()->selectRaw('status, COUNT(*) total')->groupBy('status')->pluck('total', 'status');
         $counts = BridgeCommand::query()->selectRaw('status, COUNT(*) total')->groupBy('status')->pluck('total', 'status');
         $latestItemCounts = ['mapped' => 0, 'unmapped' => 0, 'rejected' => 0];
@@ -48,7 +55,7 @@ class PohodaIntegrationController extends Controller
 
         return view('admin.integrations.pohoda', compact(
             'heartbeat', 'complete', 'partial', 'latest', 'stale', 'staleMinutes', 'counts', 'runCounts',
-            'latestItemCounts', 'rejectionCodes',
+            'latestItemCounts', 'rejectionCodes', 'latestConfirmation', 'verifiedAt', 'fullSnapshots24h', 'confirmations24h',
         ));
     }
 }

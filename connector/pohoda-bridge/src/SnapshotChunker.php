@@ -4,7 +4,7 @@ namespace PortalRepase\Bridge;
 
 final class SnapshotChunker
 {
-    public function build(array $rows, array $config, $sourceGeneratedAt = null, $runId = null)
+    public function build(array $rows, array $config, $sourceGeneratedAt = null, $runId = null, $datasetFingerprint = null)
     {
         $mode = isset($config['quantity_mode']) ? $config['quantity_mode'] : 'unconfirmed';
         if ($mode === 'unconfirmed') {
@@ -38,6 +38,9 @@ final class SnapshotChunker
         }
         $runId = $runId === null ? Util::uuid() : $runId;
         $sourceGeneratedAt = $sourceGeneratedAt === null ? Util::utcNow() : $sourceGeneratedAt;
+        $datasetFingerprint = $datasetFingerprint === null
+            ? DatasetFingerprint::calculate($rows, $config)['fingerprint']
+            : (string) $datasetFingerprint;
         $count = count($parts);
         $chunks = array();
         foreach ($parts as $index => $part) {
@@ -50,6 +53,7 @@ final class SnapshotChunker
                 'final_chunk' => $index === $count - 1,
                 'source_generated_at' => $sourceGeneratedAt,
                 'warehouse_code' => $config['warehouse_code'],
+                'dataset_fingerprint' => $datasetFingerprint,
                 'items' => $part,
             );
             $chunks[] = array(
@@ -58,11 +62,14 @@ final class SnapshotChunker
                 'index' => $index,
                 'count' => $count,
                 'scope_fingerprint' => Config::productScopeFingerprint($config),
+                'dataset_fingerprint' => $datasetFingerprint,
+                'kind' => 'FULL_SNAPSHOT',
+                'endpoint' => '/api/internal/v1/stock-snapshots',
                 'payload' => Util::json($payload),
             );
         }
 
-        return array('run_id' => $runId, 'chunks' => $chunks, 'accepted_local' => count($items), 'rejected_local' => $rejected);
+        return array('run_id' => $runId, 'dataset_fingerprint' => $datasetFingerprint, 'chunks' => $chunks, 'accepted_local' => count($items), 'rejected_local' => $rejected);
     }
 
     private static function dateVersion($value)

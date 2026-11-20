@@ -17,6 +17,7 @@ use App\Models\Order;
 use App\Models\Organization;
 use App\Models\ProcessThread;
 use App\Models\StockSnapshotBatch;
+use App\Models\StockSnapshotConfirmation;
 use App\Models\StockSnapshotItem;
 use App\Models\StockSnapshotRun;
 use App\Models\User;
@@ -459,6 +460,89 @@ class Phase7aPohodaBridgeTest extends TestCase
         self::assertSame(2, StockSnapshotRun::query()->count());
     }
 
+    public function test_unchanged_confirmation_is_idempotent_refreshes_freshness_and_stores_no_items(): void
+    {
+        Carbon::setTestNow('2026-11-20 15:00:00 UTC');
+        $fingerprint = hash('sha256', 'stable-dataset');
+        $runId = (string) Str::uuid();
+        $snapshot = $this->snapshot([
+            ['product_reference' => 'RRCONFIRMED', 'available_quantity' => 4, 'reserved_quantity' => 1, 'source_row_version' => 'c1'],
+        ], ['snapshot_run_id' => $runId, 'chunk_index' => 0, 'chunk_count' => 1, 'final_chunk' => true, 'dataset_fingerprint' => $fingerprint]);
+        $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($snapshot, JSON_THROW_ON_ERROR))
+            ->assertAccepted()->assertJsonPath('dataset_fingerprint', $fingerprint);
+        $order = Order::factory()->create(['product_code' => 'RRCONFIRMED']);
+        $itemCount = StockSnapshotItem::query()->count();
+
+        Carbon::setTestNow('2026-11-20 15:29:00 UTC');
+        $confirmation = $this->confirmation($runId, $fingerprint);
+        $body = json_encode($confirmation, JSON_THROW_ON_ERROR);
+        $this->signed('POST', '/api/internal/v1/stock-snapshots/confirm-unchanged', $body)
+            ->assertAccepted()->assertJson(['status' => 'UNCHANGED_CONFIRMED', 'base_status' => StockSnapshotRun::COMPLETE, 'idempotent_replay' => false]);
+        $this->signed('POST', '/api/internal/v1/stock-snapshots/confirm-unchanged', $body)
+            ->assertAccepted()->assertJson(['idempotent_replay' => true]);
+        self::assertSame(1, StockSnapshotConfirmation::query()->count());
+        self::assertSame($itemCount, StockSnapshotItem::query()->count());
+        self::assertSame(StockAvailabilityStatus::AVAILABLE_IN_AK, app(ResolvesStockAvailability::class)->resolve($order)->status);
+        $html = $this->actingAs($this->admin)->get(route('admin.integrations.pohoda'))->assertOk()->getContent();
+        self::assertStringContainsString('Poslední potvrzení beze změny', $html);
+        self::assertStringContainsString(substr($fingerprint, 0, 12).'…', $html);
+        self::assertStringContainsString('Plné snapshoty za 24 hodin: 1', $html);
+        self::assertStringContainsString('Potvrzení za 24 hodin: 1', $html);
+
+        Carbon::setTestNow('2026-11-20 16:00:01 UTC');
+        self::assertSame(StockAvailabilityStatus::STALE, app(ResolvesStockAvailability::class)->resolve($order)->status);
+        $this->signed('POST', '/api/internal/v1/stock-snapshots/confirm-unchanged', $body)
+            ->assertAccepted()->assertJson(['idempotent_replay' => true]);
+        self::assertSame(1, StockSnapshotConfirmation::query()->count());
+        self::assertSame(StockAvailabilityStatus::STALE, app(ResolvesStockAvailability::class)->resolve($order)->status);
+    }
+
+    public function test_confirmation_rejects_mismatch_forged_base_warehouse_and_stale_timestamp(): void
+    {
+        Carbon::setTestNow('2026-11-20 16:00:00 UTC');
+        $fingerprint = hash('sha256', 'base');
+        $runId = (string) Str::uuid();
+        $snapshot = $this->snapshot([], [
+            'snapshot_run_id' => $runId, 'chunk_index' => 0, 'chunk_count' => 1, 'final_chunk' => true,
+            'dataset_fingerprint' => $fingerprint,
+        ]);
+        $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($snapshot, JSON_THROW_ON_ERROR))->assertAccepted();
+
+        foreach ([
+            $this->confirmation($runId, hash('sha256', 'different')),
+            $this->confirmation((string) Str::uuid(), $fingerprint),
+        ] as $payload) {
+            $this->signed('POST', '/api/internal/v1/stock-snapshots/confirm-unchanged', json_encode($payload, JSON_THROW_ON_ERROR))
+                ->assertConflict()->assertExactJson(['error' => ['code' => 'DATASET_FINGERPRINT_MISMATCH']]);
+        }
+        $wrongWarehouse = $this->confirmation($runId, $fingerprint, ['warehouse_code' => 'OTHER']);
+        $this->signed('POST', '/api/internal/v1/stock-snapshots/confirm-unchanged', json_encode($wrongWarehouse, JSON_THROW_ON_ERROR))
+            ->assertUnprocessable();
+        $stale = $this->confirmation($runId, $fingerprint, ['source_generated_at' => now()->subMinutes(6)->format('Y-m-d\TH:i:s\Z')]);
+        $this->signed('POST', '/api/internal/v1/stock-snapshots/confirm-unchanged', json_encode($stale, JSON_THROW_ON_ERROR))
+            ->assertUnprocessable();
+        self::assertSame(0, StockSnapshotConfirmation::query()->count());
+    }
+
+    public function test_confirmation_keeps_partial_base_and_missing_duplicate_reference_unknown(): void
+    {
+        Carbon::setTestNow('2026-11-20 17:00:00 UTC');
+        $fingerprint = hash('sha256', 'partial');
+        $runId = (string) Str::uuid();
+        $snapshot = $this->snapshot([
+            ['product_reference' => 'RRDUP', 'available_quantity' => 2, 'source_row_version' => '1'],
+            ['product_reference' => 'RRDUP', 'available_quantity' => 3, 'source_row_version' => '2'],
+        ], ['snapshot_run_id' => $runId, 'chunk_index' => 0, 'chunk_count' => 1, 'final_chunk' => true, 'dataset_fingerprint' => $fingerprint]);
+        $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($snapshot, JSON_THROW_ON_ERROR))
+            ->assertAccepted()->assertJsonPath('run_status', StockSnapshotRun::PARTIAL);
+        $payload = $this->confirmation($runId, $fingerprint);
+        $this->signed('POST', '/api/internal/v1/stock-snapshots/confirm-unchanged', json_encode($payload, JSON_THROW_ON_ERROR))
+            ->assertAccepted()->assertJsonPath('base_status', StockSnapshotRun::PARTIAL);
+        self::assertSame(StockSnapshotRun::PARTIAL, StockSnapshotRun::query()->where('run_id', $runId)->value('status'));
+        $duplicate = Order::factory()->create(['product_code' => 'RRDUP']);
+        self::assertSame(StockAvailabilityStatus::UNKNOWN, app(ResolvesStockAvailability::class)->resolve($duplicate)->status);
+    }
+
     public function test_bridge_calls_do_not_change_existing_workflows(): void
     {
         $order = Order::factory()->create();
@@ -467,6 +551,20 @@ class Phase7aPohodaBridgeTest extends TestCase
         $body = json_encode($this->heartbeat(), JSON_THROW_ON_ERROR);
         $this->signed('POST', '/api/internal/v1/heartbeat', $body)->assertAccepted();
         self::assertSame($before, [$thread->fresh()->state, $thread->fresh()->lock_version, $order->processThreads()->count()]);
+    }
+
+    public function test_production_bridge_exposes_no_pricing_or_sql_write_command(): void
+    {
+        config(['integrations.pohoda_bridge.allowed_command_types' => []]);
+        $command = $this->command('UPDATE_PURCHASE_PRICE', [
+            'product_reference' => 'RRPRICE', 'purchase_price_minor' => 10000,
+        ]);
+        $this->signed('GET', '/api/internal/v1/commands?connector_id=connector-a&limit=50', '', queryForSignature: [
+            'connector_id' => 'connector-a', 'limit' => '50',
+        ])->assertOk()->assertExactJson(['commands' => []]);
+        self::assertSame(BridgeCommand::PENDING, $command->fresh()->status);
+        self::assertArrayNotHasKey('pohoda', config('database.connections'));
+        self::assertStringNotContainsString('repric', strtolower(file_get_contents(base_path('routes/api.php'))));
     }
 
     private function signed(
@@ -516,6 +614,17 @@ class Phase7aPohodaBridgeTest extends TestCase
         return array_replace([
             'batch_id' => (string) Str::uuid(), 'source_generated_at' => now()->utc()->format('Y-m-d\TH:i:s\Z'),
             'warehouse_code' => 'DECIN', 'items' => $items,
+        ], $override);
+    }
+
+    private function confirmation(string $runId, string $fingerprint, array $override = []): array
+    {
+        return array_replace([
+            'confirmation_id' => (string) Str::uuid(),
+            'base_snapshot_run_id' => $runId,
+            'dataset_fingerprint' => $fingerprint,
+            'warehouse_code' => 'DECIN',
+            'source_generated_at' => now()->utc()->format('Y-m-d\TH:i:s\Z'),
         ], $override);
     }
 

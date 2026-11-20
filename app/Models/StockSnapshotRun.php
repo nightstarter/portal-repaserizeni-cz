@@ -34,4 +34,9 @@ class StockSnapshotRun extends Model
     {
         return $this->hasMany(StockSnapshotBatch::class);
     }
+
+    public function confirmations(): HasMany
+    {
+        return $this->hasMany(StockSnapshotConfirmation::class);
+    }
 }
