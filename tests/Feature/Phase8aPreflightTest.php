@@ -13,11 +13,14 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Tests\Support\BackupFixture;
 use Tests\TestCase;
 
 class Phase8aPreflightTest extends TestCase
 {
     use RefreshDatabase;
+
+    private ?BackupFixture $backupFixture = null;
 
     protected function setUp(): void
     {
@@ -40,6 +43,17 @@ class Phase8aPreflightTest extends TestCase
             'integrations.pohoda_bridge.warehouses' => ['DECIN'],
             'integrations.pohoda_bridge.product_prefixes' => ['RR'],
         ]);
+        $this->backupFixture = BackupFixture::create([], [
+            'off_server' => ['confirmed' => true, 'confirmed_at_utc' => now()->utc()->format('Y-m-d\TH:i:s\Z')],
+            'restore_test' => ['status' => 'SUCCESS', 'completed_at_utc' => now()->utc()->format('Y-m-d\TH:i:s\Z')],
+        ]);
+        config(['backups.latest_manifest' => $this->backupFixture->root()]);
+    }
+
+    protected function tearDown(): void
+    {
+        $this->backupFixture?->cleanup();
+        parent::tearDown();
     }
 
     public function test_cli_json_is_sanitized_and_warn_only_returns_zero(): void
