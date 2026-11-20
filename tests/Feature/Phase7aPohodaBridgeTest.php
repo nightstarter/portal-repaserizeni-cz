@@ -560,12 +560,16 @@ class Phase7aPohodaBridgeTest extends TestCase
 
     public function test_bridge_calls_do_not_change_existing_workflows(): void
     {
-        $order = Order::factory()->create();
+        $priceSnapshot = ['currency' => 'CZK', 'customer_price_minor' => 123456, 'purchase_price_minor' => 65432];
+        $order = Order::factory()->create(['product_code' => 'RRWORKFLOW', 'business_snapshot' => $priceSnapshot]);
         $thread = ProcessThread::factory()->create(['order_id' => $order->id, 'type' => ProcessThreadType::CUSTOM_REBUILD]);
         $before = [$thread->state, $thread->lock_version, $order->processThreads()->count()];
-        $body = json_encode($this->heartbeat(), JSON_THROW_ON_ERROR);
-        $this->signed('POST', '/api/internal/v1/heartbeat', $body)->assertAccepted();
+        $snapshot = $this->snapshot([
+            ['product_reference' => 'RRWORKFLOW', 'available_quantity' => 7, 'reserved_quantity' => 2, 'source_row_version' => 'workflow-v1'],
+        ]);
+        $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($snapshot, JSON_THROW_ON_ERROR))->assertAccepted();
         self::assertSame($before, [$thread->fresh()->state, $thread->fresh()->lock_version, $order->processThreads()->count()]);
+        self::assertSame($priceSnapshot, $order->fresh()->business_snapshot);
     }
 
     public function test_production_bridge_exposes_no_pricing_or_sql_write_command(): void
