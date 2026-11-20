@@ -13,7 +13,7 @@ Tento dokument je runbook pro pozdější kontrolované nasazení. Fáze 7B žá
 
 1. Nasaďte aplikační kód.
 2. Aplikujte migrace 000014 a 000015 standardním kontrolovaným postupem.
-3. Ponechte `POHODA_BRIDGE_ENABLED=false`, `LEGACY_SHOP_IMPORT_ENABLED=false`, `DISCUSSION_EMAIL_ENABLED=false` a `BUYBACK_CUSTOMER_EMAIL_ENABLED=false`.
+3. Ponechte `POHODA_BRIDGE_ENABLED=false`, nastavte serverový allowlist `POHODA_BRIDGE_PRODUCT_PREFIXES=RR` a `POHODA_BRIDGE_WAREHOUSES=DECIN` a ponechte `LEGACY_SHOP_IMPORT_ENABLED=false`, `DISCUSSION_EMAIL_ENABLED=false` a `BUYBACK_CUSTOMER_EMAIL_ENABLED=false`.
 4. Obnovte config/route/view cache a ověřte migration status a `/admin/integrations/pohoda`.
 
 ## Instalace konektoru
@@ -28,7 +28,7 @@ Tento dokument je runbook pro pozdější kontrolované nasazení. Fáze 7B žá
 ## Kontrolované zapnutí
 
 1. Zapněte portálový flag až po ověření klíče, času a allowlistu.
-2. Odešlete heartbeat a jeden kontrolovaný snapshot, ověřte diagnostiku, počty chunků, položkové chyby a stale stav.
+2. Odešlete heartbeat a jeden nový kontrolovaný snapshot s novým `snapshot_run_id`; ověřte diagnostiku, 5/5 chunků, mapped/unmapped/rejected počty, položkové chyby a stale stav. Starý partial run nemažte ani neupravujte.
 3. Nastavte konektoru `dry_run=false`.
 4. Teprve poté vytvořte Task Scheduler:
 

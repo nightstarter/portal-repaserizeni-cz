@@ -26,6 +26,14 @@ return [
         'max_batch_items' => (int) env('POHODA_BRIDGE_MAX_BATCH_ITEMS', 500),
         'max_body_bytes' => (int) env('POHODA_BRIDGE_MAX_BODY_BYTES', 2097152),
         'snapshot_run_timeout_minutes' => (int) env('POHODA_BRIDGE_SNAPSHOT_RUN_TIMEOUT_MINUTES', 30),
+        'product_prefixes' => array_values(array_filter(
+            explode(',', (string) env('POHODA_BRIDGE_PRODUCT_PREFIXES', 'RR')),
+            static fn (string $value): bool => $value !== '',
+        )),
+        'warehouses' => array_values(array_filter(
+            explode(',', (string) env('POHODA_BRIDGE_WAREHOUSES', 'DECIN')),
+            static fn (string $value): bool => $value !== '',
+        )),
         'ip_allowlist' => array_values(array_filter(array_map('trim', explode(',', (string) env('POHODA_BRIDGE_IP_ALLOWLIST', ''))))),
         'rate_limit_per_minute' => (int) env('POHODA_BRIDGE_RATE_LIMIT_PER_MINUTE', 60),
         'command_lease_minutes' => (int) env('POHODA_BRIDGE_COMMAND_LEASE_MINUTES', 5),

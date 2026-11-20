@@ -442,6 +442,33 @@ try {
         }
     });
 
+    bridge_test('successful sync safely ignores portal mapping status metadata', function () {
+        $directory = bridge_temp_dir();
+        try {
+            $config = bridge_config($directory);
+            $responses = 0;
+            $http = new HttpClient($config, function ($request) use (&$responses) {
+                $responses++;
+                if (strpos($request['url'], '/stock-snapshots') !== false) {
+                    return array(
+                        'status' => 202,
+                        'headers' => array(),
+                        'body' => '{"items":[{"status":"ACCEPTED","mapping_status":"UNMAPPED"}]}',
+                    );
+                }
+                return array('status' => 202, 'headers' => array(), 'body' => '{}');
+            });
+            $reader = new BridgeFakeStockReader(array(
+                array('ID' => 1, 'IDS' => 'RRUNMAPPED', 'StavZ' => 3, 'Rezer' => 0, 'DatSave' => 'v1'),
+            ));
+            $result = (new BridgeApplication($config, $reader, $http))->syncOnce(false);
+            bridge_assert($result['status'] === 'SENT', 'Mapping metadata changed successful sync');
+            bridge_assert($responses === 2, 'Snapshot and heartbeat were not both sent');
+        } finally {
+            bridge_remove_dir($directory);
+        }
+    });
+
     bridge_test('logger sanitizes secret DSN password and dangerous keys', function () {
         $directory = bridge_temp_dir();
         try {

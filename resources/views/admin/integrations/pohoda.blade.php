@@ -9,7 +9,11 @@
 <div class="card kpi"><span>{{ __('app.pohoda_last_partial_snapshot') }}</span><strong>{{ $partial?->source_generated_at?->timezone(config('app.timezone'))->format('d.m.Y H:i') ?? '—' }}</strong></div>
 </div>
 <section class="card"><h2>{{ __('app.pohoda_latest_batch') }}</h2>
-@if($latest)<p>{{ $latest->run_id }} · {{ $latest->warehouse_code }} · {{ $latest->received_chunks }}/{{ $latest->chunk_count }}</p><p>{{ __('app.pohoda_items_accepted') }}: {{ $latest->accepted_count }} · {{ __('app.pohoda_items_rejected') }}: {{ $latest->rejected_count }}</p>@else<p>{{ __('app.pohoda_no_snapshot') }}</p>@endif
+@if($latest)
+<p>{{ $latest->run_id }} · {{ $latest->warehouse_code }} · {{ $latest->received_chunks }}/{{ $latest->chunk_count }}</p>
+<p>{{ __('app.pohoda_items_accepted') }}: {{ $latest->accepted_count }} · {{ __('app.pohoda_items_mapped') }}: {{ $latestItemCounts['mapped'] }} · {{ __('app.pohoda_items_unmapped') }}: {{ $latestItemCounts['unmapped'] }} · {{ __('app.pohoda_items_rejected') }}: {{ $latestItemCounts['rejected'] }}</p>
+@if($rejectionCodes->isNotEmpty())<p>{{ __('app.pohoda_rejection_codes') }}: {{ $rejectionCodes->map(fn($total, $code) => $code.': '.$total)->implode(' · ') }}</p>@endif
+@else<p>{{ __('app.pohoda_no_snapshot') }}</p>@endif
 <p>receiving: {{ $runCounts[\App\Models\StockSnapshotRun::RECEIVING] ?? 0 }} · failed: {{ $runCounts[\App\Models\StockSnapshotRun::FAILED] ?? 0 }}</p>
 </section>
 <section class="card"><h2>{{ __('app.pohoda_commands') }}</h2>

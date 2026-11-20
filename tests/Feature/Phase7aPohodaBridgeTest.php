@@ -59,6 +59,8 @@ class Phase7aPohodaBridgeTest extends TestCase
             'integrations.pohoda_bridge.stale_minutes' => 30,
             'integrations.pohoda_bridge.max_batch_items' => 500,
             'integrations.pohoda_bridge.max_body_bytes' => 2_097_152,
+            'integrations.pohoda_bridge.product_prefixes' => ['RR'],
+            'integrations.pohoda_bridge.warehouses' => ['DECIN'],
             'integrations.pohoda_bridge.ip_allowlist' => [],
             'integrations.pohoda_bridge.rate_limit_per_minute' => 1000,
             'integrations.pohoda_bridge.command_lease_minutes' => 5,
@@ -126,25 +128,35 @@ class Phase7aPohodaBridgeTest extends TestCase
         $this->signed('POST', '/api/internal/v1/heartbeat', $body, keyId: 'attacker-varied-key')->assertTooManyRequests();
     }
 
-    public function test_snapshot_is_partial_per_item_idempotent_and_unknown_products_are_recorded(): void
+    public function test_snapshot_accepts_mapped_and_unmapped_rr_products_and_rejects_invalid_items(): void
     {
-        $this->product('KNOWN-1');
+        $this->product('RRKNOWN-1');
         $payload = $this->snapshot([
-            ['product_reference' => 'KNOWN-1', 'available_quantity' => 3, 'reserved_quantity' => 1, 'source_row_version' => 'v1'],
-            ['product_reference' => 'KNOWN-2', 'available_quantity' => 5, 'source_row_version' => 'v2'],
-            ['product_reference' => 'KNOWN-1', 'available_quantity' => -1, 'source_row_version' => 'v3'],
+            ['product_reference' => 'RRKNOWN-1', 'available_quantity' => 3, 'reserved_quantity' => 1, 'source_row_version' => 'v1'],
+            ['product_reference' => 'RRUNKNOWN-2', 'available_quantity' => 5, 'reserved_quantity' => 2, 'source_row_version' => 'v2'],
+            ['product_reference' => 'RRKNOWN-1', 'available_quantity' => -1, 'source_row_version' => 'v3'],
+            ['product_reference' => 'RRFRACTION', 'available_quantity' => 1.5, 'source_row_version' => 'v4'],
+            ['product_reference' => 'RREXTRA', 'available_quantity' => 1, 'source_row_version' => 'v5', 'unsupported' => true],
         ]);
         $body = json_encode($payload, JSON_THROW_ON_ERROR);
         $response = $this->signed('POST', '/api/internal/v1/stock-snapshots', $body)->assertAccepted()
-            ->assertJson(['status' => 'PARTIAL', 'accepted_count' => 1, 'rejected_count' => 2, 'idempotent_replay' => false]);
-        self::assertSame(['ACCEPTED', 'REJECTED', 'REJECTED'], collect($response->json('items'))->pluck('status')->all());
-        self::assertSame(['UNKNOWN_PRODUCT_REFERENCE', 'INVALID_ITEM'], collect($response->json('items'))->pluck('code')->filter()->values()->all());
+            ->assertJson(['status' => 'PARTIAL', 'accepted_count' => 2, 'rejected_count' => 3, 'idempotent_replay' => false]);
+        self::assertSame(['ACCEPTED', 'ACCEPTED', 'REJECTED', 'REJECTED', 'REJECTED'], collect($response->json('items'))->pluck('status')->all());
+        self::assertSame(['MAPPED', 'UNMAPPED', null, null, null], collect($response->json('items'))->pluck('mapping_status')->all());
+        self::assertSame(['INVALID_ITEM', 'INVALID_ITEM', 'INVALID_ITEM'], collect($response->json('items'))->pluck('code')->filter()->values()->all());
+        $unmapped = StockSnapshotItem::query()->where('product_reference', 'RRUNKNOWN-2')->firstOrFail();
+        self::assertNull($unmapped->product_configuration_id);
+        self::assertSame(5, $unmapped->available_quantity);
+        self::assertSame(2, $unmapped->reserved_quantity);
+        self::assertSame('v2', $unmapped->source_row_version);
+        self::assertNotNull($unmapped->source_fingerprint);
+        self::assertFalse(LegacyProductConfiguration::query()->where('product_reference', 'RRUNKNOWN-2')->exists());
         $this->signed('POST', '/api/internal/v1/stock-snapshots', $body)->assertAccepted()->assertJson(['idempotent_replay' => true]);
         self::assertSame(1, StockSnapshotBatch::query()->count());
-        self::assertSame(3, StockSnapshotItem::query()->count());
+        self::assertSame(5, StockSnapshotItem::query()->count());
 
         $changed = $payload;
-        $changed['warehouse_code'] = 'OTHER';
+        $changed['items'][1]['available_quantity'] = 6;
         $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($changed, JSON_THROW_ON_ERROR))->assertConflict();
         self::assertSame(1, StockSnapshotBatch::query()->count());
     }
@@ -153,8 +165,8 @@ class Phase7aPohodaBridgeTest extends TestCase
     {
         config(['integrations.pohoda_bridge.max_batch_items' => 1]);
         $payload = $this->snapshot([
-            ['product_reference' => 'ONE', 'available_quantity' => 1, 'source_row_version' => '1'],
-            ['product_reference' => 'TWO', 'available_quantity' => 2, 'source_row_version' => '2'],
+            ['product_reference' => 'RRONE', 'available_quantity' => 1, 'source_row_version' => '1'],
+            ['product_reference' => 'RRTWO', 'available_quantity' => 2, 'source_row_version' => '2'],
         ]);
         $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($payload, JSON_THROW_ON_ERROR))->assertUnprocessable();
         self::assertSame(0, StockSnapshotBatch::query()->count());
@@ -165,16 +177,74 @@ class Phase7aPohodaBridgeTest extends TestCase
             ->assertExactJson(['error' => ['code' => 'REQUEST_TOO_LARGE']]);
     }
 
+    public function test_server_prefix_and_warehouse_allowlists_are_fail_closed(): void
+    {
+        $payload = $this->snapshot([
+            ['product_reference' => 'OTHER-1', 'available_quantity' => 1, 'source_row_version' => '1'],
+            ['product_reference' => 'rrLOWER', 'available_quantity' => 1, 'source_row_version' => '2'],
+            ['product_reference' => ' RRSPACE', 'available_quantity' => 1, 'source_row_version' => '3'],
+            ['product_reference' => 'RR%WILDCARD', 'available_quantity' => 1, 'source_row_version' => '4'],
+        ]);
+        $response = $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($payload, JSON_THROW_ON_ERROR))
+            ->assertAccepted()->assertJson(['accepted_count' => 0, 'rejected_count' => 4, 'run_status' => StockSnapshotRun::PARTIAL]);
+        self::assertSame(
+            ['PRODUCT_REFERENCE_NOT_ALLOWED', 'PRODUCT_REFERENCE_NOT_ALLOWED', 'INVALID_ITEM', 'INVALID_ITEM'],
+            collect($response->json('items'))->pluck('code')->all(),
+        );
+
+        $wrongWarehouse = $this->snapshot([], ['warehouse_code' => 'OTHER']);
+        $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($wrongWarehouse, JSON_THROW_ON_ERROR))
+            ->assertUnprocessable();
+
+        $requestControlledPrefix = $this->snapshot([]);
+        $requestControlledPrefix['product_prefix'] = 'OTHER';
+        $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($requestControlledPrefix, JSON_THROW_ON_ERROR))
+            ->assertUnprocessable();
+
+        config(['integrations.pohoda_bridge.product_prefixes' => ['%']]);
+        $unsafeConfig = $this->snapshot([
+            ['product_reference' => 'RRVALID', 'available_quantity' => 1, 'source_row_version' => '5'],
+        ]);
+        $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($unsafeConfig, JSON_THROW_ON_ERROR))
+            ->assertUnprocessable();
+        self::assertSame(1, StockSnapshotRun::query()->count());
+    }
+
+    public function test_duplicate_unmapped_reference_is_rejected_within_one_run(): void
+    {
+        $runId = (string) Str::uuid();
+        $first = $this->snapshot([
+            ['product_reference' => 'RRDUPLICATE', 'available_quantity' => 4, 'source_row_version' => 'a'],
+        ], [
+            'snapshot_run_id' => $runId, 'chunk_index' => 0, 'chunk_count' => 2, 'final_chunk' => false,
+        ]);
+        $second = $this->snapshot([
+            ['product_reference' => 'RRDUPLICATE', 'available_quantity' => 5, 'source_row_version' => 'b'],
+        ], [
+            'snapshot_run_id' => $runId, 'chunk_index' => 1, 'chunk_count' => 2, 'final_chunk' => true,
+            'source_generated_at' => $first['source_generated_at'],
+        ]);
+
+        $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($first, JSON_THROW_ON_ERROR))
+            ->assertAccepted()->assertJsonPath('items.0.mapping_status', 'UNMAPPED');
+        $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($second, JSON_THROW_ON_ERROR))
+            ->assertAccepted()
+            ->assertJsonPath('items.0.status', 'REJECTED')
+            ->assertJsonPath('items.0.code', 'DUPLICATE_PRODUCT_REFERENCE')
+            ->assertJsonPath('run_status', StockSnapshotRun::PARTIAL);
+        self::assertSame(1, StockSnapshotItem::query()->where('product_reference', 'RRDUPLICATE')->where('accepted', true)->count());
+    }
+
     public function test_newer_snapshot_wins_and_stale_snapshot_is_not_conclusive(): void
     {
         Carbon::setTestNow('2026-11-19 12:00:00 UTC');
-        $this->product('STOCK-1');
-        $order = Order::factory()->create(['product_code' => 'STOCK-1']);
+        $this->product('RRSTOCK-1');
+        $order = Order::factory()->create(['product_code' => 'RRSTOCK-1']);
         $newer = $this->snapshot([
-            ['product_reference' => 'STOCK-1', 'available_quantity' => 0, 'source_row_version' => 'new'],
+            ['product_reference' => 'RRSTOCK-1', 'available_quantity' => 0, 'source_row_version' => 'new'],
         ], ['source_generated_at' => '2026-11-19T11:55:00Z']);
         $older = $this->snapshot([
-            ['product_reference' => 'STOCK-1', 'available_quantity' => 9, 'source_row_version' => 'old'],
+            ['product_reference' => 'RRSTOCK-1', 'available_quantity' => 9, 'source_row_version' => 'old'],
         ], ['source_generated_at' => '2026-11-19T11:50:00Z']);
         $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($newer, JSON_THROW_ON_ERROR))->assertAccepted();
         $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($older, JSON_THROW_ON_ERROR))->assertAccepted();
@@ -184,22 +254,62 @@ class Phase7aPohodaBridgeTest extends TestCase
         self::assertSame(StockAvailabilityStatus::STALE, app(ResolvesStockAvailability::class)->resolve($order)->status);
     }
 
+    public function test_unmapped_rr_snapshot_resolves_stock_and_later_mapping_does_not_rewrite_history(): void
+    {
+        Carbon::setTestNow('2026-11-20 12:00:00 UTC');
+        $order = Order::factory()->create(['product_code' => 'RRUNMAPPED-STOCK']);
+        $available = $this->snapshot([
+            ['product_reference' => 'RRUNMAPPED-STOCK', 'available_quantity' => 7, 'reserved_quantity' => 1, 'source_row_version' => 'u1'],
+        ], ['source_generated_at' => '2026-11-20T11:59:00Z']);
+        $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($available, JSON_THROW_ON_ERROR))
+            ->assertAccepted()->assertJsonPath('items.0.mapping_status', 'UNMAPPED');
+        self::assertSame(StockAvailabilityStatus::AVAILABLE_IN_AK, app(ResolvesStockAvailability::class)->resolve($order)->status);
+
+        $historical = StockSnapshotItem::query()->where('product_reference', 'RRUNMAPPED-STOCK')->firstOrFail();
+        self::assertNull($historical->product_configuration_id);
+        $this->product('RRUNMAPPED-STOCK');
+        self::assertNull($historical->fresh()->product_configuration_id);
+        self::assertSame(StockAvailabilityStatus::AVAILABLE_IN_AK, app(ResolvesStockAvailability::class)->resolve($order)->status);
+
+        $zero = $this->snapshot([
+            ['product_reference' => 'RRUNMAPPED-STOCK', 'available_quantity' => 0, 'source_row_version' => 'u2'],
+        ], ['source_generated_at' => '2026-11-20T12:00:00Z']);
+        $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($zero, JSON_THROW_ON_ERROR))->assertAccepted();
+        self::assertSame(StockAvailabilityStatus::NOT_AVAILABLE_IN_AK, app(ResolvesStockAvailability::class)->resolve($order)->status);
+
+        Carbon::setTestNow('2026-11-20 12:31:00 UTC');
+        self::assertSame(StockAvailabilityStatus::STALE, app(ResolvesStockAvailability::class)->resolve($order)->status);
+    }
+
+    public function test_partial_run_missing_reference_is_unknown_even_with_unmapped_items(): void
+    {
+        Carbon::setTestNow('2026-11-20 13:00:00 UTC');
+        $order = Order::factory()->create(['product_code' => 'RRMISSING']);
+        $partial = $this->snapshot([
+            ['product_reference' => 'RROTHER', 'available_quantity' => 2, 'source_row_version' => 'p1'],
+            ['product_reference' => 'NOT-RR', 'available_quantity' => 1, 'source_row_version' => 'p2'],
+        ], ['source_generated_at' => '2026-11-20T12:59:00Z']);
+        $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($partial, JSON_THROW_ON_ERROR))
+            ->assertAccepted()->assertJson(['run_status' => StockSnapshotRun::PARTIAL]);
+        self::assertSame(StockAvailabilityStatus::UNKNOWN, app(ResolvesStockAvailability::class)->resolve($order)->status);
+    }
+
     public function test_chunked_snapshot_is_invisible_until_complete_and_missing_run_expires(): void
     {
         Carbon::setTestNow('2026-11-20 10:00:00 UTC');
-        $this->product('CHUNK-1');
-        $this->product('CHUNK-2');
-        $order = Order::factory()->create(['product_code' => 'CHUNK-1']);
+        $this->product('RRCHUNK-1');
+        $this->product('RRCHUNK-2');
+        $order = Order::factory()->create(['product_code' => 'RRCHUNK-1']);
 
         $baseline = $this->snapshot([
-            ['product_reference' => 'CHUNK-1', 'available_quantity' => 0, 'source_row_version' => 'base'],
+            ['product_reference' => 'RRCHUNK-1', 'available_quantity' => 0, 'source_row_version' => 'base'],
         ], ['source_generated_at' => '2026-11-20T09:50:00Z']);
         $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($baseline, JSON_THROW_ON_ERROR))->assertAccepted();
         self::assertSame(StockAvailabilityStatus::NOT_AVAILABLE_IN_AK, app(ResolvesStockAvailability::class)->resolve($order)->status);
 
         $runId = (string) Str::uuid();
         $first = $this->snapshot([
-            ['product_reference' => 'CHUNK-1', 'available_quantity' => 8, 'source_row_version' => 'new-1'],
+            ['product_reference' => 'RRCHUNK-1', 'available_quantity' => 8, 'source_row_version' => 'new-1'],
         ], [
             'snapshot_run_id' => $runId, 'chunk_index' => 0, 'chunk_count' => 2, 'final_chunk' => false,
             'source_generated_at' => '2026-11-20T09:59:00Z',
@@ -209,7 +319,7 @@ class Phase7aPohodaBridgeTest extends TestCase
         self::assertSame(StockAvailabilityStatus::NOT_AVAILABLE_IN_AK, app(ResolvesStockAvailability::class)->resolve($order)->status);
 
         $second = $this->snapshot([
-            ['product_reference' => 'CHUNK-2', 'available_quantity' => 1, 'source_row_version' => 'new-2'],
+            ['product_reference' => 'RRCHUNK-2', 'available_quantity' => 1, 'source_row_version' => 'new-2'],
         ], [
             'snapshot_run_id' => $runId, 'chunk_index' => 1, 'chunk_count' => 2, 'final_chunk' => true,
             'source_generated_at' => '2026-11-20T09:59:00Z',
@@ -220,7 +330,7 @@ class Phase7aPohodaBridgeTest extends TestCase
 
         config(['integrations.pohoda_bridge.snapshot_run_timeout_minutes' => 1]);
         $incomplete = $this->snapshot([
-            ['product_reference' => 'CHUNK-1', 'available_quantity' => 2, 'source_row_version' => 'timeout'],
+            ['product_reference' => 'RRCHUNK-1', 'available_quantity' => 2, 'source_row_version' => 'timeout'],
         ], [
             'snapshot_run_id' => (string) Str::uuid(), 'chunk_index' => 0, 'chunk_count' => 2, 'final_chunk' => false,
             'source_generated_at' => '2026-11-20T10:00:00Z',
@@ -292,6 +402,61 @@ class Phase7aPohodaBridgeTest extends TestCase
             self::assertStringNotContainsString($forbidden, $html);
         }
         self::assertStringContainsString('STALE', $html);
+    }
+
+    public function test_admin_diagnostics_aggregates_mapping_and_preserves_old_rejected_run(): void
+    {
+        Carbon::setTestNow('2026-11-20 14:00:00 UTC');
+        $oldRun = StockSnapshotRun::query()->create([
+            'run_id' => (string) Str::uuid(),
+            'warehouse_code' => 'DECIN',
+            'source_generated_at' => now()->subMinutes(10),
+            'chunk_count' => 5,
+            'received_chunks' => 5,
+            'accepted_count' => 0,
+            'rejected_count' => 2484,
+            'status' => StockSnapshotRun::PARTIAL,
+            'expires_at' => now()->subMinutes(5),
+            'completed_at' => now()->subMinutes(9),
+        ]);
+        StockSnapshotBatch::query()->create([
+            'stock_snapshot_run_id' => $oldRun->id,
+            'batch_id' => (string) Str::uuid(),
+            'chunk_index' => 0,
+            'chunk_count' => 5,
+            'final_chunk' => false,
+            'key_id' => 'current-test-key',
+            'warehouse_code' => 'DECIN',
+            'source_generated_at' => now()->subMinutes(10),
+            'received_at' => now()->subMinutes(9),
+            'status' => 'PARTIAL',
+            'accepted_count' => 0,
+            'rejected_count' => 2484,
+            'payload_hash' => hash('sha256', 'preserved-production-history'),
+        ]);
+
+        $this->product('RRMAPPED-DIAG');
+        $new = $this->snapshot([
+            ['product_reference' => 'RRMAPPED-DIAG', 'available_quantity' => 1, 'source_row_version' => 'd1'],
+            ['product_reference' => 'RRUNMAPPED-DIAG', 'available_quantity' => 2, 'source_row_version' => 'd2'],
+            ['product_reference' => 'FOREIGN-DIAG', 'available_quantity' => 3, 'source_row_version' => 'd3'],
+        ], ['source_generated_at' => '2026-11-20T13:59:00Z']);
+        $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($new, JSON_THROW_ON_ERROR))
+            ->assertAccepted()->assertJson(['accepted_count' => 2, 'rejected_count' => 1]);
+
+        $html = $this->actingAs($this->admin)->get(route('admin.integrations.pohoda'))->assertOk()->getContent();
+        self::assertStringContainsString('Přijaté položky: 2', $html);
+        self::assertStringContainsString('Namapované: 1', $html);
+        self::assertStringContainsString('Nenamapované: 1', $html);
+        self::assertStringContainsString('Odmítnuté položky: 1', $html);
+        self::assertStringContainsString('PRODUCT_REFERENCE_NOT_ALLOWED: 1', $html);
+        self::assertDatabaseHas('stock_snapshot_runs', [
+            'id' => $oldRun->id,
+            'status' => StockSnapshotRun::PARTIAL,
+            'accepted_count' => 0,
+            'rejected_count' => 2484,
+        ]);
+        self::assertSame(2, StockSnapshotRun::query()->count());
     }
 
     public function test_bridge_calls_do_not_change_existing_workflows(): void

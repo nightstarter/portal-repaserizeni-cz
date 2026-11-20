@@ -21,7 +21,14 @@ final class StockSnapshotService
 
     public function ingest(Request $request): array
     {
-        $input = $request->json()->all();
+        try {
+            $input = json_decode($request->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            throw ValidationException::withMessages(['payload' => 'Invalid JSON payload.']);
+        }
+        if (! is_array($input)) {
+            throw ValidationException::withMessages(['payload' => 'The JSON payload must be an object.']);
+        }
         if (array_diff(array_keys($input), [
             'snapshot_run_id', 'batch_id', 'chunk_index', 'chunk_count', 'final_chunk',
             'source_generated_at', 'warehouse_code', 'items',
@@ -38,6 +45,11 @@ final class StockSnapshotService
             'warehouse_code' => ['required', 'string', 'max:32', 'regex:/^[A-Z0-9_-]+$/'],
             'items' => ['present', 'array', 'max:'.max(1, (int) config('integrations.pohoda_bridge.max_batch_items', 500))],
         ])->validate();
+        $allowedWarehouses = $this->allowedWarehouses();
+        if (! in_array($data['warehouse_code'], $allowedWarehouses, true)) {
+            throw ValidationException::withMessages(['warehouse_code' => 'Warehouse is not allowed.']);
+        }
+        $allowedPrefixes = $this->allowedProductPrefixes();
         $chunkFields = collect(['snapshot_run_id', 'chunk_index', 'chunk_count', 'final_chunk'])
             ->filter(fn (string $field): bool => array_key_exists($field, $input));
         if (! in_array($chunkFields->count(), [0, 4], true)) {
@@ -85,10 +97,10 @@ final class StockSnapshotService
             if (array_diff(array_keys($itemData), ['product_reference', 'available_quantity', 'reserved_quantity', 'source_row_version']) !== []
                 || $validator->fails()) {
                 $code = 'INVALID_ITEM';
+            } elseif (! $this->hasAllowedPrefix($reference, $allowedPrefixes)) {
+                $code = 'PRODUCT_REFERENCE_NOT_ALLOWED';
             } elseif (isset($seen[$reference])) {
                 $code = 'DUPLICATE_PRODUCT_REFERENCE';
-            } elseif (! $known->has($reference)) {
-                $code = 'UNKNOWN_PRODUCT_REFERENCE';
             }
             if ($reference !== null) {
                 $seen[$reference] = true;
@@ -97,7 +109,7 @@ final class StockSnapshotService
             $rows[] = [
                 'item_index' => $index,
                 'product_reference' => $reference,
-                'product_configuration_id' => $valid ? $known->get($reference)->id : null,
+                'product_configuration_id' => $valid ? $known->get($reference)?->id : null,
                 'available_quantity' => $valid ? (int) $item['available_quantity'] : null,
                 'reserved_quantity' => $valid && array_key_exists('reserved_quantity', $item) && $item['reserved_quantity'] !== null
                     ? (int) $item['reserved_quantity'] : null,
@@ -243,6 +255,9 @@ final class StockSnapshotService
                 'index' => $item->item_index,
                 'product_reference' => $item->product_reference,
                 'status' => $item->accepted ? 'ACCEPTED' : 'REJECTED',
+                'mapping_status' => $item->accepted
+                    ? ($item->product_configuration_id === null ? 'UNMAPPED' : 'MAPPED')
+                    : null,
                 'code' => $item->rejection_code,
             ])->values()->all(),
         ];
@@ -254,5 +269,59 @@ final class StockSnapshotService
             ->where('status', StockSnapshotRun::RECEIVING)
             ->where('expires_at', '<', now())
             ->update(['status' => StockSnapshotRun::FAILED, 'updated_at' => now()]);
+    }
+
+    /** @return list<string> */
+    private function allowedProductPrefixes(): array
+    {
+        $prefixes = config('integrations.pohoda_bridge.product_prefixes', ['RR']);
+        if (! is_array($prefixes) || $prefixes === []) {
+            throw ValidationException::withMessages(['payload' => 'Bridge product scope is not configured safely.']);
+        }
+        foreach ($prefixes as $prefix) {
+            if (! is_string($prefix)
+                || $prefix === ''
+                || $prefix !== trim($prefix)
+                || preg_match('/[\x00-\x1F\x7F%_\[\]\\\\]/', $prefix)
+                || ! preg_match('/^[A-Za-z0-9.-]{1,32}$/D', $prefix)) {
+                throw ValidationException::withMessages(['payload' => 'Bridge product scope is not configured safely.']);
+            }
+        }
+
+        return array_values(array_unique($prefixes));
+    }
+
+    /** @return list<string> */
+    private function allowedWarehouses(): array
+    {
+        $warehouses = config('integrations.pohoda_bridge.warehouses', ['DECIN']);
+        if (! is_array($warehouses) || $warehouses === []) {
+            throw ValidationException::withMessages(['warehouse_code' => 'Bridge warehouse scope is not configured safely.']);
+        }
+        foreach ($warehouses as $warehouse) {
+            if (! is_string($warehouse)
+                || $warehouse === ''
+                || $warehouse !== trim($warehouse)
+                || ! preg_match('/^[A-Z0-9_-]{1,32}$/D', $warehouse)) {
+                throw ValidationException::withMessages(['warehouse_code' => 'Bridge warehouse scope is not configured safely.']);
+            }
+        }
+
+        return array_values(array_unique($warehouses));
+    }
+
+    /** @param list<string> $prefixes */
+    private function hasAllowedPrefix(?string $reference, array $prefixes): bool
+    {
+        if ($reference === null) {
+            return false;
+        }
+        foreach ($prefixes as $prefix) {
+            if (str_starts_with($reference, $prefix)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

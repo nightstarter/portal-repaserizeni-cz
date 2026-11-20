@@ -8,6 +8,8 @@ Konektor implementuje diagnostiku, read-only parametrizované čtení `SKz`, vý
 
 Upřesnění 7B.1 omezuje produkční zdroj referencí na `SKz.IDS LIKE :prefix`, kde je `:prefix=RR%`, při `RefSklad=1` a `RelSkTyp=1`. Prefix je parametr, nikoli část SQL textu. Inspect, dry-run, anomalies a sync používají shodný rozsah; portálový registr produktů se pro vymezení snapshotu nepoužívá. Konfigurace wildcardy a full-warehouse scope odmítá.
 
+Korekce 7B.2 odstraňuje chybnou závislost snapshotu na předchozím importu objednávek. Validní RR položka je přijatá i bez `LegacyProductConfiguration`, zachová množství, row version a fingerprint a vrací `mapping_status=UNMAPPED`. Pozdější mapování historický append-only snapshot nemění. Portál navíc nezávisle vynucuje `POHODA_BRIDGE_PRODUCT_PREFIXES=RR` a `POHODA_BRIDGE_WAREHOUSES=DECIN`; diagnostika agreguje mapped, unmapped a skutečně odmítnuté položky bez výpisu tisíců referencí.
+
 ## Portálová změna
 
 Protože limit jednoho requestu je 500 položek, migrace `2026_11_20_000015_add_chunked_stock_snapshot_runs.php` přidává `stock_snapshot_runs`, vazbu chunků na run a bezpečné heartbeat error codes. Starý jednodávkový 7A payload zůstává podporovaný jako run o jednom chunku.
