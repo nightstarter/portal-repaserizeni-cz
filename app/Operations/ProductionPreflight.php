@@ -185,7 +185,7 @@ class ProductionPreflight
         $age = max(0, (int) $heartbeat->occurred_at->diffInMinutes(now()));
         $ok = $age <= $limit && $heartbeat->status === 'OK';
 
-        return new PreflightCheck('pohoda_heartbeat', $ok ? PreflightCheck::OK : PreflightCheck::WARN, $ok ? 'Pohoda heartbeat je čerstvý.' : 'Pohoda heartbeat je zastaralý nebo degradovaný.', ['age_minutes' => $age, 'limit_minutes' => $limit, 'connector_status' => $heartbeat->status]);
+        return new PreflightCheck('pohoda_heartbeat', $ok ? PreflightCheck::OK : PreflightCheck::WARN, $ok ? 'Pohoda heartbeat je čerstvý.' : 'Pohoda heartbeat je zastaralý nebo degradovaný.', ['occurred_at' => $heartbeat->occurred_at->toIso8601String(), 'age_minutes' => $age, 'limit_minutes' => $limit, 'connector_status' => $heartbeat->status]);
     }
 
     private function snapshotCheck(): PreflightCheck
@@ -210,7 +210,16 @@ class ProductionPreflight
             && $this->knownDuplicateCount($run->id) === 2;
         $status = $run->status === StockSnapshotRun::COMPLETE || $knownPartial ? PreflightCheck::OK : PreflightCheck::WARN;
 
-        return new PreflightCheck('pohoda_snapshot', $status, $knownPartial ? 'Čerstvý známý PARTIAL snapshot 2482 + 2 duplicity je použitelný.' : ($status === PreflightCheck::OK ? 'Použitelný Pohoda snapshot je čerstvý.' : 'PARTIAL snapshot je čerstvý, ale odchylka vyžaduje provozní kontrolu.'), ['status' => $run->status, 'age_minutes' => $age, 'accepted' => (int) $run->accepted_count, 'rejected' => (int) $run->rejected_count, 'known_partial' => $knownPartial]);
+        return new PreflightCheck('pohoda_snapshot', $status, $knownPartial ? 'Čerstvý známý PARTIAL snapshot 2482 + 2 duplicity je použitelný.' : ($status === PreflightCheck::OK ? 'Použitelný Pohoda snapshot je čerstvý.' : 'PARTIAL snapshot je čerstvý, ale odchylka vyžaduje provozní kontrolu.'), [
+            'status' => $run->status,
+            'verified_at' => $verifiedAt?->toIso8601String(),
+            'verified_via' => $confirmation === null ? 'snapshot' : 'confirmation',
+            'last_confirmation_at' => $confirmation?->received_at?->toIso8601String(),
+            'age_minutes' => $age,
+            'accepted' => (int) $run->accepted_count,
+            'rejected' => (int) $run->rejected_count,
+            'known_partial' => $knownPartial,
+        ]);
     }
 
     private function knownDuplicateCount(int $runId): int
@@ -236,11 +245,22 @@ class ProductionPreflight
     {
         $outbox = Schema::hasTable('outbox_events') ? OutboxEvent::query()->whereIn('status', [OutboxEvent::PENDING, OutboxEvent::FAILED])->selectRaw('status, COUNT(*) total')->groupBy('status')->pluck('total', 'status') : collect();
         $integration = Schema::hasTable('integration_events') ? DB::table('integration_events')->whereIn('status', ['PENDING', 'FAILED'])->selectRaw('status, COUNT(*) total')->groupBy('status')->pluck('total', 'status') : collect();
-        $failed = (int) ($outbox[OutboxEvent::FAILED] ?? 0) + (int) ($integration['FAILED'] ?? 0);
-        $pending = (int) ($outbox[OutboxEvent::PENDING] ?? 0) + (int) ($integration['PENDING'] ?? 0);
+        $outboxPending = (int) ($outbox[OutboxEvent::PENDING] ?? 0);
+        $outboxFailed = (int) ($outbox[OutboxEvent::FAILED] ?? 0);
+        $integrationPending = (int) ($integration['PENDING'] ?? 0);
+        $integrationFailed = (int) ($integration['FAILED'] ?? 0);
+        $failed = $outboxFailed + $integrationFailed;
+        $pending = $outboxPending + $integrationPending;
         $status = $failed > 0 ? PreflightCheck::ERROR : ($pending > 0 ? PreflightCheck::WARN : PreflightCheck::OK);
 
-        return new PreflightCheck('integration_outbox', $status, $status === PreflightCheck::OK ? 'Integrační a outbox fronty jsou bez pending/failed událostí.' : 'Integrační nebo outbox fronta vyžaduje pozornost.', ['pending' => $pending, 'failed' => $failed]);
+        return new PreflightCheck('integration_outbox', $status, $status === PreflightCheck::OK ? 'Integrační a outbox fronty jsou bez pending/failed událostí.' : 'Integrační nebo outbox fronta vyžaduje pozornost.', [
+            'outbox_pending' => $outboxPending,
+            'outbox_failed' => $outboxFailed,
+            'integration_pending' => $integrationPending,
+            'integration_failed' => $integrationFailed,
+            'pending' => $pending,
+            'failed' => $failed,
+        ]);
     }
 
     private function featureFlagCheck(): PreflightCheck
