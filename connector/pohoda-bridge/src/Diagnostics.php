@@ -42,6 +42,8 @@ final class Diagnostics
             $checks[] = $this->check('SQL_CONNECTION', true, 'OK');
             $checks[] = $this->check('SQL_SCHEMA', count(array_diff($required, $columns)) === 0, 'COLUMNS_'.count($columns));
             $checks[] = $this->check('WAREHOUSE_SCOPE', $this->reader->warehouseCount() >= 0, 'REF_'.(int) $this->config['warehouse_ref']);
+            $prefixes = Config::productReferencePrefixes($this->config);
+            $checks[] = $this->check('PRODUCT_SCOPE', $this->reader->scopedCount() >= 0, 'SQL_PREFIX_'.implode(',', $prefixes));
             $permissions = $this->reader->dangerousPermissions();
             $checks[] = $this->check('SQL_READ_ONLY', $permissions === array(), $permissions === array() ? 'OK' : 'WARN_EXCESS_PERMISSIONS');
         } catch (BridgeException $exception) {

@@ -21,8 +21,8 @@ Tento dokument je runbook pro pozdější kontrolované nasazení. Fáze 7B žá
 1. Zkopírujte `connector\pohoda-bridge` do `C:\Services\portal-repase-bridge` mimo webroot.
 2. Vytvořte `config\config.local.php` z example; nastavte NTFS ACL podle README.
 3. Vygenerujte secret lokálně `php bin\bridge.php key:generate`, vložte Base64 hodnotu do lokální konfigurace a bezpečným kanálem do portálového `.env`.
-4. Nastavte `quantity_mode=unconfirmed` a `dry_run=true`.
-5. Spusťte `diagnose`, `stock:inspect`, `stock:dry-run`, `heartbeat:dry-run` a `sync:once --dry-run`. Zkontrolujte, že SQL účet nemá INSERT/UPDATE/DELETE/ALTER.
+4. Nastavte `product_scope=sql_prefix`, `product_reference_prefixes=array('RR')`, `quantity_mode=unconfirmed` a `dry_run=true`. Wildcardy do prefixu nevkládejte; `%` přidává konektor jen do bind parametru.
+5. Spusťte `diagnose`, `stock:inspect`, `stock:dry-run`, `stock:anomalies`, `heartbeat:dry-run` a `sync:once --dry-run`. Zkontrolujte RR prefix, počty/duplicity/anomálie a že SQL účet nemá INSERT/UPDATE/DELETE/ALTER.
 6. Po písemném potvrzení významu zásoby nastavte explicitně `physical` nebo `free`. Nic neodhadujte.
 
 ## Kontrolované zapnutí
@@ -49,7 +49,7 @@ Nastavte nový current pár a starý previous pár na portálu, rebuild config c
 ## Bezpečný rollback
 
 1. Vypněte Task Scheduler a `POHODA_BRIDGE_ENABLED=false`.
-2. Neodstraňujte pending spool; uchovejte jej pro analýzu/retry.
+2. Neodstraňujte pending spool; uchovejte jej pro analýzu/retry. Po změně scope zůstane neshodný spool bezpečně blokovaný `SPOOL_SCOPE_MISMATCH` a nesmí se ručně přeznačit bez kontroly payloadu.
 3. Vraťte předchozí kód konektoru nebo portálu. Neprovádějte slepý schema rollback a nemažte snapshot historii.
 4. Pokud je nutná rotace po incidentu, zneplatněte current secret a proveďte celý rotation postup.
 

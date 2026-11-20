@@ -27,32 +27,102 @@ final class BridgeApplication
     {
         $result = array();
         foreach ($this->reader->inspect($limit) as $row) {
-            $physical = QuantityCalculator::calculate($row['StavZ'], $row['Rezer'], 'physical');
-            $free = QuantityCalculator::calculate($row['StavZ'], $row['Rezer'], 'free');
-            $result[] = array(
-                'IDS' => trim((string) $row['IDS']), 'StavZ' => $physical['physical_quantity'],
-                'Rezer' => $physical['reserved_quantity'], 'physical' => $physical['available_quantity'],
-                'free' => $free['available_quantity'],
-            );
+            try {
+                $physical = QuantityCalculator::calculate($row['StavZ'], $row['Rezer'], 'physical');
+                $free = QuantityCalculator::calculate($row['StavZ'], $row['Rezer'], 'free');
+                $result[] = array(
+                    'IDS' => trim((string) $row['IDS']), 'StavZ' => $physical['physical_quantity'],
+                    'Rezer' => $physical['reserved_quantity'], 'physical' => $physical['available_quantity'],
+                    'free' => $free['available_quantity'], 'quantity_error' => null,
+                );
+            } catch (BridgeException $exception) {
+                $result[] = array(
+                    'IDS' => trim((string) $row['IDS']), 'StavZ' => $row['StavZ'], 'Rezer' => $row['Rezer'],
+                    'physical' => null, 'free' => null, 'quantity_error' => $exception->safeCode(),
+                );
+            }
         }
         return $result;
     }
 
     public function stockDryRun()
     {
+        return $this->stockReport(false);
+    }
+
+    public function stockAnomalies()
+    {
+        return $this->stockReport(true);
+    }
+
+    private function stockReport($includeDetails)
+    {
         $rows = $this->reader->readAll();
-        $report = array('rows' => count($rows), 'empty_ids' => 0, 'non_integer_quantity' => 0, 'quantity_mode' => $this->config['quantity_mode']);
+        $prefixes = Config::productReferencePrefixes($this->config);
+        $ids = array();
+        $duplicateIds = array();
+        $invalidQuantityIds = array();
+        $report = array(
+            'product_scope' => 'sql_prefix',
+            'prefixes' => $prefixes,
+            'rr_cards' => count($rows),
+            'unique_ids' => 0,
+            'duplicate_ids' => 0,
+            'duplicate_rows' => 0,
+            'non_integer_quantities' => 0,
+            'negative_quantities' => 0,
+            'reserved_positive' => 0,
+            'physical_differs_from_free' => 0,
+            'quantity_mode' => $this->config['quantity_mode'],
+        );
         foreach ($rows as $row) {
-            if (trim((string) $row['IDS']) === '') {
-                $report['empty_ids']++;
+            $id = trim((string) $row['IDS']);
+            if (isset($ids[$id])) {
+                $report['duplicate_rows']++;
+                $duplicateIds[$id] = true;
             }
-            try {
-                QuantityCalculator::calculate($row['StavZ'], $row['Rezer'], 'physical');
-            } catch (BridgeException $exception) {
-                $report['non_integer_quantity']++;
+            $ids[$id] = true;
+
+            $physical = $this->quantityClass($row['StavZ']);
+            $reserved = $this->quantityClass($row['Rezer']);
+            if ($physical === 'non_integer' || $reserved === 'non_integer') {
+                $report['non_integer_quantities']++;
+                $invalidQuantityIds[$id] = true;
+            }
+            if ($physical === 'negative' || $reserved === 'negative') {
+                $report['negative_quantities']++;
+                $invalidQuantityIds[$id] = true;
+            }
+            if (is_numeric($row['Rezer']) && (float) $row['Rezer'] > 0) {
+                $report['reserved_positive']++;
+            }
+            if ($physical === 'integer' && $reserved === 'integer') {
+                $physicalValue = (int) $row['StavZ'];
+                $freeValue = max($physicalValue - (int) $row['Rezer'], 0);
+                if ($physicalValue !== $freeValue) {
+                    $report['physical_differs_from_free']++;
+                }
             }
         }
+        $report['unique_ids'] = count($ids);
+        $report['duplicate_ids'] = count($duplicateIds);
+        if ($includeDetails) {
+            $report['duplicate_id_values'] = array_keys($duplicateIds);
+            $report['invalid_quantity_ids'] = array_keys($invalidQuantityIds);
+        }
         return $report;
+    }
+
+    private function quantityClass($value)
+    {
+        if (! is_numeric($value)) {
+            return 'non_integer';
+        }
+        $numeric = (float) $value;
+        if ($numeric < 0) {
+            return 'negative';
+        }
+        return floor($numeric) === $numeric ? 'integer' : 'non_integer';
     }
 
     public function syncOnce($dryRun)
@@ -61,8 +131,14 @@ final class BridgeApplication
         $lock->acquire($this->config['lock_file']);
         $runId = Util::uuid();
         try {
+            // Fail closed before touching an existing spool. An entry created for
+            // another scope must never be sent after a configuration change.
+            Config::productReferencePrefixes($this->config);
             if (! $dryRun && ! empty($this->config['dry_run'])) {
                 throw new BridgeException('DRY_RUN_CONFIG_ACTIVE');
+            }
+            if ($this->config['quantity_mode'] === 'unconfirmed') {
+                throw new BridgeException('QUANTITY_MODE_UNCONFIRMED');
             }
             if (! $dryRun) {
                 $this->drainSpool($runId);
@@ -74,9 +150,6 @@ final class BridgeApplication
             $rows = $this->reader->readAll();
             if (! $dryRun) {
                 $this->state->set('last_successful_sql_read_at', Util::utcNow());
-            }
-            if ($this->config['quantity_mode'] === 'unconfirmed') {
-                throw new BridgeException('QUANTITY_MODE_UNCONFIRMED');
             }
             $built = (new SnapshotChunker())->build($rows, $this->config);
             if ($dryRun) {
@@ -107,6 +180,12 @@ final class BridgeApplication
     private function drainSpool($runId)
     {
         while (($entry = $this->spool->oldestReady()) !== null) {
+            $expectedScope = Config::productScopeFingerprint($this->config);
+            if (! isset($entry['meta']['scope_fingerprint']) || ! hash_equals($expectedScope, (string) $entry['meta']['scope_fingerprint'])) {
+                $this->spool->block($entry, 'SPOOL_SCOPE_MISMATCH');
+                $this->logger->write('ERROR', 'SPOOL_SCOPE_MISMATCH', array('run_id' => $runId, 'batch_id' => $entry['meta']['batch_id']));
+                return;
+            }
             try {
                 $response = $this->http->signed('POST', '/api/internal/v1/stock-snapshots', array(), $entry['payload']);
             } catch (BridgeException $exception) {

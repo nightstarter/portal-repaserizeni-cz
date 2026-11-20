@@ -36,6 +36,59 @@ class BridgeFakeStockReader extends StockReader
     }
 }
 
+class BridgePrefixStatement
+{
+    private $pdo;
+    private $rows;
+
+    public function __construct(BridgePrefixPdo $pdo, array $rows)
+    {
+        $this->pdo = $pdo;
+        $this->rows = $rows;
+    }
+
+    public function execute(array $parameters)
+    {
+        $this->pdo->executedParameters = $parameters;
+        return true;
+    }
+
+    public function fetchAll()
+    {
+        $prefix = substr($this->pdo->executedParameters['prefix'], 0, -1);
+        return array_values(array_filter($this->rows, function ($row) use ($prefix) {
+            return strpos((string) $row['IDS'], $prefix) === 0;
+        }));
+    }
+}
+
+class BridgePrefixPdo
+{
+    public $preparedSql;
+    public $executedParameters = array();
+    public $fullWarehouseCount = 69005;
+    private $rows;
+    private $transaction = false;
+
+    public function __construct(array $rows)
+    {
+        $this->rows = $rows;
+    }
+
+    public function setAttribute($attribute, $value) { return true; }
+    public function exec($sql) { return 0; }
+    public function beginTransaction() { $this->transaction = true; return true; }
+    public function commit() { $this->transaction = false; return true; }
+    public function rollBack() { $this->transaction = false; return true; }
+    public function inTransaction() { return $this->transaction; }
+
+    public function prepare($sql)
+    {
+        $this->preparedSql = $sql;
+        return new BridgePrefixStatement($this, $this->rows);
+    }
+}
+
 $tests = 0;
 $assertions = 0;
 
@@ -94,6 +147,7 @@ function bridge_config($directory)
         'connector_id' => 'test-connector', 'connector_version' => 'test',
         'sql_dsn' => 'sqlsrv:Server=invalid;Database=invalid', 'sql_username' => 'reader', 'sql_password' => 'password-marker',
         'warehouse_ref' => 1, 'warehouse_code' => 'DECIN', 'quantity_mode' => 'physical',
+        'product_reference_prefixes' => array('RR'), 'product_scope' => 'sql_prefix',
         'connect_timeout_seconds' => 1, 'request_timeout_seconds' => 1, 'batch_size' => 2, 'command_limit' => 10,
         'spool_max_bytes' => 100000, 'spool_max_age_hours' => 24, 'retry_base_seconds' => 10, 'retry_max_seconds' => 100,
         'log_max_bytes' => 100000, 'log_retention_days' => 1, 'dry_run' => false,
@@ -125,20 +179,24 @@ try {
         bridge_assert(QuantityCalculator::calculate(10, 3, 'physical')['available_quantity'] === 10, 'Physical mismatch');
         bridge_assert(QuantityCalculator::calculate(10, 3, 'free')['available_quantity'] === 7, 'Free mismatch');
         bridge_assert(QuantityCalculator::calculate(2, 5, 'free')['available_quantity'] === 0, 'Free floor mismatch');
+        bridge_throws('QUANTITY_NEGATIVE', function () { QuantityCalculator::calculate(-1, 0, 'physical'); });
     });
 
     bridge_test('snapshot chunks are deterministic complete and keep exact references', function () {
-        $config = array('quantity_mode' => 'physical', 'batch_size' => 2, 'warehouse_code' => 'DECIN');
+        $config = array(
+            'quantity_mode' => 'physical', 'batch_size' => 2, 'warehouse_code' => 'DECIN',
+            'product_reference_prefixes' => array('RR'), 'product_scope' => 'sql_prefix',
+        );
         $rows = array(
-            array('ID' => 1, 'IDS' => ' AbC-1 ', 'StavZ' => 5, 'Rezer' => 1, 'DatSave' => 'v1'),
-            array('ID' => 2, 'IDS' => 'XYZ', 'StavZ' => 2, 'Rezer' => 0, 'DatSave' => 'v2'),
-            array('ID' => 3, 'IDS' => 'third', 'StavZ' => 1, 'Rezer' => 0, 'DatSave' => 'v3'),
+            array('ID' => 1, 'IDS' => ' RRNR123456 ', 'StavZ' => 5, 'Rezer' => 1, 'DatSave' => 'v1'),
+            array('ID' => 2, 'IDS' => 'RRXYZ', 'StavZ' => 2, 'Rezer' => 0, 'DatSave' => 'v2'),
+            array('ID' => 3, 'IDS' => 'RRthird', 'StavZ' => 1, 'Rezer' => 0, 'DatSave' => 'v3'),
         );
         $built = (new SnapshotChunker())->build($rows, $config, '2026-11-20T10:00:00Z', '00000000-0000-4000-8000-000000000010');
         bridge_assert(count($built['chunks']) === 2, 'Chunk count mismatch');
         $first = json_decode($built['chunks'][0]['payload'], true);
         $last = json_decode($built['chunks'][1]['payload'], true);
-        bridge_assert($first['items'][0]['product_reference'] === 'AbC-1', 'Reference was normalized beyond trim');
+        bridge_assert($first['items'][0]['product_reference'] === 'RRNR123456', 'Reference was normalized beyond trim');
         bridge_assert($first['final_chunk'] === false && $last['final_chunk'] === true, 'Finalization marker mismatch');
         bridge_assert($first['snapshot_run_id'] === $last['snapshot_run_id'], 'Run ID mismatch');
     });
@@ -218,9 +276,127 @@ try {
 
     bridge_test('stock SQL is parameterized select without NOLOCK or mutation', function () {
         $sql = StockReader::stockSql();
-        bridge_assert(stripos($sql, 'FROM SKz') !== false && strpos($sql, ':warehouse_ref') !== false, 'SQL parameters missing');
+        bridge_assert(stripos($sql, 'FROM SKz') !== false && strpos($sql, ':warehouse_ref') !== false && strpos($sql, ':prefix') !== false, 'SQL parameters missing');
+        bridge_assert(strpos($sql, 'RR%') === false, 'Prefix was concatenated into SQL');
+        bridge_assert(strpos($sql, 'SKz.RefSklad = :warehouse_ref') !== false && strpos($sql, 'SKz.RelSkTyp = :stock_type') !== false, 'Warehouse scope missing');
         bridge_assert(stripos($sql, 'NOLOCK') === false, 'NOLOCK found');
         bridge_assert(! preg_match('/\b(INSERT|UPDATE|DELETE|ALTER|EXEC)\b/i', $sql), 'Mutating SQL found');
+    });
+
+    bridge_test('RR prefix is bound literally and excludes a 69005-card full warehouse read', function () {
+        $directory = bridge_temp_dir();
+        try {
+            $config = bridge_config($directory);
+            $pdo = new BridgePrefixPdo(array(
+                array('ID' => 1, 'IDS' => 'RRNR123456', 'StavZ' => 2, 'Rezer' => 0, 'DatSave' => 'v1', 'RefSklad' => 1, 'RelSkTyp' => 1),
+                array('ID' => 2, 'IDS' => 'OTHER69005', 'StavZ' => 9, 'Rezer' => 0, 'DatSave' => 'v2', 'RefSklad' => 1, 'RelSkTyp' => 1),
+            ));
+            $reader = new StockReader($config, function () use ($pdo) { return $pdo; });
+            $rows = $reader->readAll();
+            bridge_assert(count($rows) === 1 && $rows[0]['IDS'] === 'RRNR123456', 'Non-RR product entered scoped result');
+            bridge_assert($pdo->fullWarehouseCount === 69005 && count($rows) < $pdo->fullWarehouseCount, 'Scoped query could read all 69005 warehouse cards');
+            bridge_assert($pdo->executedParameters['prefix'] === 'RR%', 'RR prefix was not bound as RR%');
+            bridge_assert(strpos($pdo->preparedSql, 'RR%') === false, 'Bound prefix leaked into SQL text');
+            $applicationSource = file_get_contents(dirname(__DIR__).DIRECTORY_SEPARATOR.'src'.DIRECTORY_SEPARATOR.'BridgeApplication.php');
+            bridge_assert(strpos($applicationSource, 'warehouseCount(') === false, 'Sync can call full warehouse diagnostic');
+        } finally {
+            bridge_remove_dir($directory);
+        }
+    });
+
+    bridge_test('empty wildcard and injection prefixes are rejected before SQL', function () {
+        $directory = bridge_temp_dir();
+        try {
+            foreach (array('', '%', '_', 'RR%', 'RR_', "RR%' OR 1=1 --") as $prefix) {
+                $config = bridge_config($directory);
+                $config['product_reference_prefixes'] = array($prefix);
+                bridge_throws('PRODUCT_PREFIX_INVALID', function () use ($config) {
+                    Config::validate($config);
+                });
+            }
+            $config = bridge_config($directory);
+            $config['product_reference_prefixes'] = array();
+            bridge_throws('PRODUCT_PREFIX_REQUIRED', function () use ($config) { Config::validate($config); });
+            $config = bridge_config($directory);
+            $config['product_scope'] = 'full_warehouse';
+            bridge_throws('PRODUCT_SCOPE_INVALID', function () use ($config) { Config::validate($config); });
+        } finally {
+            bridge_remove_dir($directory);
+        }
+    });
+
+    bridge_test('stock reports use RR scope and count duplicates and quantity anomalies', function () {
+        $directory = bridge_temp_dir();
+        try {
+            $config = bridge_config($directory);
+            $reader = new BridgeFakeStockReader(array(
+                array('ID' => 1, 'IDS' => ' RRNR123456 ', 'StavZ' => 5, 'Rezer' => 2, 'DatSave' => 'v1'),
+                array('ID' => 2, 'IDS' => 'RRNR123456', 'StavZ' => 1.5, 'Rezer' => 0, 'DatSave' => 'v2'),
+                array('ID' => 3, 'IDS' => 'RRNEG', 'StavZ' => -1, 'Rezer' => 1, 'DatSave' => 'v3'),
+            ));
+            $application = new BridgeApplication($config, $reader);
+            $report = $application->stockDryRun();
+            bridge_assert($report['prefixes'] === array('RR') && $report['rr_cards'] === 3, 'RR scope report mismatch');
+            bridge_assert($report['unique_ids'] === 2 && $report['duplicate_ids'] === 1 && $report['duplicate_rows'] === 1, 'Duplicate report mismatch');
+            bridge_assert($report['non_integer_quantities'] === 1 && $report['negative_quantities'] === 1, 'Quantity anomaly report mismatch');
+            bridge_assert($report['reserved_positive'] === 2 && $report['physical_differs_from_free'] === 1, 'Physical/free report mismatch');
+            $details = $application->stockAnomalies();
+            bridge_assert($details['duplicate_id_values'] === array('RRNR123456'), 'Duplicate details mismatch');
+            bridge_assert(in_array('RRNEG', $details['invalid_quantity_ids'], true), 'Negative quantity detail missing');
+        } finally {
+            bridge_remove_dir($directory);
+        }
+    });
+
+    bridge_test('legacy or mismatched spool scope is never sent as stock snapshot', function () {
+        $directory = bridge_temp_dir();
+        try {
+            $config = bridge_config($directory);
+            $spool = new FileSpool($config['spool_dir'], $config['spool_max_bytes'], $config['spool_max_age_hours']);
+            $spool->enqueue(array('batch_id' => 'legacy-full-warehouse', 'run_id' => 'legacy-run', 'payload' => '{"legacy":true}'));
+            $requests = array();
+            $http = new HttpClient($config, function ($request) use (&$requests) {
+                $requests[] = $request;
+                return array('status' => 202, 'headers' => array(), 'body' => '{}');
+            });
+            $result = (new BridgeApplication($config, new BridgeFakeStockReader(array()), $http, $spool))->syncOnce(false);
+            bridge_assert($result['status'] === 'DEFERRED_PENDING_SPOOL', 'Mismatched spool was not retained');
+            $stockRequests = array_filter($requests, function ($request) {
+                return strpos($request['url'], '/stock-snapshots') !== false;
+            });
+            bridge_assert(count($stockRequests) === 0, 'Legacy full-warehouse payload was sent');
+            $entry = $spool->oldestReady();
+            bridge_assert($entry === null, 'Mismatched spool was not blocked');
+        } finally {
+            bridge_remove_dir($directory);
+        }
+    });
+
+    bridge_test('unconfirmed quantity mode cannot drain an already scoped spool', function () {
+        $directory = bridge_temp_dir();
+        try {
+            $config = bridge_config($directory);
+            $config['quantity_mode'] = 'unconfirmed';
+            $spool = new FileSpool($config['spool_dir'], $config['spool_max_bytes'], $config['spool_max_age_hours']);
+            $spool->enqueue(array(
+                'batch_id' => 'scoped-pending', 'run_id' => 'scoped-run', 'payload' => '{"scoped":true}',
+                'scope_fingerprint' => Config::productScopeFingerprint($config),
+            ));
+            $requests = array();
+            $http = new HttpClient($config, function ($request) use (&$requests) {
+                $requests[] = $request;
+                return array('status' => 202, 'headers' => array(), 'body' => '{}');
+            });
+            bridge_throws('QUANTITY_MODE_UNCONFIRMED', function () use ($config, $http, $spool) {
+                (new BridgeApplication($config, new BridgeFakeStockReader(array()), $http, $spool))->syncOnce(false);
+            });
+            $stockRequests = array_filter($requests, function ($request) {
+                return strpos($request['url'], '/stock-snapshots') !== false;
+            });
+            bridge_assert(count($stockRequests) === 0 && $spool->count() === 1, 'Unconfirmed mode drained stock spool');
+        } finally {
+            bridge_remove_dir($directory);
+        }
     });
 
     bridge_test('commands reject SQL and only testing NOOP can execute', function () {

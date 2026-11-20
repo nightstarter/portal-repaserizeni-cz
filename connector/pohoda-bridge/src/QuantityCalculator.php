@@ -17,8 +17,11 @@ final class QuantityCalculator
         if (floor($physicalFloat) !== $physicalFloat || floor($reservedFloat) !== $reservedFloat) {
             throw new BridgeException('QUANTITY_NOT_INTEGER');
         }
-        $physicalInt = max(0, (int) $physicalFloat);
-        $reservedInt = max(0, (int) $reservedFloat);
+        if ($physicalFloat < 0 || $reservedFloat < 0) {
+            throw new BridgeException('QUANTITY_NEGATIVE');
+        }
+        $physicalInt = (int) $physicalFloat;
+        $reservedInt = (int) $reservedFloat;
 
         return array(
             'available_quantity' => $mode === 'physical' ? $physicalInt : max($physicalInt - $reservedInt, 0),

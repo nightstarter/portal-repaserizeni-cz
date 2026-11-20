@@ -35,21 +35,32 @@ class StockReader
         return $this->pdo;
     }
 
-    public static function stockSql()
+    public static function stockSql($prefixCount = 1)
     {
+        $prefixCount = max(1, (int) $prefixCount);
+        $conditions = array('SKz.IDS LIKE :prefix');
+        for ($index = 1; $index < $prefixCount; $index++) {
+            $conditions[] = 'SKz.IDS LIKE :prefix_'.$index;
+        }
+
         return 'SELECT SKz.ID, SKz.IDS, SKz.StavZ, SKz.Rezer, SKz.DatSave, SKz.RefSklad, SKz.RelSkTyp '
             .'FROM SKz WHERE SKz.RefSklad = :warehouse_ref AND SKz.RelSkTyp = :stock_type '
-            ."AND LTRIM(RTRIM(SKz.IDS)) <> '' ORDER BY SKz.ID";
+            ."AND LTRIM(RTRIM(SKz.IDS)) <> '' AND (".implode(' OR ', $conditions).') ORDER BY SKz.ID';
     }
 
     public function readAll()
     {
+        $prefixes = Config::productReferencePrefixes($this->config);
         $pdo = $this->connect();
         try {
             $pdo->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
             $pdo->beginTransaction();
-            $statement = $pdo->prepare(self::stockSql());
-            $statement->execute(array('warehouse_ref' => (int) $this->config['warehouse_ref'], 'stock_type' => 1));
+            $statement = $pdo->prepare(self::stockSql(count($prefixes)));
+            $parameters = array('warehouse_ref' => (int) $this->config['warehouse_ref'], 'stock_type' => 1);
+            foreach ($prefixes as $index => $prefix) {
+                $parameters[$index === 0 ? 'prefix' : 'prefix_'.$index] = $prefix.'%';
+            }
+            $statement->execute($parameters);
             $rows = $statement->fetchAll();
             $pdo->commit();
             return $rows;
@@ -89,5 +100,10 @@ class StockReader
         $statement->execute(array('warehouse_ref' => (int) $this->config['warehouse_ref'], 'stock_type' => 1));
         $row = $statement->fetch();
         return (int) $row['total'];
+    }
+
+    public function scopedCount()
+    {
+        return count($this->readAll());
     }
 }

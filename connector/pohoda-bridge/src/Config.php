@@ -23,6 +23,7 @@ final class Config
         $required = array(
             'environment', 'portal_base_url', 'bridge_key_id', 'bridge_secret_base64', 'connector_id', 'connector_version',
             'sql_dsn', 'sql_username', 'sql_password', 'warehouse_ref', 'warehouse_code', 'quantity_mode',
+            'product_reference_prefixes', 'product_scope',
             'connect_timeout_seconds', 'request_timeout_seconds', 'batch_size', 'command_limit',
             'spool_max_bytes', 'spool_max_age_hours', 'retry_base_seconds', 'retry_max_seconds',
             'log_max_bytes', 'log_retention_days', 'var_dir', 'spool_dir', 'state_file', 'log_file', 'lock_file', 'dry_run'
@@ -52,8 +53,39 @@ final class Config
         if (! in_array(isset($config['quantity_mode']) ? $config['quantity_mode'] : 'unconfirmed', array('unconfirmed', 'physical', 'free'), true)) {
             throw new BridgeException('QUANTITY_MODE_INVALID');
         }
+        self::productReferencePrefixes($config);
         if ((int) (isset($config['batch_size']) ? $config['batch_size'] : 500) < 1 || (int) $config['batch_size'] > 500) {
             throw new BridgeException('BATCH_SIZE_INVALID');
         }
+    }
+
+    public static function productReferencePrefixes(array $config)
+    {
+        if (! isset($config['product_scope']) || $config['product_scope'] !== 'sql_prefix') {
+            throw new BridgeException('PRODUCT_SCOPE_INVALID');
+        }
+        if (! isset($config['product_reference_prefixes']) || ! is_array($config['product_reference_prefixes']) || $config['product_reference_prefixes'] === array()) {
+            throw new BridgeException('PRODUCT_PREFIX_REQUIRED');
+        }
+
+        $prefixes = array();
+        foreach ($config['product_reference_prefixes'] as $prefix) {
+            if (! is_string($prefix) || $prefix === '' || $prefix !== trim($prefix)) {
+                throw new BridgeException('PRODUCT_PREFIX_INVALID');
+            }
+            // A deliberately narrow alphabet makes SQL LIKE semantics literal and
+            // rejects %, _, bracket ranges, escapes and injection syntax.
+            if (! preg_match('/^[A-Za-z0-9.-]{1,32}$/D', $prefix)) {
+                throw new BridgeException('PRODUCT_PREFIX_INVALID');
+            }
+            $prefixes[$prefix] = $prefix;
+        }
+
+        return array_values($prefixes);
+    }
+
+    public static function productScopeFingerprint(array $config)
+    {
+        return hash('sha256', 'sql_prefix'."\n".implode("\n", self::productReferencePrefixes($config)));
     }
 }

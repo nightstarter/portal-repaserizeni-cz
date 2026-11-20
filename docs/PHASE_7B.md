@@ -6,6 +6,8 @@ Repozitář obsahuje samostatnou aplikaci `connector/pohoda-bridge`, určenou ke
 
 Konektor implementuje diagnostiku, read-only parametrizované čtení `SKz`, výslovnou volbu významu množství, deterministický JSON, HMAC parity s portálem, chunking, atomický souborový spool, oldest-first retry, jitter/backoff, lokální process lock, bezpečný heartbeat, lease command polling a sanitizované rotující logování.
 
+Upřesnění 7B.1 omezuje produkční zdroj referencí na `SKz.IDS LIKE :prefix`, kde je `:prefix=RR%`, při `RefSklad=1` a `RelSkTyp=1`. Prefix je parametr, nikoli část SQL textu. Inspect, dry-run, anomalies a sync používají shodný rozsah; portálový registr produktů se pro vymezení snapshotu nepoužívá. Konfigurace wildcardy a full-warehouse scope odmítá.
+
 ## Portálová změna
 
 Protože limit jednoho requestu je 500 položek, migrace `2026_11_20_000015_add_chunked_stock_snapshot_runs.php` přidává `stock_snapshot_runs`, vazbu chunků na run a bezpečné heartbeat error codes. Starý jednodávkový 7A payload zůstává podporovaný jako run o jednom chunku.
@@ -16,6 +18,7 @@ Run je `RECEIVING`, dokud nejsou přijaté všechny indexy a finální marker. T
 
 - Portál stále nemá SQL connection k Pohodě.
 - SQL dotaz konektoru je pouze parametrizovaný `SELECT` nad `SKz`, bez `NOLOCK` a pod `REPEATABLE READ` transakcí.
+- Ostrý snapshot zahrnuje pouze doslovný prefix `RR`; starý spool bez odpovídajícího scope fingerprintu se neodešle.
 - Výchozí `quantity_mode=unconfirmed` blokuje ostré odeslání.
 - Produkční command whitelist na portálu zůstává prázdný; konektor dovolí `NOOP` pouze při `environment=testing` a odmítá SQL payload.
 - TLS peer/hostname verification je natvrdo zapnuté.
@@ -24,7 +27,7 @@ Run je `RECEIVING`, dokud nejsou přijaté všechny indexy a finální marker. T
 
 ## Testy
 
-Standalone connector test runner ověřuje HMAC vektor, raw body, nonce, quantity režimy, chunking/finalizaci, stabilní retry, spool limit, lock, TLS, backoff/429/5xx, parametrizovaný SELECT, command allowlist, heartbeat, sanitizaci a PHP 7.4 kontrakt. Composer `check` jej spouští před Laravel test suite. Portálové testy nadále používají pouze SQLite `:memory:`.
+Standalone connector test runner ověřuje HMAC vektor, raw body, nonce, quantity režimy, chunking/finalizaci, stabilní retry, spool limit, lock, TLS, backoff/429/5xx, parametrizovaný RR prefix, odmítnutí wildcardů/injection, anomálie, command allowlist, heartbeat, sanitizaci a PHP 7.4 kontrakt. Composer `check` jej spouští před Laravel test suite. Portálové testy nadále používají pouze SQLite `:memory:`.
 
 ## Neprovedené provozní kroky
 

@@ -28,6 +28,7 @@ if ($command === 'key:generate') {
 if ($command === 'help') {
     bridge_output(array('commands' => array(
         'diagnose', 'key:generate', 'stock:inspect', 'stock:dry-run',
+        'stock:anomalies',
         'heartbeat:dry-run', 'sync:once --dry-run', 'sync:once',
         'commands:poll --dry-run', 'commands:poll'
     )));
@@ -59,6 +60,9 @@ try {
             break;
         case 'stock:dry-run':
             bridge_output($application->stockDryRun());
+            break;
+        case 'stock:anomalies':
+            bridge_output($application->stockAnomalies());
             break;
         case 'heartbeat:dry-run':
             bridge_output($application->sendHeartbeat(true));

@@ -28,6 +28,7 @@ final class FileSpool
         try {
             Util::atomicWrite($metaPath, Util::json(array(
                 'batch_id' => $chunk['batch_id'], 'run_id' => $chunk['run_id'],
+                'scope_fingerprint' => isset($chunk['scope_fingerprint']) ? $chunk['scope_fingerprint'] : null,
                 'created_at' => time(), 'attempts' => 0, 'next_attempt_at' => 0,
             )));
         } catch (BridgeException $exception) {

@@ -52,7 +52,14 @@ final class SnapshotChunker
                 'warehouse_code' => $config['warehouse_code'],
                 'items' => $part,
             );
-            $chunks[] = array('run_id' => $runId, 'batch_id' => $batchId, 'index' => $index, 'count' => $count, 'payload' => Util::json($payload));
+            $chunks[] = array(
+                'run_id' => $runId,
+                'batch_id' => $batchId,
+                'index' => $index,
+                'count' => $count,
+                'scope_fingerprint' => Config::productScopeFingerprint($config),
+                'payload' => Util::json($payload),
+            );
         }
 
         return array('run_id' => $runId, 'chunks' => $chunks, 'accepted_local' => count($items), 'rejected_local' => $rejected);

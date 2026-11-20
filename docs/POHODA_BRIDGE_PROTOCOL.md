@@ -71,6 +71,8 @@ Stejný doménový klíč a stejný payload s novým nonce vrací idempotentní 
 
 ### `POST /stock-snapshots`
 
+Produkční HPSERVER konektor fáze 7B.1 získává `product_reference` přímo z `SKz.IDS` omezeného parametrizovaným SQL prefixem `RR%` (`RefSklad=1`, `RelSkTyp=1`). Referenci pouze trimuje; nemění case ani obsah. Portálový registr produktů není podmínkou ani zdrojem rozsahu snapshotu a endpoint `stock-product-references` se nezavádí. Neznámé reference portál přijme k ručnímu mapování podle běžných pravidel snapshotu.
+
 Maximální velikost těla je standardně 2 MiB a chunk má nejvýše 500 položek. Snapshot s více položkami se rozdělí na jeden run s několika chunky:
 
 ```json
