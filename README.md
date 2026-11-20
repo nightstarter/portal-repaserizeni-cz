@@ -40,13 +40,20 @@ Samostatný transakční portál AUTOKLUBY ↔ POLSKO. Procesní pravidla určuj
   - [x] Fáze 7B.2 – přijetí platných nenamapovaných `RR` referencí
   - [x] Fáze 7C – fingerprint datasetu a potvrzení beze změny
   - [x] Fáze 7D – závěrečná akceptace, bezpečnostní a kapacitní audit
-- [ ] Fáze 8 – následující: produkční připravenost, monitoring, zálohy a obnova, provozní testy a řešení technického dluhu PHP 7.4 / Windows Server 2012 R2
+- [ ] Fáze 8 – rozpracovaná produkční připravenost
+  - [ ] Fáze 8A – bezpečnostní baseline, permission matrix a provozní preflight (implementováno; dokončení až po zelené akceptaci, viz [docs/PHASE_8A.md](docs/PHASE_8A.md))
+  - [ ] Fáze 8B – zálohy, obnova a disaster recovery
+  - [ ] Fáze 8C – monitoring, health checks a alerty
+  - [ ] Fáze 8D – izolované smoke/load testy a anonymní demo prostředí
+  - [ ] Fáze 8E – go-live checklist, importní startovní bod a závěrečná akceptace
 
-Aktuální stav: Fáze 0–7 jsou dokončené; následuje Fáze 8. Legacy mapování bylo ověřeno proti živé databázi a přijato ve Fázi 1F. Fáze 2 implementovala zakázkovou a skladovou repasi s paralelními větvemi, Fáze 3 atomické hromadné zásilky AUTOKLUBY ↔ POLSKO, Fáze 4 vratky a finance, Fáze 5 diskusi a notifikace a Fáze 6 opakovatelné reklamace `WARRANTY` a systémové výkupy `BUYBACK`.
+Aktuální stav: Fáze 0–7 jsou dokončené. Fáze 8 je rozpracovaná pouze v podfázi 8A; 8B–8E nebyly zahájeny. Legacy mapování bylo ověřeno proti živé databázi a přijato ve Fázi 1F. Fáze 2 implementovala zakázkovou a skladovou repasi s paralelními větvemi, Fáze 3 atomické hromadné zásilky AUTOKLUBY ↔ POLSKO, Fáze 4 vratky a finance, Fáze 5 diskusi a notifikace a Fáze 6 opakovatelné reklamace `WARRANTY` a systémové výkupy `BUYBACK`.
 
 Pohoda bridge z Fáze 7 je nasazený a běží každých pět minut. Použitelný základní snapshot je `PARTIAL`: 2482 platných `RR` referencí je přijato jako `UNMAPPED` a dvě duplicitní reference zůstávají bezpečně odmítnuté. Následné nezměněné běhy používají `UNCHANGED_CONFIRMATION_ONLY`. HPSERVER konektor má pouze read-only SQL přístup k Pohodě a portál nemá přímé SQL spojení do Pohody.
 
 `PRODUCT_REPRICING = DEFERRED_EXTERNAL_SYSTEM`. Nákupní ani prodejní ceny se přes Pohoda bridge nezapisují a produkční command whitelist zůstává prázdný. `LEGACY_SHOP_IMPORT_ENABLED=false` zůstává bezpečná provozní i výchozí hodnota.
+
+Read-only produkční kontrola 8A je dostupná jako `php artisan ops:preflight` nebo `php artisan ops:preflight --json`; podrobnosti jsou v [docs/OPERATIONS_PREFLIGHT.md](docs/OPERATIONS_PREFLIGHT.md). PHP CLI 7.4.33 a Windows Server 2012 R2 konektoru jsou přijatý technický dluh (`WARN`), nikoli blokátor 8A. Produkční aktivace legacy importu, diskusních e-mailů ani zákaznických výkupních e-mailů dosud neproběhla.
 
 ## Instalace z čistého klonu
 

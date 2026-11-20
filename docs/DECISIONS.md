@@ -321,3 +321,24 @@
 - Stav: přijato pro Fázi 7C
 - Rozhodnutí: První nebo změněný RR dataset vytvoří plný chunkovaný snapshot. Stejný deterministický fingerprint následně vytvoří pouze append-only potvrzení vůči nejnovějšímu použitelnému COMPLETE/PARTIAL runu; množství zůstává vždy v base runu.
 - Dopad: Potvrzení obnoví čas ověření bez tisíců nových položek, nemění PARTIAL na COMPLETE a při konfliktu nebo ztrátě lokálního stavu konektor bezpečně odešle nový plný snapshot.
+
+## D-047: PHP 7.4.33 a Windows Server 2012 R2 jsou přijaté provozní riziko
+
+- Datum: 2026-11-20
+- Stav: přijato pro Fázi 8A
+- Rozhodnutí: Runtime a OS HPSERVER konektoru se v 8A nemění. Preflight je vždy uvádí jako dokumentovaný `WARN`, nikoli `ERROR`; konektor zůstává kompatibilní s PHP CLI 7.4.33.
+- Dopad: Upgrade PHP, Windows, WAMPu, intranetu, SQL Serveru nebo Pohody není podmínkou akceptace 8A ani skrytým úkolem jiné podfáze bez nového rozhodnutí vlastníka.
+
+## D-048: Provozní preflight je read-only a Task Scheduler je ruční kontrola
+
+- Datum: 2026-11-20
+- Stav: přijato pro Fázi 8A
+- Rozhodnutí: `ops:preflight` a AK_ADMIN stránka používají tutéž read-only službu. Neopravují stav, neaplikují migrace, neodesílají SMTP/snapshot a nespouštějí connector command. Protože portál nemá důvěryhodný Task Scheduler heartbeat, stav Scheduleru je explicitní `WARN` s ručním checklistem.
+- Dopad: Exit code je nenulový pouze při `ERROR`; `WARN` umožní provoz s viditelným rizikem. JSON nikdy nezveřejní secret, DSN, `.env`, exception detail ani PII.
+
+## D-049: READ_ONLY nesmí měnit ani unread doménový stav
+
+- Datum: 2026-11-20
+- Stav: přijato pro Fázi 8A
+- Rozhodnutí: READ_ONLY může číst objekty ve svém organizačním scope, ale nesmí vytvářet message read marker ani jiný doménový zápis. GET diskuse je pro tuto roli skutečně read-only a přímý mark-read POST je odmítnut.
+- Dopad: Vlastní změna hesla/jazyka zůstává bezpečnostní/uživatelská preference; všechny workflow, finance, dokumenty, zásilky, diskuse, unread, WARRANTY, BUYBACK a admin operace jsou bez zápisu.
