@@ -105,7 +105,7 @@ class Phase2bCustomRebuildUiTest extends TestCase
 
         $this->actingAs($this->plOperator)
             ->get(route('orders.show', $foreign))
-            ->assertForbidden();
+            ->assertNotFound();
     }
 
     public function test_poland_detail_and_dashboard_never_show_customer_contact_pii(): void

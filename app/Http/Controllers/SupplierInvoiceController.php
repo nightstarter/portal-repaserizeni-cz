@@ -28,7 +28,7 @@ class SupplierInvoiceController extends Controller
 
     private function upload(Request $request, Order $order, ProcessThread $thread, PrivateDocumentService $service, ?Document $replaces): RedirectResponse
     {
-        $this->authorize('view', $order);
+        abort_unless(request()->user()->can('view', $order), 404);
         abort_unless($thread->order_id === $order->id, 404);
         $validated = $request->validate([
             'file' => ['required', 'file'], 'idempotency_key' => ['required', 'string'],

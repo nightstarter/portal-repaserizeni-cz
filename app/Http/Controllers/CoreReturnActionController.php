@@ -19,7 +19,7 @@ class CoreReturnActionController extends Controller
 {
     public function __invoke(Request $request, Order $order, string $action, CoreReturnWorkflow $workflow): RedirectResponse
     {
-        $this->authorize('view', $order);
+        abort_unless($request->user()->can('view', $order), 404);
         $workflowAction = CoreReturnAction::tryFrom($action);
         if ($workflowAction === null) {
             throw ValidationException::withMessages(['action' => __('app.workflow_errors.unknown_core_action')]);

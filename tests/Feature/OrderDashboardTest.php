@@ -90,7 +90,7 @@ class OrderDashboardTest extends TestCase
         $this->actingAs($user)->get(route('orders.show', $visible))
             ->assertOk()
             ->assertDontSee('private@example.test');
-        $this->actingAs($user)->get(route('orders.show', $hidden))->assertForbidden();
+        $this->actingAs($user)->get(route('orders.show', $hidden))->assertNotFound();
     }
 
     public function test_production_import_remains_disabled(): void

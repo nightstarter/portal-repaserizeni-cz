@@ -38,7 +38,7 @@ class OrderController extends Controller
         WarrantyPresentation $warrantyPresentation,
         BuybackPresentation $buybackPresentation,
     ): View {
-        $this->authorize('view', $order);
+        abort_unless($request->user()->can('view', $order), 404);
         $discussionUnreadCount = $discussion->unreadCount($order, $request->user());
         $warrantiesByItem = $warrantyPresentation->forOrder($order, $request->user());
         $warrantyCreateKeys = $order->items()->pluck('id')->mapWithKeys(

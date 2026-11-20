@@ -29,7 +29,7 @@ class BuybackInvoiceController extends Controller
 
     private function upload(Request $request, Order $order, ProcessThread $thread, PrivateDocumentService $service, ?Document $replaces): JsonResponse
     {
-        $this->authorize('view', $order);
+        abort_unless(request()->user()->can('view', $order), 404);
         abort_unless($thread->order_id === $order->id && $thread->type === ProcessThreadType::BUYOUT, 404);
         $validated = $request->validate([
             'file' => ['required', 'file'], 'idempotency_key' => ['required', 'string', 'max:128'],

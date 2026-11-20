@@ -104,7 +104,7 @@ class CustomRebuildWorkflowTest extends TestCase
 
         $this->actingAs($this->plOperator)
             ->postJson($this->actionUrl($order, CustomRebuildAction::CONFIRM_AK_RECEIPT), $this->receiptData(), ['Idempotency-Key' => 'wrong-pl'])
-            ->assertForbidden();
+            ->assertNotFound();
 
         $this->actingAs($this->akOperator)
             ->postJson($this->actionUrl($order, CustomRebuildAction::CONFIRM_AK_RECEIPT), $this->receiptData() + ['target_state' => 'PICKED_UP'], ['Idempotency-Key' => 'inject'])

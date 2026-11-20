@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Application\Messages\DiscussionService;
 use App\Application\Messages\PostMessageCommand;
+use App\Enums\UserRole;
 use App\Exceptions\WorkflowConflictException;
 use App\Models\Message;
 use App\Models\Order;
@@ -17,7 +18,9 @@ class DiscussionController extends Controller
     public function index(Request $request, Order $order, DiscussionService $discussion): View
     {
         abort_unless($request->user()->can('view', $order), 404);
-        $discussion->markRead($order, $request->user());
+        if ($request->user()->role !== UserRole::READ_ONLY) {
+            $discussion->markRead($order, $request->user());
+        }
         $messages = $order->messages()
             ->with(['author:id,name', 'authorOrganization:id,name,code', 'attachments'])
             ->orderByDesc('created_at')
@@ -57,6 +60,7 @@ class DiscussionController extends Controller
     public function markRead(Request $request, Order $order, DiscussionService $discussion): RedirectResponse
     {
         abort_unless($request->user()->can('view', $order), 404);
+        abort_if($request->user()->role === UserRole::READ_ONLY, 403);
         $discussion->markRead($order, $request->user());
 
         return back()->with('status', __('app.messages_marked_read'));

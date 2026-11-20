@@ -94,7 +94,7 @@ class Phase4dNavigationTest extends TestCase
                 ->assertDontSee('CZK');
         }
 
-        $this->actingAs($this->plOperator)->get(route('orders.show', $hiddenOrder))->assertForbidden();
+        $this->actingAs($this->plOperator)->get(route('orders.show', $hiddenOrder))->assertNotFound();
         self::assertSame($this->poland->id, $visibleCore->responsible_organization_id);
     }
 

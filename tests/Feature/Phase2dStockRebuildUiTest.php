@@ -115,7 +115,7 @@ class Phase2dStockRebuildUiTest extends TestCase
         $order = $this->pending(['order_no' => 'PENDING-HIDDEN']);
 
         $this->actingAs($this->plOperator)->get(route('dashboard'))->assertOk()->assertDontSee('PENDING-HIDDEN');
-        $this->actingAs($this->plOperator)->get(route('orders.show', $order))->assertForbidden();
+        $this->actingAs($this->plOperator)->get(route('orders.show', $order))->assertNotFound();
     }
 
     public function test_polish_dashboard_has_separate_operational_queues(): void

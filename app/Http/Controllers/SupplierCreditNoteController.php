@@ -15,7 +15,7 @@ class SupplierCreditNoteController extends Controller
 {
     public function store(Request $request, Order $order, ProcessThread $thread, PrivateDocumentService $service): RedirectResponse
     {
-        $this->authorize('view', $order);
+        abort_unless(request()->user()->can('view', $order), 404);
         abort_unless($thread->order_id === $order->id, 404);
         $validated = $request->validate([
             'file' => ['required', 'file'], 'idempotency_key' => ['required', 'string'],
@@ -38,7 +38,7 @@ class SupplierCreditNoteController extends Controller
 
     public function replace(Request $request, Order $order, ProcessThread $thread, Document $document, PrivateDocumentService $service): RedirectResponse
     {
-        $this->authorize('view', $order);
+        abort_unless(request()->user()->can('view', $order), 404);
         abort_unless($thread->order_id === $order->id && $document->order_id === $order->id && $document->process_thread_id === $thread->id, 404);
         $validated = $request->validate([
             'file' => ['required', 'file'], 'idempotency_key' => ['required', 'string'],

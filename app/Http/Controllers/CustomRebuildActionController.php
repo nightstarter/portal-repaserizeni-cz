@@ -21,7 +21,7 @@ class CustomRebuildActionController extends Controller
         string $action,
         CustomRebuildWorkflow $workflow,
     ): JsonResponse|RedirectResponse {
-        $this->authorize('view', $order);
+        abort_unless($request->user()->can('view', $order), 404);
         $workflowAction = CustomRebuildAction::tryFrom($action);
 
         if ($workflowAction === null) {

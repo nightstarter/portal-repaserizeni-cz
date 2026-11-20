@@ -22,7 +22,7 @@ class StockRebuildActionController extends Controller
         string $action,
         StockRebuildWorkflow $workflow,
     ): JsonResponse|RedirectResponse {
-        $this->authorize('view', $order);
+        abort_unless($request->user()->can('view', $order), 404);
         $type = ProcessThreadType::tryFrom($threadType);
         $workflowAction = StockRebuildAction::tryFrom($action);
 
