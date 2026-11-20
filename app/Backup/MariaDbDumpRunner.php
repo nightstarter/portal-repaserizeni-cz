@@ -3,81 +3,50 @@
 namespace App\Backup;
 
 use App\Backup\Contracts\DatabaseDumpRunner;
-use RuntimeException;
-use Symfony\Component\Process\Process;
+use App\Backup\Contracts\DumpProcessRunner;
 use Throwable;
 
 final class MariaDbDumpRunner implements DatabaseDumpRunner
 {
-    public function dump(string $outputPath, string $credentialsDirectory): void
-    {
-        $connection = (string) config('database.default');
-        $database = (array) config("database.connections.{$connection}", []);
-        if (($database['driver'] ?? null) !== 'mysql' || blank($database['database'] ?? null)) {
-            throw new RuntimeException('Production backup requires a configured MariaDB connection.');
-        }
+    public function __construct(
+        private readonly DumpProcessRunner $processes,
+        private readonly MariaDbClientConfig $credentials,
+        private readonly MariaDbDumpCommand $commands,
+        private readonly DatabaseObjectInspector $objects,
+        private readonly DumpFailureClassifier $failures,
+    ) {}
 
-        $credentials = $credentialsDirectory.DIRECTORY_SEPARATOR.'.mariadb-client-'.bin2hex(random_bytes(12)).'.cnf';
-        $this->writeCredentials($credentials, $database);
+    public function dump(string $outputPath, string $credentialsDirectory): array
+    {
+        $database = $this->credentials->databaseConfiguration();
+        $binary = $this->commands->binary();
+        $inventory = $this->objects->inspect();
+        $credentials = null;
         try {
-            $process = new Process([
-                (string) config('backups.dump_binary', 'mariadb-dump'),
-                '--defaults-extra-file='.$credentials,
-                '--single-transaction',
-                '--quick',
-                '--skip-lock-tables',
-                '--routines',
-                '--triggers',
-                '--events',
-                '--hex-blob',
-                '--default-character-set=utf8mb4',
-                '--result-file='.$outputPath,
-                (string) $database['database'],
-            ]);
-            $process->setTimeout(max(60, (int) config('backups.dump_timeout_seconds', 3600)));
-            $process->run();
-            if (! $process->isSuccessful() || ! is_file($outputPath) || filesize($outputPath) < 1) {
-                throw new RuntimeException('Database dump failed; database tool output was suppressed.');
+            $credentials = $this->credentials->create($credentialsDirectory, $database);
+            $command = $this->commands->build($binary, $credentials, (string) $database['database'], $inventory, false);
+            $result = $this->processes->run($command, $outputPath, max(60, (int) config('backups.dump_timeout_seconds', 3600)));
+            if ($result->exitCode !== 0) {
+                throw $this->failures->fromResult($result, $binary, $inventory);
             }
-            if (! chmod($outputPath, 0600)) {
-                throw new RuntimeException('Database dump permissions could not be secured.');
+            if (! is_file($outputPath) || filesize($outputPath) < 1 || ! chmod($outputPath, 0600)) {
+                throw new DumpException('DUMP_OUTPUT_WRITE_FAILED', 'dump_output', $result->exitCode, basename($binary), 'Use a new writable backup target on a filesystem with sufficient free space.');
             }
+
+            return [
+                'logical_objects' => $inventory,
+                'options' => $this->commands->safeOptionMetadata($inventory),
+            ];
         } catch (Throwable $exception) {
             @unlink($outputPath);
-            if ($exception instanceof RuntimeException) {
+            if ($exception instanceof DumpException) {
                 throw $exception;
             }
-            throw new RuntimeException('Database dump failed; database tool output was suppressed.');
+            throw new DumpException('DUMP_FAILED_UNKNOWN', 'dump', null, basename($binary), 'Run backup:diagnose --json and review only its sanitized capability results.');
         } finally {
-            if (is_file($credentials)) {
+            if (is_string($credentials)) {
                 @unlink($credentials);
             }
-        }
-    }
-
-    private function writeCredentials(string $path, array $database): void
-    {
-        $values = [
-            'host' => $database['host'] ?? null,
-            'port' => $database['port'] ?? null,
-            'user' => $database['username'] ?? null,
-            'password' => $database['password'] ?? null,
-            'socket' => $database['unix_socket'] ?? null,
-        ];
-        foreach ($values as $value) {
-            if (is_string($value) && preg_match('/[\r\n]/', $value) === 1) {
-                throw new RuntimeException('Database credential configuration is invalid.');
-            }
-        }
-        $lines = ['[client]'];
-        foreach ($values as $key => $value) {
-            if ($value !== null && $value !== '') {
-                $lines[] = $key.'="'.addcslashes((string) $value, '\\"').'"';
-            }
-        }
-        if (file_put_contents($path, implode(PHP_EOL, $lines).PHP_EOL, LOCK_EX) === false || ! chmod($path, 0600)) {
-            @unlink($path);
-            throw new RuntimeException('Unable to create protected database credentials file.');
         }
     }
 }

@@ -45,10 +45,18 @@ final class BackupFixture
         $createdAt = now()->utc()->format('Y-m-d\TH:i:s\Z');
         $gitCommit = str_repeat('a', 40);
         $schema = ['migrations' => $migrations, 'fingerprint' => hash('sha256', json_encode($migrations))];
+        $dumpMetadata = [
+            'logical_objects' => ['triggers' => 0, 'routines' => 0, 'events' => 0],
+            'options' => [
+                'single_transaction' => true, 'quick' => true, 'skip_lock_tables' => true,
+                'no_tablespaces' => true, 'triggers' => false, 'routines' => false, 'events' => false,
+            ],
+        ];
         $metadata = [
             'backup_id' => $backupId, 'created_at_utc' => $createdAt, 'git_commit' => $gitCommit,
             'runtime' => ['portal_php' => '8.5', 'mariadb' => 'fixture', 'connector_php' => '7.4.33', 'connector_os' => 'Windows Server 2012 R2'],
-            'schema' => $schema, 'critical_counts' => $counts, 'private_file_count' => count($entries),
+            'schema' => $schema, 'critical_counts' => $counts, 'database_dump' => $dumpMetadata,
+            'private_file_count' => count($entries),
         ];
         file_put_contents($root.'/metadata.json', json_encode($metadata, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
         chmod($root.'/metadata.json', 0600);
@@ -69,6 +77,8 @@ final class BackupFixture
                 'engine' => 'mariadb', 'version' => 'fixture',
                 'source_identity_sha256' => hash('sha256', 'production-source-fixture'),
                 'critical_counts' => $counts,
+                'logical_objects' => $dumpMetadata['logical_objects'],
+                'dump_options' => $dumpMetadata['options'],
             ],
             'components' => [
                 'database' => true, 'private_storage' => true, 'schema_metadata' => true,

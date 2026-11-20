@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Backup\Contracts\BackupMaintenance;
 use App\Backup\Contracts\DatabaseDumpRunner;
 use App\Backup\Contracts\PrivateStorageArchiver;
+use App\Backup\DumpException;
 use App\Backup\MariaDbDumpRunner;
 use App\Enums\DocumentStatus;
 use App\Enums\DocumentType;
@@ -79,7 +80,7 @@ class Phase8bBackupCreateTest extends TestCase
         $this->cleanup[] = $foreign;
         $this->app->bind(DatabaseDumpRunner::class, fn () => new class implements DatabaseDumpRunner
         {
-            public function dump(string $outputPath, string $credentialsDirectory): void
+            public function dump(string $outputPath, string $credentialsDirectory): array
             {
                 throw new RuntimeException('dump password=must-not-print');
             }
@@ -94,6 +95,32 @@ class Phase8bBackupCreateTest extends TestCase
         $this->assertSame(1, $maintenance->ends);
         $this->assertStringNotContainsString('must-not-print', Artisan::output());
         $this->assertSame([], glob(dirname($target).'/.'.basename($target).'.staging-*'));
+    }
+
+    public function test_classified_dump_failure_is_safe_in_json_and_keeps_exit_one(): void
+    {
+        $target = $this->preparePrivateDocumentAndTarget();
+        $this->app->bind(DatabaseDumpRunner::class, fn () => new class implements DatabaseDumpRunner
+        {
+            public function dump(string $outputPath, string $credentialsDirectory): array
+            {
+                throw new DumpException(
+                    'DUMP_AUTHENTICATION_FAILED',
+                    'database_dump',
+                    2,
+                    'mariadb-dump',
+                    'Verify separately managed credentials.',
+                );
+            }
+        });
+
+        $this->assertSame(1, Artisan::call('backup:create', ['--target' => $target, '--json' => true]));
+        $result = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame('DUMP_AUTHENTICATION_FAILED', $result['code']);
+        $this->assertSame('database_dump', $result['phase']);
+        $this->assertSame(2, $result['dump_exit_code']);
+        $this->assertSame('mariadb-dump', $result['binary']);
+        $this->assertDirectoryDoesNotExist($target);
     }
 
     public function test_archive_failure_and_checksum_mismatch_never_publish_complete_manifest(): void
@@ -134,11 +161,13 @@ class Phase8bBackupCreateTest extends TestCase
         {
             public function __construct(private readonly string $target) {}
 
-            public function dump(string $outputPath, string $credentialsDirectory): void
+            public function dump(string $outputPath, string $credentialsDirectory): array
             {
                 mkdir($this->target, 0700);
                 file_put_contents($this->target.'/foreign.keep', 'preserve');
                 file_put_contents($outputPath, '-- fake isolated SQLite dump');
+
+                return Phase8bBackupCreateTest::dumpMetadata();
             }
         });
 
@@ -258,15 +287,28 @@ class Phase8bBackupCreateTest extends TestCase
         {
             public function __construct(private readonly string $target) {}
 
-            public function dump(string $outputPath, string $credentialsDirectory): void
+            public function dump(string $outputPath, string $credentialsDirectory): array
             {
                 if (file_exists($this->target)) {
                     throw new RuntimeException('Final target was published before dump completed.');
                 }
                 file_put_contents($outputPath, '-- fake isolated SQLite dump');
                 chmod($outputPath, 0600);
+
+                return Phase8bBackupCreateTest::dumpMetadata();
             }
         });
+    }
+
+    public static function dumpMetadata(): array
+    {
+        return [
+            'logical_objects' => ['triggers' => 0, 'routines' => 0, 'events' => 0],
+            'options' => [
+                'single_transaction' => true, 'quick' => true, 'skip_lock_tables' => true,
+                'no_tablespaces' => true, 'triggers' => false, 'routines' => false, 'events' => false,
+            ],
+        ];
     }
 
     private function recordingMaintenance(): object

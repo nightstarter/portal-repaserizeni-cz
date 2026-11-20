@@ -4,5 +4,6 @@ namespace App\Backup\Contracts;
 
 interface DatabaseDumpRunner
 {
-    public function dump(string $outputPath, string $credentialsDirectory): void;
+    /** @return array<string, mixed> Sanitized manifest metadata. */
+    public function dump(string $outputPath, string $credentialsDirectory): array;
 }

@@ -43,7 +43,7 @@ final class BackupCreator
             $privateBefore = $this->archiver->inventory($privateRoot);
 
             $dumpPath = $staging.DIRECTORY_SEPARATOR.'database.sql';
-            $this->dumpRunner->dump($dumpPath, $staging);
+            $dumpMetadata = $this->dumpRunner->dump($dumpPath, $staging);
             $archivePath = $staging.DIRECTORY_SEPARATOR.'private-storage.tar';
             $archiveEntries = $this->archiver->archive($privateRoot, $archivePath);
 
@@ -69,6 +69,7 @@ final class BackupCreator
                 ],
                 'schema' => $after['schema'],
                 'critical_counts' => $after['critical_counts'],
+                'database_dump' => $dumpMetadata,
                 'private_file_count' => count($archiveEntries),
             ];
             $metadataPath = $staging.DIRECTORY_SEPARATOR.'metadata.json';
@@ -181,6 +182,8 @@ final class BackupCreator
                     (string) ($database['port'] ?? ''), (string) ($database['database'] ?? ''),
                 ])),
                 'critical_counts' => $metadata['critical_counts'],
+                'logical_objects' => $metadata['database_dump']['logical_objects'],
+                'dump_options' => $metadata['database_dump']['options'],
             ],
             'components' => [
                 'database' => true, 'private_storage' => true, 'schema_metadata' => true,

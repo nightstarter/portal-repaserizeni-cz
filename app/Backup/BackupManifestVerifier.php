@@ -137,7 +137,7 @@ final class BackupManifestVerifier
         $allowed = [
             '' => ['format_version', 'backup_id', 'created_at_utc', 'environment', 'status', 'git_commit', 'schema', 'database', 'components', 'runtime', 'parts', 'off_server', 'restore_test'],
             'schema' => ['migrations', 'fingerprint'],
-            'database' => ['engine', 'version', 'source_identity_sha256', 'critical_counts'],
+            'database' => ['engine', 'version', 'source_identity_sha256', 'critical_counts', 'logical_objects', 'dump_options'],
             'components' => ['database', 'private_storage', 'schema_metadata', 'apache_php_configuration', 'webserver_cron_export', 'windows_task_scheduler_export', 'connector_config_state', 'deployed_revision', 'runtime_versions', 'protected_secret_escrow'],
             'runtime' => ['portal_php', 'connector_php', 'connector_os', 'mariadb'],
             'off_server' => ['confirmed', 'confirmed_at_utc', 'evidence_id'],
@@ -154,6 +154,20 @@ final class BackupManifestVerifier
         $counts = data_get($manifest, 'database.critical_counts');
         if (is_array($counts) && array_diff(array_keys($counts), (array) config('backups.critical_tables', [])) !== []) {
             $errors[] = 'Manifest contains an unknown critical table count.';
+        }
+        $logicalObjects = data_get($manifest, 'database.logical_objects');
+        foreach (['triggers', 'routines', 'events'] as $type) {
+            if (! is_array($logicalObjects) || ! is_int($logicalObjects[$type] ?? null) || $logicalObjects[$type] < 0) {
+                $errors[] = 'Database logical object inventory is incomplete.';
+                break;
+            }
+        }
+        $dumpOptions = data_get($manifest, 'database.dump_options');
+        foreach (['single_transaction', 'quick', 'skip_lock_tables', 'no_tablespaces', 'triggers', 'routines', 'events'] as $option) {
+            if (! is_array($dumpOptions) || ! is_bool($dumpOptions[$option] ?? null)) {
+                $errors[] = 'Database dump option metadata is incomplete.';
+                break;
+            }
         }
         foreach ((array) ($manifest['parts'] ?? []) as $part) {
             if (is_array($part) && array_diff(array_keys($part), ['name', 'kind', 'path', 'size', 'sha256', 'source_path', 'mode', 'encrypted', 'entries']) !== []) {
@@ -242,7 +256,9 @@ final class BackupManifestVerifier
                     || ($metadata['backup_id'] ?? null) !== ($manifest['backup_id'] ?? null)
                     || ($metadata['git_commit'] ?? null) !== ($manifest['git_commit'] ?? null)
                     || ($metadata['schema'] ?? null) !== ($manifest['schema'] ?? null)
-                    || ($metadata['critical_counts'] ?? null) !== data_get($manifest, 'database.critical_counts')) {
+                    || ($metadata['critical_counts'] ?? null) !== data_get($manifest, 'database.critical_counts')
+                    || data_get($metadata, 'database_dump.logical_objects') !== data_get($manifest, 'database.logical_objects')
+                    || data_get($metadata, 'database_dump.options') !== data_get($manifest, 'database.dump_options')) {
                     $errors[] = 'Sanitized metadata content is invalid or inconsistent.';
                 }
             } catch (Throwable) {
