@@ -46,6 +46,17 @@ JSON obsahuje jen `status`, seznam `checks`, bezpečné číselné/booleovské c
 
 Stejnou službu používá read-only `/admin/operations/preflight`, dostupný pouze `AK_ADMIN` z AUTOKLUBY. Ostatní dostanou `404`. Stránka nemá opravná tlačítka ani mutační endpoint.
 
+## Produkční akceptační výsledek 20. 11. 2026
+
+Po provozní opravě `APP_URL=https://portal.repaserizeni.cz` a obnově config cache byly spuštěny textová i JSON varianta přes `php8.5`. Obě skončily exit code `0`, bez `ERROR`: 18 kontrol bylo `OK` a dvě `WARN`.
+
+Zbývající `WARN` jsou výhradně:
+
+- ruční kontrola Windows Task Scheduleru, protože portál nemá důvěryhodný přístup k jeho Last Run Result;
+- přijatý technický dluh PHP CLI 7.4.33 a Windows Server 2012 R2.
+
+Preflight potvrdil čerstvý heartbeat a confirmation, použitelný PARTIAL snapshot 2482 přijatých + 2 známé duplicity, nulové receiving/failed bridge runy, nulové pending/failed integrační a outbox události, bezpečné feature flagy, prázdný command whitelist a HTTPS/session baseline. Tyto výsledky nenahrazují níže uvedenou ruční kontrolu Scheduleru ani živého TLS/vhost/ACL.
+
 ## Ruční kontrola
 
 Portál nevidí Windows Task Scheduler API. Provozovatel musí na HPSERVERU zkontrolovat Last Run Result `0x0`, poslední běh, pětiminutový interval, „do not start a new instance“, servisní účet, Windows Time, spool a ACL. Preflight tento stav nikdy nepředstírá jako automaticky ověřený.

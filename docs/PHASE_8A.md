@@ -1,6 +1,6 @@
 # Fáze 8A – produkční baseline, oprávnění a preflight
 
-Datum implementace: 20. 11. 2026. Rozsah je výhradně 8A; zálohy/DR (8B), monitoring/alerty (8C), izolované smoke/load/demo (8D) a go-live/importní start (8E) nebyly zahájeny.
+Datum dokončení: 20. 11. 2026. Fáze 8A je akceptovaná. Rozsah je výhradně 8A; zálohy/DR (8B), monitoring/alerty (8C), izolované smoke/load/demo (8D) a go-live/importní start (8E) nebyly zahájeny.
 
 ## Dodané části
 
@@ -34,10 +34,14 @@ Datum implementace: 20. 11. 2026. Rozsah je výhradně 8A; zálohy/DR (8B), moni
 
 Read-only produkční `migrate:status` potvrdil všech 20 migrací 000001–000016 jako `Ran`, bez pending migrace. Žádná migrace nebyla spuštěna.
 
-Read-only produkční `ops:preflight --json` ověřil jako `OK` prostředí/debug, DB, migrace, runtime adresáře, private storage, cache, čerstvý heartbeat, známý PARTIAL 2482+2, nulové receiving/failed runy, nulový pending/failed outbox, bezpečné feature flagy, prázdný whitelist, allowlisty DECIN/RR, vypnuté SMTP funkce a disk. `WARN` jsou ruční Task Scheduler kontrola a přijatý runtime/OS dluh.
+Po opravě produkčního `APP_URL` provozovatelem a obnově config cache byly zopakovány oba read-only příkazy `php8.5 artisan ops:preflight` a `php8.5 artisan ops:preflight --json`. Oba vrátily exit code **0**, žádný `ERROR`, celkový stav `WARN`, **18× OK** a **2× WARN**.
 
-## Neuzavřený blokátor
+Jako `OK` byly skutečně ověřeny prostředí/debug, HTTPS a session cookie flags, DB, všech 20 migrací bez pending změn, runtime adresáře, private storage, cache, čerstvý bridge heartbeat, čerstvé confirmation a známý PARTIAL snapshot 2482+2, nulové receiving/failed runy, nulový pending/failed integrační i outbox stav, bezpečné feature flagy, prázdný command whitelist, allowlisty DECIN/RR, vypnuté SMTP funkce a diskový limit.
 
-Kontrola `https_and_session` v načtené produkční konfiguraci vrátila `ERROR`: session flags jsou bezpečné, ale scheme `APP_URL` není HTTPS. Podle zadání nebyl `.env` ani config cache změněn. Provozovatel musí bezpečným deployment postupem nastavit/ověřit produkční `APP_URL=https://portal.repaserizeni.cz`, rebuildnout config cache a zopakovat `ops:preflight --json`. Teprve výsledek bez `ERROR` dovolí označit 8A za dokončenou.
+## Zbývající WARN a ruční kontroly
 
-Task Scheduler GUI, živý TLS certifikát/redirect/vhost/ACL, SQL grants konektoru a produkční browser přehled zůstávají výslovně ruční kontroly.
+- Stav Windows Task Scheduleru nelze z portálu spolehlivě zjistit. Last Run Result, poslední běh a nepřekrývání instancí zůstávají ruční provozní kontrola.
+- PHP CLI 7.4.33 a Windows Server 2012 R2 jsou přijatý technický dluh a provozní riziko, nikoli `ERROR` ani blokátor 8A.
+- Živý TLS certifikát/redirect/vhost/ACL, SQL grants konektoru a produkční browser přehled nebyly tímto preflightem ověřeny a zůstávají ruční kontroly.
+
+Produkční konfigurace, DB, cron, Task Scheduler, Pohoda ani HPSERVER nebyly tímto akceptačním opakováním změněny.
