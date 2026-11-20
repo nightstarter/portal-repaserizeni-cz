@@ -1,0 +1,32 @@
+<?php
+
+return array(
+    'environment' => 'production',
+    'portal_base_url' => 'https://portal.repaserizeni.cz',
+    'bridge_key_id' => '',
+    'bridge_secret_base64' => '',
+    'connector_id' => 'hpserver-pohoda-1',
+    'connector_version' => '7B-1.0.0',
+    'sql_dsn' => 'sqlsrv:Server=127.0.0.1;Database=POHODA',
+    'sql_username' => 'portal_bridge_readonly',
+    'sql_password' => '',
+    'warehouse_ref' => 1,
+    'warehouse_code' => 'DECIN',
+    'quantity_mode' => 'unconfirmed', // unconfirmed | physical | free
+    'connect_timeout_seconds' => 10,
+    'request_timeout_seconds' => 30,
+    'batch_size' => 500,
+    'command_limit' => 50,
+    'spool_max_bytes' => 104857600,
+    'spool_max_age_hours' => 168,
+    'retry_base_seconds' => 30,
+    'retry_max_seconds' => 3600,
+    'log_max_bytes' => 5242880,
+    'log_retention_days' => 14,
+    'var_dir' => 'C:\\Services\\portal-repase-bridge\\var',
+    'spool_dir' => 'C:\\Services\\portal-repase-bridge\\var\\spool',
+    'state_file' => 'C:\\Services\\portal-repase-bridge\\var\\state.json',
+    'log_file' => 'C:\\Services\\portal-repase-bridge\\var\\bridge.log',
+    'lock_file' => 'C:\\Services\\portal-repase-bridge\\var\\bridge.lock',
+    'dry_run' => true,
+);

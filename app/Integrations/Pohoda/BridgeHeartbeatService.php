@@ -14,14 +14,18 @@ use Illuminate\Validation\ValidationException;
 
 final class BridgeHeartbeatService
 {
-    public function __construct(private readonly AuditLogger $auditLogger) {}
+    public function __construct(
+        private readonly AuditLogger $auditLogger,
+        private readonly StockSnapshotService $stockSnapshots,
+    ) {}
 
     public function record(Request $request): array
     {
+        $this->stockSnapshots->expireIncompleteRuns();
         $input = $request->json()->all();
         if (array_diff(array_keys($input), [
             'event_id', 'connector_id', 'connector_version', 'occurred_at',
-            'last_pohoda_read_at', 'last_snapshot_at', 'last_command_poll_at', 'status',
+            'last_pohoda_read_at', 'last_snapshot_at', 'last_command_poll_at', 'status', 'error_codes',
         ]) !== []) {
             throw ValidationException::withMessages(['payload' => 'Unsupported heartbeat fields.']);
         }
@@ -34,6 +38,8 @@ final class BridgeHeartbeatService
             'last_snapshot_at' => ['nullable', 'date'],
             'last_command_poll_at' => ['nullable', 'date'],
             'status' => ['required', 'in:OK,DEGRADED,ERROR'],
+            'error_codes' => ['nullable', 'array', 'max:10'],
+            'error_codes.*' => ['string', 'max:64', 'regex:/^[A-Z0-9_.-]+$/'],
         ])->validate();
         foreach (['occurred_at', 'last_pohoda_read_at', 'last_snapshot_at', 'last_command_poll_at'] as $field) {
             if (isset($data[$field]) && CarbonImmutable::parse($data[$field])->utcOffset() !== 0) {
@@ -61,6 +67,7 @@ final class BridgeHeartbeatService
                     'last_snapshot_at' => isset($data['last_snapshot_at']) ? $this->localTime($data['last_snapshot_at']) : null,
                     'last_command_poll_at' => isset($data['last_command_poll_at']) ? $this->localTime($data['last_command_poll_at']) : null,
                     'status' => $data['status'],
+                    'error_codes' => $data['error_codes'] ?? null,
                     'payload_hash' => $hash,
                     'received_at' => now(),
                 ]);

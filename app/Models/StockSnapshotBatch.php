@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class StockSnapshotBatch extends Model
@@ -22,7 +23,15 @@ class StockSnapshotBatch extends Model
             'received_at' => 'immutable_datetime',
             'accepted_count' => 'integer',
             'rejected_count' => 'integer',
+            'chunk_index' => 'integer',
+            'chunk_count' => 'integer',
+            'final_chunk' => 'boolean',
         ];
+    }
+
+    public function run(): BelongsTo
+    {
+        return $this->belongsTo(StockSnapshotRun::class, 'stock_snapshot_run_id');
     }
 
     public function items(): HasMany

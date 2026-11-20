@@ -6,6 +6,8 @@ use App\Application\Audit\AuditLogger;
 use App\Exceptions\WorkflowConflictException;
 use App\Models\LegacyProductConfiguration;
 use App\Models\StockSnapshotBatch;
+use App\Models\StockSnapshotItem;
+use App\Models\StockSnapshotRun;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -20,27 +22,47 @@ final class StockSnapshotService
     public function ingest(Request $request): array
     {
         $input = $request->json()->all();
-        if (array_diff(array_keys($input), ['batch_id', 'source_generated_at', 'warehouse_code', 'items']) !== []) {
+        if (array_diff(array_keys($input), [
+            'snapshot_run_id', 'batch_id', 'chunk_index', 'chunk_count', 'final_chunk',
+            'source_generated_at', 'warehouse_code', 'items',
+        ]) !== []) {
             throw ValidationException::withMessages(['payload' => 'Unsupported snapshot fields.']);
         }
         $data = Validator::make($input, [
             'batch_id' => ['required', 'uuid'],
+            'snapshot_run_id' => ['nullable', 'uuid'],
+            'chunk_index' => ['nullable', 'integer', 'min:0'],
+            'chunk_count' => ['nullable', 'integer', 'min:1', 'max:10000'],
+            'final_chunk' => ['nullable', 'boolean'],
             'source_generated_at' => ['required', 'date'],
             'warehouse_code' => ['required', 'string', 'max:32', 'regex:/^[A-Z0-9_-]+$/'],
-            'items' => ['required', 'array', 'min:1', 'max:'.max(1, (int) config('integrations.pohoda_bridge.max_batch_items', 500))],
+            'items' => ['present', 'array', 'max:'.max(1, (int) config('integrations.pohoda_bridge.max_batch_items', 500))],
         ])->validate();
+        $chunkFields = collect(['snapshot_run_id', 'chunk_index', 'chunk_count', 'final_chunk'])
+            ->filter(fn (string $field): bool => array_key_exists($field, $input));
+        if (! in_array($chunkFields->count(), [0, 4], true)) {
+            throw ValidationException::withMessages(['snapshot_run_id' => 'All chunk metadata fields are required together.']);
+        }
+        $runId = (string) ($data['snapshot_run_id'] ?? $data['batch_id']);
+        $chunkIndex = (int) ($data['chunk_index'] ?? 0);
+        $chunkCount = (int) ($data['chunk_count'] ?? 1);
+        $finalChunk = (bool) ($data['final_chunk'] ?? true);
+        if ($chunkIndex >= $chunkCount || $finalChunk !== ($chunkIndex === $chunkCount - 1)) {
+            throw ValidationException::withMessages(['chunk_index' => 'Chunk position or final marker is inconsistent.']);
+        }
         $sourceAt = CarbonImmutable::parse($data['source_generated_at']);
         if ($sourceAt->utcOffset() !== 0) {
             throw ValidationException::withMessages(['source_generated_at' => 'The source timestamp must use UTC.']);
         }
         $payloadHash = hash('sha256', $request->getContent());
+        $this->expireIncompleteRuns();
         $existing = StockSnapshotBatch::query()->where('batch_id', $data['batch_id'])->first();
         if ($existing !== null) {
             if (! hash_equals($existing->payload_hash, $payloadHash)) {
                 throw new WorkflowConflictException('The batch_id was reused with another payload.');
             }
 
-            return $this->response($existing->load('items'), true);
+            return $this->response($existing->load(['items', 'run']), true);
         }
 
         $known = LegacyProductConfiguration::query()
@@ -89,7 +111,27 @@ final class StockSnapshotService
         $accepted = collect($rows)->where('accepted', true)->count();
         $rejected = count($rows) - $accepted;
         try {
-            $batch = DB::transaction(function () use ($request, $data, $sourceAt, $payloadHash, $rows, $accepted, $rejected): StockSnapshotBatch {
+            $batch = DB::transaction(function () use (
+                $request, $data, $sourceAt, $payloadHash, $rows, $accepted, $rejected,
+                $runId, $chunkIndex, $chunkCount, $finalChunk,
+            ): StockSnapshotBatch {
+                $run = StockSnapshotRun::query()->firstOrCreate(
+                    ['run_id' => $runId],
+                    [
+                        'warehouse_code' => $data['warehouse_code'],
+                        'source_generated_at' => $sourceAt->setTimezone(config('app.timezone')),
+                        'chunk_count' => $chunkCount,
+                        'status' => StockSnapshotRun::RECEIVING,
+                        'expires_at' => now()->addMinutes(max(1, (int) config('integrations.pohoda_bridge.snapshot_run_timeout_minutes', 30))),
+                    ],
+                );
+                $run = StockSnapshotRun::query()->whereKey($run->id)->lockForUpdate()->firstOrFail();
+                if ($run->status === StockSnapshotRun::FAILED
+                    || $run->warehouse_code !== $data['warehouse_code']
+                    || ! $run->source_generated_at->equalTo($sourceAt->setTimezone(config('app.timezone')))
+                    || $run->chunk_count !== $chunkCount) {
+                    throw new WorkflowConflictException('Snapshot run metadata conflict.');
+                }
                 $existing = StockSnapshotBatch::query()->where('batch_id', $data['batch_id'])->lockForUpdate()->first();
                 if ($existing !== null) {
                     if (! hash_equals($existing->payload_hash, $payloadHash)) {
@@ -98,8 +140,32 @@ final class StockSnapshotService
 
                     return $existing;
                 }
+                if (StockSnapshotBatch::query()->where('stock_snapshot_run_id', $run->id)->where('chunk_index', $chunkIndex)->exists()) {
+                    throw new WorkflowConflictException('Snapshot chunk position was already used.');
+                }
+                $existingReferences = StockSnapshotItem::query()
+                    ->whereHas('batch', fn ($query) => $query->where('stock_snapshot_run_id', $run->id))
+                    ->whereIn('product_reference', collect($rows)->where('accepted', true)->pluck('product_reference'))
+                    ->pluck('product_reference')->flip();
+                foreach ($rows as &$row) {
+                    if ($row['accepted'] && $existingReferences->has($row['product_reference'])) {
+                        $row['accepted'] = false;
+                        $row['product_configuration_id'] = null;
+                        $row['available_quantity'] = null;
+                        $row['reserved_quantity'] = null;
+                        $row['source_row_version'] = null;
+                        $row['rejection_code'] = 'DUPLICATE_PRODUCT_REFERENCE';
+                        $accepted--;
+                        $rejected++;
+                    }
+                }
+                unset($row);
                 $batch = StockSnapshotBatch::query()->create([
+                    'stock_snapshot_run_id' => $run->id,
                     'batch_id' => $data['batch_id'],
+                    'chunk_index' => $chunkIndex,
+                    'chunk_count' => $chunkCount,
+                    'final_chunk' => $finalChunk,
                     'key_id' => $request->attributes->get('bridge_key_id'),
                     'warehouse_code' => $data['warehouse_code'],
                     'source_generated_at' => $sourceAt->setTimezone(config('app.timezone')),
@@ -110,8 +176,27 @@ final class StockSnapshotService
                     'payload_hash' => $payloadHash,
                 ]);
                 $batch->items()->createMany($rows);
+                $aggregates = StockSnapshotBatch::query()->where('stock_snapshot_run_id', $run->id)
+                    ->selectRaw('COUNT(*) chunks, COALESCE(SUM(accepted_count), 0) accepted, COALESCE(SUM(rejected_count), 0) rejected')
+                    ->firstOrFail();
+                $isComplete = (int) $aggregates->chunks === $run->chunk_count
+                    && StockSnapshotBatch::query()->where('stock_snapshot_run_id', $run->id)
+                        ->where('chunk_index', $run->chunk_count - 1)->where('final_chunk', true)->exists();
+                $run->forceFill([
+                    'received_chunks' => (int) $aggregates->chunks,
+                    'accepted_count' => (int) $aggregates->accepted,
+                    'rejected_count' => (int) $aggregates->rejected,
+                    'status' => $isComplete
+                        ? ((int) $aggregates->rejected === 0 ? StockSnapshotRun::COMPLETE : StockSnapshotRun::PARTIAL)
+                        : StockSnapshotRun::RECEIVING,
+                    'completed_at' => $isComplete ? now() : null,
+                ])->save();
                 $this->auditLogger->record('POHODA_STOCK_SNAPSHOT_RECEIVED', $batch, [], [
+                    'snapshot_run_id' => $run->run_id,
                     'batch_id' => $batch->batch_id,
+                    'chunk_index' => $batch->chunk_index,
+                    'chunk_count' => $batch->chunk_count,
+                    'run_status' => $run->status,
                     'warehouse_code' => $batch->warehouse_code,
                     'status' => $batch->status,
                     'accepted_count' => $accepted,
@@ -125,23 +210,32 @@ final class StockSnapshotService
             // initial lookup. The unique constraint remains the authority.
             $batch = StockSnapshotBatch::query()->where('batch_id', $data['batch_id'])->first();
             if ($batch === null) {
+                $run = StockSnapshotRun::query()->where('run_id', $runId)->first();
+                if ($run !== null && StockSnapshotBatch::query()
+                    ->where('stock_snapshot_run_id', $run->id)->where('chunk_index', $chunkIndex)->exists()) {
+                    throw new WorkflowConflictException('Snapshot chunk position was already used.');
+                }
                 throw $exception;
             }
             if (! hash_equals($batch->payload_hash, $payloadHash)) {
                 throw new WorkflowConflictException('The batch_id was reused with another payload.');
             }
 
-            return $this->response($batch->load('items'), true);
+            return $this->response($batch->load(['items', 'run']), true);
         }
 
-        return $this->response($batch->load('items'), false);
+        return $this->response($batch->load(['items', 'run']), false);
     }
 
     private function response(StockSnapshotBatch $batch, bool $idempotent): array
     {
         return [
+            'snapshot_run_id' => $batch->run?->run_id,
             'batch_id' => $batch->batch_id,
             'status' => $batch->status,
+            'run_status' => $batch->run?->status,
+            'chunk_index' => $batch->chunk_index,
+            'chunk_count' => $batch->chunk_count,
             'accepted_count' => $batch->accepted_count,
             'rejected_count' => $batch->rejected_count,
             'idempotent_replay' => $idempotent,
@@ -152,5 +246,13 @@ final class StockSnapshotService
                 'code' => $item->rejection_code,
             ])->values()->all(),
         ];
+    }
+
+    public function expireIncompleteRuns(): int
+    {
+        return StockSnapshotRun::query()
+            ->where('status', StockSnapshotRun::RECEIVING)
+            ->where('expires_at', '<', now())
+            ->update(['status' => StockSnapshotRun::FAILED, 'updated_at' => now()]);
     }
 }

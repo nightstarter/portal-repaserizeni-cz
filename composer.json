@@ -38,10 +38,12 @@
       "@php artisan test"
     ],
     "analyse": "@php scripts/lint.php",
+    "connector:test": "@php connector/pohoda-bridge/tests/run.php",
     "check": [
       "@composer validate --strict",
       "@php vendor/bin/pint --test",
       "@analyse",
+      "@connector:test",
       "@test"
     ]
   },

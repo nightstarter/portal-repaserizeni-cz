@@ -1,0 +1,8 @@
+/config/config.local.php
+/var/*
+!/var/.gitignore
+*.log
+*.sqlite
+*.db
+*.payload
+*.meta.json

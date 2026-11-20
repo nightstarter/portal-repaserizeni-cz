@@ -24,6 +24,7 @@ class BridgeHeartbeat extends Model
             'last_snapshot_at' => 'immutable_datetime',
             'last_command_poll_at' => 'immutable_datetime',
             'received_at' => 'immutable_datetime',
+            'error_codes' => 'array',
         ];
     }
 }

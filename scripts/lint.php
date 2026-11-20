@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-$roots = ['app', 'bootstrap', 'config', 'database', 'routes', 'tests', 'resources/lang'];
+$roots = ['app', 'bootstrap', 'config', 'database', 'routes', 'tests', 'resources/lang', 'connector/pohoda-bridge'];
 $failed = false;
 
 foreach ($roots as $root) {

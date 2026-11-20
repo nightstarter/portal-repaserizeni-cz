@@ -18,6 +18,7 @@ use App\Models\Organization;
 use App\Models\ProcessThread;
 use App\Models\StockSnapshotBatch;
 use App\Models\StockSnapshotItem;
+use App\Models\StockSnapshotRun;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -181,6 +182,58 @@ class Phase7aPohodaBridgeTest extends TestCase
 
         Carbon::setTestNow('2026-11-19 12:31:00 UTC');
         self::assertSame(StockAvailabilityStatus::STALE, app(ResolvesStockAvailability::class)->resolve($order)->status);
+    }
+
+    public function test_chunked_snapshot_is_invisible_until_complete_and_missing_run_expires(): void
+    {
+        Carbon::setTestNow('2026-11-20 10:00:00 UTC');
+        $this->product('CHUNK-1');
+        $this->product('CHUNK-2');
+        $order = Order::factory()->create(['product_code' => 'CHUNK-1']);
+
+        $baseline = $this->snapshot([
+            ['product_reference' => 'CHUNK-1', 'available_quantity' => 0, 'source_row_version' => 'base'],
+        ], ['source_generated_at' => '2026-11-20T09:50:00Z']);
+        $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($baseline, JSON_THROW_ON_ERROR))->assertAccepted();
+        self::assertSame(StockAvailabilityStatus::NOT_AVAILABLE_IN_AK, app(ResolvesStockAvailability::class)->resolve($order)->status);
+
+        $runId = (string) Str::uuid();
+        $first = $this->snapshot([
+            ['product_reference' => 'CHUNK-1', 'available_quantity' => 8, 'source_row_version' => 'new-1'],
+        ], [
+            'snapshot_run_id' => $runId, 'chunk_index' => 0, 'chunk_count' => 2, 'final_chunk' => false,
+            'source_generated_at' => '2026-11-20T09:59:00Z',
+        ]);
+        $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($first, JSON_THROW_ON_ERROR))->assertAccepted()
+            ->assertJson(['run_status' => StockSnapshotRun::RECEIVING, 'chunk_index' => 0, 'chunk_count' => 2]);
+        self::assertSame(StockAvailabilityStatus::NOT_AVAILABLE_IN_AK, app(ResolvesStockAvailability::class)->resolve($order)->status);
+
+        $second = $this->snapshot([
+            ['product_reference' => 'CHUNK-2', 'available_quantity' => 1, 'source_row_version' => 'new-2'],
+        ], [
+            'snapshot_run_id' => $runId, 'chunk_index' => 1, 'chunk_count' => 2, 'final_chunk' => true,
+            'source_generated_at' => '2026-11-20T09:59:00Z',
+        ]);
+        $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($second, JSON_THROW_ON_ERROR))->assertAccepted()
+            ->assertJson(['run_status' => StockSnapshotRun::COMPLETE]);
+        self::assertSame(StockAvailabilityStatus::AVAILABLE_IN_AK, app(ResolvesStockAvailability::class)->resolve($order)->status);
+
+        config(['integrations.pohoda_bridge.snapshot_run_timeout_minutes' => 1]);
+        $incomplete = $this->snapshot([
+            ['product_reference' => 'CHUNK-1', 'available_quantity' => 2, 'source_row_version' => 'timeout'],
+        ], [
+            'snapshot_run_id' => (string) Str::uuid(), 'chunk_index' => 0, 'chunk_count' => 2, 'final_chunk' => false,
+            'source_generated_at' => '2026-11-20T10:00:00Z',
+        ]);
+        $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($incomplete, JSON_THROW_ON_ERROR))->assertAccepted();
+        Carbon::setTestNow('2026-11-20 10:02:00 UTC');
+        $this->signed('POST', '/api/internal/v1/heartbeat', json_encode($this->heartbeat(), JSON_THROW_ON_ERROR))->assertAccepted();
+        self::assertSame(StockSnapshotRun::FAILED, StockSnapshotRun::query()->where('run_id', $incomplete['snapshot_run_id'])->value('status'));
+
+        $empty = $this->snapshot([], ['source_generated_at' => '2026-11-20T10:01:00Z']);
+        $this->signed('POST', '/api/internal/v1/stock-snapshots', json_encode($empty, JSON_THROW_ON_ERROR))->assertAccepted()
+            ->assertJson(['run_status' => StockSnapshotRun::COMPLETE, 'accepted_count' => 0]);
+        self::assertSame(StockAvailabilityStatus::NOT_AVAILABLE_IN_AK, app(ResolvesStockAvailability::class)->resolve($order)->status);
     }
 
     public function test_heartbeat_is_idempotent_and_rejects_sensitive_or_changed_payload(): void

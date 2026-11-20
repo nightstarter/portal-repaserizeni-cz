@@ -1,6 +1,6 @@
 # Pohoda bridge protocol v1
 
-Tento dokument popisuje portálovou polovinu protokolu. Konektor na HPSERVERU není součástí fáze 7A. Portál se nikdy nepřipojuje k SQL databázi Pohody; konektor iniciuje pouze odchozí HTTPS požadavky na portál.
+Tento dokument popisuje společný kontrakt portálu a samostatného HPSERVER konektoru. Portál se nikdy nepřipojuje k SQL databázi Pohody; konektor iniciuje pouze odchozí HTTPS požadavky na portál a neotevírá příchozí port.
 
 ## Transport a autentizace
 
@@ -60,7 +60,8 @@ Výsledný HMAC-SHA256 lowercase hex:
 
 Nonce je jednorázový pro konkrétní key ID a ukládá se až po validním podpisu. Jeho opakování vrací obecné `401 BRIDGE_AUTH_FAILED`. Doménové klíče jsou nezávislé:
 
-- snapshot: `batch_id` UUID;
+- snapshot run: `snapshot_run_id` UUID;
+- snapshot chunk: `batch_id` UUID;
 - heartbeat: `event_id` UUID;
 - výsledek příkazu: `result_id` UUID.
 
@@ -70,11 +71,15 @@ Stejný doménový klíč a stejný payload s novým nonce vrací idempotentní 
 
 ### `POST /stock-snapshots`
 
-Maximální velikost těla je standardně 2 MiB a dávka má nejvýše 500 položek.
+Maximální velikost těla je standardně 2 MiB a chunk má nejvýše 500 položek. Snapshot s více položkami se rozdělí na jeden run s několika chunky:
 
 ```json
 {
+  "snapshot_run_id": "00000000-0000-4000-8000-000000000010",
   "batch_id": "00000000-0000-4000-8000-000000000001",
+  "chunk_index": 0,
+  "chunk_count": 3,
+  "final_chunk": false,
   "source_generated_at": "2026-11-19T09:30:00Z",
   "warehouse_code": "DECIN",
   "items": [
@@ -88,7 +93,13 @@ Maximální velikost těla je standardně 2 MiB a dávka má nejvýše 500 polo�
 }
 ```
 
-Odpověď `202` obsahuje `batch_id`, `COMPLETE|PARTIAL`, počty, `idempotent_replay` a pro každou pozici pouze `ACCEPTED` nebo `REJECTED` s bezpečným kódem (`INVALID_ITEM`, `DUPLICATE_PRODUCT_REFERENCE`, `UNKNOWN_PRODUCT_REFERENCE`). Chybná položka nevrací zpět správné položky. Historie je append-only. Aktuální stav se vybírá podle `source_generated_at` a poté ID; starší dávka nepřepíše novější. Data starší než `POHODA_BRIDGE_STALE_MINUTES` vrací aplikačnímu resolveru `STALE`, takže rozhodnutí zůstane `PENDING_STOCK_CHECK`.
+`chunk_index` je nula-based a musí být menší než `chunk_count`. `final_chunk=true` je povoleno právě pro index `chunk_count - 1`. Všechny chunky runu mají stejné `snapshot_run_id`, `chunk_count`, `source_generated_at` a `warehouse_code`; každý má vlastní stabilní `batch_id`. Při retry musí konektor poslat přesně stejné raw payload bytes a stejné ID, ale nový nonce/timestamp.
+
+Odpověď `202` obsahuje `snapshot_run_id`, `batch_id`, stav chunku, `run_status`, index/počet, počty, `idempotent_replay` a pro každou pozici pouze `ACCEPTED` nebo `REJECTED` s bezpečným kódem (`INVALID_ITEM`, `DUPLICATE_PRODUCT_REFERENCE`, `UNKNOWN_PRODUCT_REFERENCE`). Chybná položka nevrací zpět správné položky.
+
+Run zůstává `RECEIVING`, dokud nejsou přijaté všechny pozice a finální marker. Teprve potom se atomicky změní na `COMPLETE` (bez položkových chyb) nebo `PARTIAL` (alespoň jedna položková chyba). `RECEIVING` ani timeoutovaný `FAILED` run se nikdy nepoužije pro aktuální dostupnost. Timeout se vyhodnotí při následujícím validním snapshotu nebo heartbeat. Starší dokončený run nepřepíše novější. Pokud je produkt v posledním `COMPLETE` runu nepřítomný, je nedostupný; u `PARTIAL` runu je nepřítomnost nekonkluzivní. Data starší než `POHODA_BRIDGE_STALE_MINUTES` vrací `STALE`, takže rozhodnutí zůstane `PENDING_STOCK_CHECK`.
+
+Pro zpětnou kompatibilitu lze vynechat všechna čtyři chunk pole (`snapshot_run_id`, `chunk_index`, `chunk_count`, `final_chunk`); server takový 7A payload interpretuje jako jednodílný run. Částečné uvedení chunk polí je chyba 422.
 
 ### `POST /heartbeat`
 
@@ -101,11 +112,12 @@ Odpověď `202` obsahuje `batch_id`, `COMPLETE|PARTIAL`, počty, `idempotent_rep
   "last_pohoda_read_at": "2026-11-19T09:30:55Z",
   "last_snapshot_at": "2026-11-19T09:30:00Z",
   "last_command_poll_at": "2026-11-19T09:30:30Z",
-  "status": "OK"
+  "status": "OK",
+  "error_codes": []
 }
 ```
 
-Povoleny jsou jen stavy `OK`, `DEGRADED`, `ERROR` a UTC časy. Connection string, hesla, cesty, stack trace a další pole jsou odmítnuty.
+Povoleny jsou jen stavy `OK`, `DEGRADED`, `ERROR`, UTC časy a nejvýše deset bezpečných kódů `[A-Z0-9_.-]`. Connection string, hostname, hesla, cesty, stack trace a další pole jsou odmítnuty.
 
 ### `GET /commands?connector_id=hpserver-1&limit=50`
 
@@ -154,4 +166,4 @@ Metadata má pevný allowlist. SQL text, stack trace a libovolná chybová zprá
 
 Portál přijímá současný i předchozí key ID/secret. Bezpečný postup je: nastavit nový pár jako current a starý jako previous, obnovit cache konfigurace, přepnout konektor, ověřit heartbeat, poté předchozí pár odstranit. Key ID nesmí být znovu použit s jiným secret během životnosti nonce. Hodiny konektoru musí být synchronizované NTP; při odchylce přes toleranci se požadavek odmítne.
 
-Konektor retryuje pouze s novým nonce a novým timestampem, ale se stejným doménovým ID. Odpověď 4xx kromě 409/429 není důvod k agresivnímu retry; 429 a 5xx vyžadují exponenciální backoff. Secret, podpis, raw body ani interní výjimky se nelogují.
+Konektor retryuje pouze s novým nonce a novým timestampem, ale se stejným doménovým ID a raw payloadem. HTTP 408, 429 a 5xx používají exponenciální backoff s jitterem; `Retry-After` má přednost. Ostatní 4xx se automaticky neopakují a spool položka se zablokuje pro ruční zásah. Secret, podpis, raw body ani interní výjimky se nelogují.

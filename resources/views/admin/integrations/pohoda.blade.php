@@ -9,7 +9,8 @@
 <div class="card kpi"><span>{{ __('app.pohoda_last_partial_snapshot') }}</span><strong>{{ $partial?->source_generated_at?->timezone(config('app.timezone'))->format('d.m.Y H:i') ?? '—' }}</strong></div>
 </div>
 <section class="card"><h2>{{ __('app.pohoda_latest_batch') }}</h2>
-@if($latest)<p>{{ $latest->batch_id }} · {{ $latest->warehouse_code }}</p><p>{{ __('app.pohoda_items_accepted') }}: {{ $latest->accepted_count }} · {{ __('app.pohoda_items_rejected') }}: {{ $latest->rejected_count }}</p>@else<p>{{ __('app.pohoda_no_snapshot') }}</p>@endif
+@if($latest)<p>{{ $latest->run_id }} · {{ $latest->warehouse_code }} · {{ $latest->received_chunks }}/{{ $latest->chunk_count }}</p><p>{{ __('app.pohoda_items_accepted') }}: {{ $latest->accepted_count }} · {{ __('app.pohoda_items_rejected') }}: {{ $latest->rejected_count }}</p>@else<p>{{ __('app.pohoda_no_snapshot') }}</p>@endif
+<p>receiving: {{ $runCounts[\App\Models\StockSnapshotRun::RECEIVING] ?? 0 }} · failed: {{ $runCounts[\App\Models\StockSnapshotRun::FAILED] ?? 0 }}</p>
 </section>
 <section class="card"><h2>{{ __('app.pohoda_commands') }}</h2>
 <p>pending: {{ $counts[\App\Models\BridgeCommand::PENDING] ?? 0 }} · processing: {{ $counts[\App\Models\BridgeCommand::PROCESSING] ?? 0 }} · failed: {{ $counts[\App\Models\BridgeCommand::FAILED] ?? 0 }}</p>
