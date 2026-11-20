@@ -108,6 +108,18 @@ class Phase7aPohodaBridgeTest extends TestCase
         self::assertFalse(DB::table('audit_log')->where('user_agent', 'LIKE', '%SECRET-IN-HEADER%')->exists());
     }
 
+    public function test_signed_bridge_request_over_plain_http_is_rejected_before_nonce_is_stored(): void
+    {
+        $body = json_encode($this->heartbeat(), JSON_THROW_ON_ERROR);
+
+        $this->signed('POST', '/api/internal/v1/heartbeat', $body, secure: false)
+            ->assertUnauthorized()
+            ->assertExactJson(['error' => ['code' => 'BRIDGE_AUTH_FAILED']]);
+
+        self::assertSame(0, BridgeNonce::query()->count());
+        self::assertSame(0, BridgeHeartbeat::query()->count());
+    }
+
     public function test_disabled_bridge_and_ip_allowlist_write_nothing(): void
     {
         config(['integrations.pohoda_bridge.enabled' => false]);
@@ -657,6 +669,7 @@ class Phase7aPohodaBridgeTest extends TestCase
         ?array $queryForSignature = null,
         string $ip = '127.0.0.1',
         string $userAgent = 'Phase7aTestConnector/1.0',
+        bool $secure = true,
     ) {
         $nonce ??= 'nonce_'.Str::random(32);
         $timestamp ??= now()->timestamp;
@@ -669,11 +682,15 @@ class Phase7aPohodaBridgeTest extends TestCase
         ]);
         $signature ??= hash_hmac('sha256', $canonical, $secret ?? $this->currentSecret);
 
-        return $this->call($method, $uri, [], [], [], [
+        $requestUri = ($secure ? 'https://localhost' : 'http://localhost').$uri;
+
+        return $this->call($method, $requestUri, [], [], [], [
             'CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json',
             'HTTP_X_BRIDGE_KEY_ID' => $keyId, 'HTTP_X_BRIDGE_TIMESTAMP' => (string) $timestamp,
             'HTTP_X_BRIDGE_NONCE' => $nonce, 'HTTP_X_BRIDGE_SIGNATURE' => $signature,
             'REMOTE_ADDR' => $ip, 'HTTP_USER_AGENT' => $userAgent,
+            'HTTPS' => $secure ? 'on' : 'off', 'SERVER_PORT' => $secure ? 443 : 80,
+            'REQUEST_SCHEME' => $secure ? 'https' : 'http',
         ], $body);
     }
 

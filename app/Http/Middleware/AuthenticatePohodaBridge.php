@@ -18,6 +18,10 @@ class AuthenticatePohodaBridge
 
     public function handle(Request $request, Closure $next): Response
     {
+        if (! $request->isSecure()) {
+            return $this->reject($request);
+        }
+
         if (strlen($request->getContent()) > max(1024, (int) config('integrations.pohoda_bridge.max_body_bytes'))) {
             return new JsonResponse(['error' => ['code' => 'REQUEST_TOO_LARGE']], 413);
         }
