@@ -36,6 +36,8 @@ Příkaz nic neopravuje, nespouští migrace/import/snapshot/SMTP/bridge command
 | `bridge_server_allowlists` | obsahuje DECIN a RR | — | chybí |
 | `smtp` | funkce off nebo úplná konfigurace | — | funkce on + neúplná konfigurace |
 | `disk_space` | nad `OPS_MIN_FREE_DISK_MB` | — | pod limitem/nezjistitelné |
+| `latest_backup` | čerstvý produkční COMPLETE manifest a všechny checksumy | — | chybí, není produkční, je starý/neplatný |
+| `recovery_evidence` | off-server kopie a čerstvý úspěšný restore test | některý důkaz chybí/je starý | — |
 | `connector_runtime_debt` | — | PHP 7.4.33 + Windows 2012 R2 | — |
 
 `UNMAPPED` RR reference není chyba. Čerstvý `PARTIAL` run s 2482 accepted a dvěma `DUPLICATE_PRODUCT_REFERENCE` je známý použitelný stav. Čerstvost heartbeat/snapshotu nastavují `OPS_HEARTBEAT_STALE_MINUTES` a `OPS_SNAPSHOT_STALE_MINUTES`.
@@ -60,3 +62,9 @@ Preflight potvrdil čerstvý heartbeat a confirmation, použitelný PARTIAL snap
 ## Ruční kontrola
 
 Portál nevidí Windows Task Scheduler API. Provozovatel musí na HPSERVERU zkontrolovat Last Run Result `0x0`, poslední běh, pětiminutový interval, „do not start a new instance“, servisní účet, Windows Time, spool a ACL. Preflight tento stav nikdy nepředstírá jako automaticky ověřený.
+
+## Zálohy a recovery evidence (8B)
+
+`BACKUP_LATEST_MANIFEST` smí ukazovat pouze na absolutní cestu ke skutečné produkční záloze mimo repozitář, webroot a private storage. Testovací fixture se jako produkční důkaz odmítne. Chybějící, nekompletní, starý nebo checksumově neplatný produkční manifest je `ERROR`. Chybějící off-server potvrzení nebo chybějící/starý restore test je samostatný `WARN`, protože samotný archiv ještě nedokládá obnovitelnost.
+
+Výchozí limity jsou 26 hodin pro poslední COMPLETE zálohu a 100 dní pro restore test. Provozovatel je může změnit řízenou produkční konfigurací; tato implementace `.env` nemění. Preflight nevytváří zálohu, nic neobnovuje a nečte obsah dokumentů. Produkční výsledek 8A výše historicky předchází přidání těchto dvou kontrol.

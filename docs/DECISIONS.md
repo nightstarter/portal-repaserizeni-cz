@@ -342,3 +342,24 @@
 - Stav: přijato pro Fázi 8A
 - Rozhodnutí: READ_ONLY může číst objekty ve svém organizačním scope, ale nesmí vytvářet message read marker ani jiný doménový zápis. GET diskuse je pro tuto roli skutečně read-only a přímý mark-read POST je odmítnut.
 - Dopad: Vlastní změna hesla/jazyka zůstává bezpečnostní/uživatelská preference; všechny workflow, finance, dokumenty, zásilky, diskuse, unread, WARRANTY, BUYBACK a admin operace jsou bez zápisu.
+
+## D-050: COMPLETE je vlastnost ověřeného manifestu, ne názvu souboru
+
+- Datum: 2026-11-20
+- Stav: přijato pro implementaci Fáze 8B
+- Rozhodnutí: Záloha je `COMPLETE` jen tehdy, když manifest formátu 1 obsahuje všechny povinné komponenty, bezpečná metadata, počty kritických tabulek a každá deklarovaná část existuje se shodnou velikostí a SHA-256. Přípona, název adresáře ani testovací fixture nejsou důkaz produkční zálohy.
+- Dopad: Neplatný, neúplný, traversal/symlinkový nebo checksumově změněný archiv se odmítne. Manifest nesmí obsahovat hesla, APP_KEY, HMAC/SMTP secret, celé DSN ani PII.
+
+## D-051: Obnova má samostatnou izolovanou DB a storage hranici
+
+- Datum: 2026-11-20
+- Stav: přijato pro implementaci Fáze 8B
+- Rozhodnutí: Portál neprovádí produkční DB restore. `backup:restore-check` běží jen v `testing` nebo explicitním `restore-test`, odmítá produkční DB identitu a private storage a kopíruje soubory jen do nového prázdného canonical cíle mimo chráněné cesty. Databázový import do nové DB provede provozovatel před kontrolou standardním klientem.
+- Dopad: Kontrola porovná migrace, kritické počty, FK, unikátní indexy, DB reference dokumentů, SHA-256 a orphan policy. Scheduler, SMTP, import, bridge a přecenění musí zůstat vypnuté. Nástroj po úspěchu sandbox nemaže; při chybě uklidí pouze vlastní soubory.
+
+## D-052: RPO a RTO určuje vlastník až podle reálného měření
+
+- Datum: 2026-11-20
+- Stav: `OWNER_CONFIRMATION_REQUIRED`
+- Rozhodnutí: Doporučená frekvence a retence nejsou smluvní RPO/RTO. Hodnoty RPO a RTO nesmí být odhadnuty z testovací fixture; vlastník je potvrdí až po skutečné produkční záloze, off-server kopii a měřeném izolovaném restore testu.
+- Dopad: Fáze 8B zůstává nedokončená. Automatické mazání starých záloh není aktivováno.

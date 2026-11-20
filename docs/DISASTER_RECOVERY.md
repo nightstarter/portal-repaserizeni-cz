@@ -1,0 +1,19 @@
+# Disaster recovery
+
+## Rozhodovací rámec
+
+1. Zastavte nové zápisy pouze schváleným incident postupem; tato Fáze žádný kill switch ani automatickou změnu produkce nezavádí.
+2. Určete poslední skutečný produkční `COMPLETE` manifest, ověřte SHA-256 a dostupnost off-server kopie i secret escrow.
+3. Pokud poslední sada neprojde `backup:verify`, nepoužívejte ji a eskalujte na předchozí ověřenou sadu.
+4. Nejprve proveďte [izolovaný restore](RESTORE_RUNBOOK.md). Přepnutí služby je samostatné vlastnické rozhodnutí mimo tento automatizovaný nástroj.
+5. Po obnově zachovejte auditní stopu: backup ID, Git revizi, verze runtime, časy, výsledky kontrol a schválení bez PII/tajemství.
+
+## Závislosti obnovy
+
+Obnova potřebuje Git revizi/tag, Composer lock, podporovaný portálový PHP/MariaDB runtime, Apache/PHP konfiguraci, cron export, private storage, oddělené `.env`/APP_KEY escrow a HPSERVER konfiguraci/state. Portál nemá SQL připojení do Pohody; connector zůstává read-only a ceny se přes bridge nezapisují. PHP 7.4.33 a Windows Server 2012 R2 jsou přijaté riziko a tato fáze je nemění.
+
+## Cíle a cvičení
+
+RPO i RTO jsou `OWNER_CONFIRMATION_REQUIRED`. Musí vycházet z obchodního rozhodnutí a naměřeného produkčního backup/restore cvičení. Doporučený čtvrtletní test není sám o sobě RPO/RTO.
+
+Fáze 8B se uzavře teprve po skutečné COMPLETE záloze, off-server kopii, checksum kontrole, izolované obnově, měření a potvrzení RPO/RTO. Automatická retence/mazání, monitoring a alerty patří do dalších rozhodnutí; 8C–8E zde nezačínají.
