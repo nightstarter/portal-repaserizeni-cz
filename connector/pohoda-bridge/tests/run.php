@@ -574,6 +574,28 @@ try {
         }
     });
 
+    bridge_test('CLI returns zero for success and nonzero for a real error', function () {
+        $script = dirname(__DIR__).DIRECTORY_SEPARATOR.'bin'.DIRECTORY_SEPARATOR.'bridge.php';
+        $output = array();
+        $exitCode = -1;
+        exec(escapeshellarg(PHP_BINARY).' '.escapeshellarg($script).' key:generate', $output, $exitCode);
+        bridge_assert($exitCode === 0, 'Successful CLI command returned nonzero');
+
+        $missingConfig = sys_get_temp_dir().DIRECTORY_SEPARATOR.'pohoda-bridge-missing-'.bin2hex(random_bytes(8)).'.php';
+        $previousConfig = getenv('POHODA_BRIDGE_CONFIG');
+        putenv('POHODA_BRIDGE_CONFIG='.$missingConfig);
+        try {
+            $output = array();
+            $exitCode = 0;
+            exec(escapeshellarg(PHP_BINARY).' '.escapeshellarg($script).' diagnose', $output, $exitCode);
+            bridge_assert($exitCode !== 0, 'Failed CLI command returned zero');
+        } finally {
+            $previousConfig === false
+                ? putenv('POHODA_BRIDGE_CONFIG')
+                : putenv('POHODA_BRIDGE_CONFIG='.$previousConfig);
+        }
+    });
+
     bridge_test('connector source stays within PHP 7.4 syntax contract', function () {
         $forbidden = array('/\?->/', '/#\[/', '/\breadonly\b/', '/\benum\s+[A-Za-z_]/', '/\bmatch\s*\(/', '/\bstr_(contains|starts_with|ends_with)\s*\(/');
         foreach (array(dirname(__DIR__).DIRECTORY_SEPARATOR.'src', dirname(__DIR__).DIRECTORY_SEPARATOR.'bin', dirname(__DIR__).DIRECTORY_SEPARATOR.'config') as $root) {
