@@ -24,9 +24,35 @@ Nezálohují se `vendor`, cache, sessions, temporary soubory, testovací artefak
 
 Kritické počty pokrývají minimálně `organizations`, `users`, `orders`, `items`, `process_threads`, `shipments`, `documents`, `messages` a `message_attachments`. Manifest neobsahuje názvy/obsah zákazníků, e-maily, hesla, APP_KEY, HMAC/SMTP secret ani DSN. `operations-config` musí být označen jako externě šifrovaný.
 
-`FAILED` sada není obnovitelná. `COMPLETE` lze použít až po `backup:verify`, který ověří každou část podle obsahu, nikoli přípony. Existing manifest se nesmí tiše přepisovat a backup cíl musí být explicitní absolutní canonical cesta mimo `/`, repozitář, `public` a private storage.
+`FAILED` sada není obnovitelná. `COMPLETE` lze použít až po `backup:verify`, který ověří každou část podle obsahu, nikoli přípony. Existing manifest se nesmí tiše přepisovat a backup cíl musí být explicitní absolutní canonical cesta mimo `/`, repozitář, `public` a celou aplikační storage.
 
-Pro MariaDB dump použijte klientský option file režimu `0600` mimo archiv a po běhu jej bezpečně odstraňte. Příklad tvaru příkazu je `mariadb-dump --defaults-extra-file=/secure/runtime/client.cnf --single-transaction --quick --routines --triggers <database>`. Heslo nesmí být argument ani být vidět v process listu. Skutečný provozní wrapper musí při každé chybě ponechat status `FAILED`, vrátit nenulový exit a uklidit pouze vlastní dočasné soubory.
+## Vytvoření balíčku
+
+Podporovaná syntaxe je:
+
+```bash
+php8.5 artisan backup:create --target=/backup-root/portal-backup-YYYYMMDDTHHMMSSZ --json
+```
+
+Finální cesta nesmí existovat. Parent musí být canonical adresář bez symlinku. Přímé `/tmp` se odmítá; pod `/tmp` je pro nouzový test povolen pouze unikátní podadresář `portal-backup-*`, který stále není off-server kopií.
+
+Balíček má přesně tuto základní strukturu:
+
+```text
+portal-backup-…/
+├── database.sql
+├── private-storage.tar
+├── metadata.json
+└── manifest.json
+```
+
+`database.sql` vzniká přes `mariadb-dump --single-transaction --quick --skip-lock-tables` s routines, triggers, events a hex-blob. Heslo je pouze v náhodném klientském option file režimu `0600`; nikdy není argumentem procesu a soubor se maže ve `finally`. `private-storage.tar` obsahuje soubory private storage bez symlinků a manifest eviduje velikost, SHA-256 a mode každého archive entry. `metadata.json` obsahuje jen backup ID, UTC, Git commit, PHP/MariaDB/connector verze, migrace, kritické počty a počet private souborů.
+
+Příkaz nejprve pracuje v skrytém sourozeneckém `.staging-<UUID>` adresáři. V produkci zapne Laravel maintenance, vyčká drain interval, porovná DB/migrace/private inventář před a po, ověří dokumentové reference a strict orphan policy a stejným verifierem jako `backup:verify` předověří všechny části proti neveřejnému nekompletnímu manifestu. Teprve potom atomicky zapíše finální `COMPLETE` manifest a celý staging znovu ověří. Finální adresář vznikne až atomickým rename ověřeného stagingu. Chyba zanechá finální cestu neexistující a smaže pouze vlastní staging.
+
+Laravel maintenance nezastavuje externí CLI writery. Provozovatel proto musí během krátkého maintenance okna ručně zajistit nepřítomnost zápisových schedulerů/workerů. Příkaz žádný cron ani Task Scheduler nemění. APP_KEY, `.env`, DB/SMTP/HMAC hesla, Apache/PHP konfigurace, cron export, Task Scheduler export a chráněná connector konfigurace/state patří do samostatného šifrovaného provozního escrow; nejsou součástí běžného create balíčku ani Gitu.
+
+Při každé chybě vrací create nenulový exit, nezveřejní COMPLETE balíček a uklidí pouze vlastní staging a credentials file. Výstup databázového nástroje se nepropaguje, aby nemohl zveřejnit DSN nebo secret.
 
 ## Frekvence, retence a ochrana
 

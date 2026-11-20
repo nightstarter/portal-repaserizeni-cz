@@ -4,12 +4,15 @@ Tento postup je výhradně pro izolovaný test nebo disaster-recovery náhradu. 
 
 ## Příprava
 
-1. Zaznamenejte incident/change ID, backup ID, začátek měření a osoby provádějící kontrolu.
-2. Získejte kopii backup sady mimo webserver; secret escrow a dešifrovací klíč držte odděleně.
-3. Spusťte `php artisan backup:verify /absolute/backup --json`. Jakýkoli nenulový exit zastavuje obnovu.
-4. Připravte nový izolovaný host/namespace, `APP_ENV=restore-test`, nový prázdný DB název, jiný účet a nový prázdný storage adresář mimo produkční storage.
-5. Nastavte `BACKUP_PRODUCTION_DB_HOST/PORT/DATABASE` na identitu produkce, aby guard mohl odmítnout shodu. Použijte oddělenou config cache; nekopírujte produkční cache.
-6. Ověřte `LEGACY_SHOP_IMPORT_ENABLED=false`, `DISCUSSION_EMAIL_ENABLED=false`, `BUYBACK_CUSTOMER_EMAIL_ENABLED=false`, `POHODA_BRIDGE_ENABLED=false`, prázdný command whitelist a `PRODUCT_REPRICING=DEFERRED_EXTERNAL_SYSTEM`. Neinstalujte cron ani Task Scheduler.
+1. Vyhlaste krátké maintenance okno, ověřte nepřítomnost externích zápisových CLI procesů a spusťte `php8.5 artisan backup:create --target=/absolute/new-backup --json`. Zaznamenejte začátek/konec, backup ID a exit code. Příkaz sám vrátí aplikaci z Laravel maintenance i při chybě.
+2. Na webserveru spusťte `php8.5 artisan backup:verify /absolute/new-backup --json`. Nenulový exit zastavuje postup.
+3. Přeneste kompletní adresář šifrovaným kanálem na úložiště mimo webserver s oddělenými credentials.
+4. Na off-server kopii znovu spusťte kompatibilní `backup:verify`; nekopírujte jen manifest.
+5. Získejte oddělené secret escrow pouze pro izolovanou obnovu; klíč držte mimo balíček.
+6. Zaznamenejte incident/change ID, osoby a začátek restore měření.
+7. Připravte nový izolovaný host/namespace, `APP_ENV=restore-test`, nový prázdný DB název, jiný účet a nový prázdný storage adresář mimo produkční storage.
+8. Nastavte `BACKUP_PRODUCTION_DB_HOST/PORT/DATABASE` na identitu produkce, aby guard mohl odmítnout shodu. Použijte oddělenou config cache; nekopírujte produkční cache.
+9. Ověřte `LEGACY_SHOP_IMPORT_ENABLED=false`, `DISCUSSION_EMAIL_ENABLED=false`, `BUYBACK_CUSTOMER_EMAIL_ENABLED=false`, `POHODA_BRIDGE_ENABLED=false`, prázdný command whitelist a `PRODUCT_REPRICING=DEFERRED_EXTERNAL_SYSTEM`. Neinstalujte cron ani Task Scheduler.
 
 ## Obnova a kontrola
 
@@ -24,6 +27,6 @@ Tento postup je výhradně pro izolovaný test nebo disaster-recovery náhradu. 
 4. Nenulový exit znamená neúspěšný restore test. Nástroj při vlastní chybě uklidí jen jím vytvořený sandbox/soubory; cizí či nejasné cesty nemaže.
 5. Úspěch dokládá shodu migrací a kritických počtů, FK bez porušení, povinné unique indexy, checksum každého dokumentu/přílohy, existenci všech DB referencí a nulové orphan soubory podle přísné politiky „private soubor musí mít DB referenci“.
 6. Technickým izolovaným účtem ověřte login a základní read-only dashboard/detail bez zobrazení či exportu PII do protokolu. Ověřte, že scheduler, SMTP, import a bridge neběží.
-7. Zaznamenejte konec a naměřené časy zálohy i obnovy. Obsah dokumentů ani PII do evidence nekopírujte.
+7. Zaznamenejte konec, naměřené časy create/přenos/verify/restore, backup ID a výsledek. Vlastník následně potvrdí RPO a RTO. Obsah dokumentů ani PII do evidence nekopírujte.
 
 Úspěšný test se eviduje pouze u skutečného produkčního backup ID. PHPUnit fixture dokládá funkci guardů, nikoli obnovitelnost produkce.

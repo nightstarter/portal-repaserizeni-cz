@@ -3,7 +3,7 @@
 ## Rozhodovací rámec
 
 1. Zastavte nové zápisy pouze schváleným incident postupem; tato Fáze žádný kill switch ani automatickou změnu produkce nezavádí.
-2. Určete poslední skutečný produkční `COMPLETE` manifest, ověřte SHA-256 a dostupnost off-server kopie i secret escrow.
+2. Pokud je zdroj dostupný, vytvořte nový balíček přes `backup:create` v řízeném maintenance okně. Jinak určete poslední skutečný produkční `COMPLETE` manifest, ověřte SHA-256 a dostupnost off-server kopie i secret escrow.
 3. Pokud poslední sada neprojde `backup:verify`, nepoužívejte ji a eskalujte na předchozí ověřenou sadu.
 4. Nejprve proveďte [izolovaný restore](RESTORE_RUNBOOK.md). Přepnutí služby je samostatné vlastnické rozhodnutí mimo tento automatizovaný nástroj.
 5. Po obnově zachovejte auditní stopu: backup ID, Git revizi, verze runtime, časy, výsledky kontrol a schválení bez PII/tajemství.

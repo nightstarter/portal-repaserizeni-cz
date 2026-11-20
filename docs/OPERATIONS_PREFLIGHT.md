@@ -67,4 +67,6 @@ Portál nevidí Windows Task Scheduler API. Provozovatel musí na HPSERVERU zkon
 
 `BACKUP_LATEST_MANIFEST` smí ukazovat pouze na absolutní cestu ke skutečné produkční záloze mimo repozitář, webroot a private storage. Testovací fixture se jako produkční důkaz odmítne. Chybějící, nekompletní, starý nebo checksumově neplatný produkční manifest je `ERROR`. Chybějící off-server potvrzení nebo chybějící/starý restore test je samostatný `WARN`, protože samotný archiv ještě nedokládá obnovitelnost.
 
+Produkční manifest vytváří pouze `backup:create --target=<nová-absolutní-cesta>`. Příkaz interně použije stejný verifier, ale provozovatel musí následně provést samostatné `backup:verify` na webserveru i po přenosu celé kopie mimo webserver. Teprve skutečný produkční balíček lze nastavit jako `BACKUP_LATEST_MANIFEST`; fixture ani staging cesta se neeviduje.
+
 Výchozí limity jsou 26 hodin pro poslední COMPLETE zálohu a 100 dní pro restore test. Provozovatel je může změnit řízenou produkční konfigurací; tato implementace `.env` nemění. Preflight nevytváří zálohu, nic neobnovuje a nečte obsah dokumentů. Produkční výsledek 8A výše historicky předchází přidání těchto dvou kontrol.

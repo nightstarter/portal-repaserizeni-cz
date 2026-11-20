@@ -363,3 +363,10 @@
 - Stav: `OWNER_CONFIRMATION_REQUIRED`
 - Rozhodnutí: Doporučená frekvence a retence nejsou smluvní RPO/RTO. Hodnoty RPO a RTO nesmí být odhadnuty z testovací fixture; vlastník je potvrdí až po skutečné produkční záloze, off-server kopii a měřeném izolovaném restore testu.
 - Dopad: Fáze 8B zůstává nedokončená. Automatické mazání starých záloh není aktivováno.
+
+## D-053: Produkční COMPLETE balíček vzniká pouze atomickým create workflow
+
+- Datum: 2026-11-20
+- Stav: přijato pro opravu Fáze 8B
+- Rozhodnutí: `backup:create` v produkci automaticky aktivuje Laravel maintenance, vyčká konfigurovaný drain interval a v sourozeneckém privátním stagingu vytvoří transakční MariaDB dump, TAR private storage a sanitizovaná metadata. Všechny části se nejprve ověří proti neveřejnému nekompletnímu manifestu; COMPLETE manifest se zapíše atomicky až poté, celý staging znovu projde stejným verifierem a finální adresář vznikne až rename ověřeného stagingu.
+- Dopad: DB heslo je pouze v dočasném mode-0600 option file a není v argv. Chyba nikdy nezveřejní COMPLETE cíl a uklidí jen vlastní staging. Maintenance se ve `finally` vrací do původního stavu. Externí CLI writery musí provozovatel během okna vyloučit; příkaz nemění cron ani Task Scheduler.
