@@ -27,11 +27,26 @@ Samostatný transakční portál AUTOKLUBY ↔ POLSKO. Procesní pravidla určuj
   - [x] Fáze 5B – UI diskuse, globální a lokální unread badge, autorizovaná fronta a cursorové stránkování (viz `docs/PHASE_5B.md`)
   - [x] Fáze 5C – transakční e-mailový outbox, worker/retry, scheduler a AK_ADMIN přehled (viz `docs/PHASE_5C.md`)
   - [x] Fáze 5D – závěrečná automatizovaná akceptace, bezpečnostní/výkonový audit a deployment plán (viz `docs/PHASE_5_ACCEPTANCE.md` a `docs/PHASE_5_DEPLOYMENT.md`)
-- [ ] Fáze 6 – reklamace a výkup
-- [ ] Fáze 7 – Pohoda bridge a přecenění
-- [ ] Fáze 8 – produkční připravenost
+- [x] Fáze 6 – opakovatelné reklamace a systémový výkup (závěrečná akceptace a deployment viz [docs/PHASE_6_ACCEPTANCE.md](docs/PHASE_6_ACCEPTANCE.md) a [docs/PHASE_6_DEPLOYMENT.md](docs/PHASE_6_DEPLOYMENT.md))
+  - [x] Fáze 6A – doménové jádro reklamačních cyklů `WARRANTY`
+  - [x] Fáze 6B – UI a autorizovaná fronta reklamací
+  - [x] Fáze 6C – doménové a API jádro systémového výkupu `BUYBACK`
+  - [x] Fáze 6D – UI, fronta a administrace výkupů
+  - [x] Fáze 6E – závěrečná automatizovaná akceptace a bezpečnostní audit
+- [x] Fáze 7 – bezpečný Pohoda bridge (závěrečná akceptace, provoz a deployment viz [docs/PHASE_7_ACCEPTANCE.md](docs/PHASE_7_ACCEPTANCE.md), [docs/PHASE_7_OPERATIONS.md](docs/PHASE_7_OPERATIONS.md) a [docs/PHASE_7_DEPLOYMENT.md](docs/PHASE_7_DEPLOYMENT.md))
+  - [x] Fáze 7A – portálové API Pohoda bridge, HMAC, snapshoty a příkazy
+  - [x] Fáze 7B – samostatný HPSERVER konektor
+  - [x] Fáze 7B.1 – omezení snapshotu na produkty s prefixem `RR`
+  - [x] Fáze 7B.2 – přijetí platných nenamapovaných `RR` referencí
+  - [x] Fáze 7C – fingerprint datasetu a potvrzení beze změny
+  - [x] Fáze 7D – závěrečná akceptace, bezpečnostní a kapacitní audit
+- [ ] Fáze 8 – následující: produkční připravenost, monitoring, zálohy a obnova, provozní testy a řešení technického dluhu PHP 7.4 / Windows Server 2012 R2
 
-Legacy mapování bylo ověřeno proti živé databázi a přijato ve Fázi 1F. Fáze 2 implementovala zakázkovou a skladovou repasi s paralelními větvemi, Fáze 3 atomické hromadné zásilky AUTOKLUBY ↔ POLSKO. Fáze 4 doplňuje `CORE_RETURN`, oddělenou dodavatelskou zálohu, append-only ledger, soukromé dodavatelské faktury a dobropisy, platbu, UI a odvozené KPI. Zákaznický snapshot zálohy se nepoužívá jako dodavatelská hodnota, Polsku se nezobrazuje a portál jej zákazníkovi nerefunduje. Produkční import, Pohoda bridge ani portalový scheduler nejsou aktivované; `LEGACY_SHOP_IMPORT_ENABLED=false` zůstává bezpečná provozní i výchozí hodnota.
+Aktuální stav: Fáze 0–7 jsou dokončené; následuje Fáze 8. Legacy mapování bylo ověřeno proti živé databázi a přijato ve Fázi 1F. Fáze 2 implementovala zakázkovou a skladovou repasi s paralelními větvemi, Fáze 3 atomické hromadné zásilky AUTOKLUBY ↔ POLSKO, Fáze 4 vratky a finance, Fáze 5 diskusi a notifikace a Fáze 6 opakovatelné reklamace `WARRANTY` a systémové výkupy `BUYBACK`.
+
+Pohoda bridge z Fáze 7 je nasazený a běží každých pět minut. Použitelný základní snapshot je `PARTIAL`: 2482 platných `RR` referencí je přijato jako `UNMAPPED` a dvě duplicitní reference zůstávají bezpečně odmítnuté. Následné nezměněné běhy používají `UNCHANGED_CONFIRMATION_ONLY`. HPSERVER konektor má pouze read-only SQL přístup k Pohodě a portál nemá přímé SQL spojení do Pohody.
+
+`PRODUCT_REPRICING = DEFERRED_EXTERNAL_SYSTEM`. Nákupní ani prodejní ceny se přes Pohoda bridge nezapisují a produkční command whitelist zůstává prázdný. `LEGACY_SHOP_IMPORT_ENABLED=false` zůstává bezpečná provozní i výchozí hodnota.
 
 ## Instalace z čistého klonu
 
