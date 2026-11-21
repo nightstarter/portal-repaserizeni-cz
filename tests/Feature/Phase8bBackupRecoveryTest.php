@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Backup\BackupManifestVerifier;
 use App\Backup\PrivateStoragePolicy;
+use App\Backup\RecoveryEvidenceStore;
 use App\Backup\RestoreCheckService;
 use App\Enums\DocumentStatus;
 use App\Enums\DocumentType;
@@ -194,7 +195,9 @@ class Phase8bBackupRecoveryTest extends TestCase
         $fixture = $this->fixture();
         $target = $this->target();
         $this->app->detectEnvironment(fn (): string => 'production');
-        $this->assertSame(1, Artisan::call('backup:restore-check', ['path' => $fixture->root(), '--target' => $target, '--json' => true]));
+        $this->assertSame(1, Artisan::call('backup:restore-check', [
+            'path' => $fixture->root(), '--target' => $target, '--evidence-id' => 'restore-production-environment', '--json' => true,
+        ]));
         $this->assertDirectoryDoesNotExist($target);
     }
 
@@ -204,7 +207,7 @@ class Phase8bBackupRecoveryTest extends TestCase
         config(['backups.production_database' => ['host' => null, 'port' => null, 'database' => ':memory:']]);
 
         $this->assertSame(1, Artisan::call('backup:restore-check', [
-            'path' => $fixture->root(), '--target' => $this->target(), '--json' => true,
+            'path' => $fixture->root(), '--target' => $this->target(), '--evidence-id' => 'restore-production-identity-1', '--json' => true,
         ]));
 
         config(['backups.production_database' => ['host' => null, 'port' => null, 'database' => null]]);
@@ -212,7 +215,7 @@ class Phase8bBackupRecoveryTest extends TestCase
         $manifest['database']['source_identity_sha256'] = hash('sha256', 'sqlite|||:memory:');
         $fixture->rewrite($manifest);
         $this->assertSame(1, Artisan::call('backup:restore-check', [
-            'path' => $fixture->root(), '--target' => $this->target(), '--json' => true,
+            'path' => $fixture->root(), '--target' => $this->target(), '--evidence-id' => 'restore-production-identity-2', '--json' => true,
         ]));
     }
 
@@ -221,13 +224,13 @@ class Phase8bBackupRecoveryTest extends TestCase
         $fixture = $this->fixture();
         $productionStorage = (string) config('filesystems.disks.local.root');
         $this->assertSame(1, Artisan::call('backup:restore-check', [
-            'path' => $fixture->root(), '--target' => $productionStorage, '--json' => true,
+            'path' => $fixture->root(), '--target' => $productionStorage, '--evidence-id' => 'restore-production-storage', '--json' => true,
         ]));
 
         $target = $this->target(true);
         file_put_contents($target.'/foreign.keep', 'preserve');
         $this->assertSame(1, Artisan::call('backup:restore-check', [
-            'path' => $fixture->root(), '--target' => $target, '--json' => true,
+            'path' => $fixture->root(), '--target' => $target, '--evidence-id' => 'restore-nonempty-target', '--json' => true,
         ]));
         $this->assertFileExists($target.'/foreign.keep');
         $this->assertSame('preserve', file_get_contents($target.'/foreign.keep'));
@@ -241,16 +244,17 @@ class Phase8bBackupRecoveryTest extends TestCase
         config(['backups.testing_fail_after_copied_parts' => 1]);
 
         $this->assertSame(1, Artisan::call('backup:restore-check', [
-            'path' => $fixture->root(), '--target' => $target, '--json' => true,
+            'path' => $fixture->root(), '--target' => $target, '--evidence-id' => 'restore-interrupted-created', '--json' => true,
         ]));
         $this->assertDirectoryDoesNotExist($target);
 
         $existingEmpty = $this->target(true);
         $this->assertSame(1, Artisan::call('backup:restore-check', [
-            'path' => $fixture->root(), '--target' => $existingEmpty, '--json' => true,
+            'path' => $fixture->root(), '--target' => $existingEmpty, '--evidence-id' => 'restore-interrupted-existing', '--json' => true,
         ]));
         $this->assertDirectoryExists($existingEmpty);
         $this->assertSame(['.', '..'], scandir($existingEmpty));
+        $this->assertFileDoesNotExist($fixture->root().'/recovery-evidence.json');
     }
 
     public function test_isolated_fixture_restore_checks_counts_constraints_files_and_read_only_page(): void
@@ -259,12 +263,12 @@ class Phase8bBackupRecoveryTest extends TestCase
         $fixture = $this->fixture([$documentPath => $contents]);
         $target = $this->target();
 
-        $serviceResult = app(RestoreCheckService::class)->run($fixture->root(), $target);
+        $serviceResult = app(RestoreCheckService::class)->run($fixture->root(), $target, 'restore-service-success');
         $this->assertSame('OK', $serviceResult['status']);
         $target = $this->target();
 
         $this->assertSame(0, Artisan::call('backup:restore-check', [
-            'path' => $fixture->root(), '--target' => $target, '--json' => true,
+            'path' => $fixture->root(), '--target' => $target, '--evidence-id' => 'restore-command-success', '--json' => true,
         ]));
         $result = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
         $this->assertSame('OK', $result['status']);
@@ -272,6 +276,15 @@ class Phase8bBackupRecoveryTest extends TestCase
         $this->assertFileExists($target.'/'.$documentPath);
         $this->assertSame($contents, file_get_contents($target.'/'.$documentPath));
         $this->actingAs($user)->get(route('dashboard'))->assertOk();
+
+        $evidence = app(RecoveryEvidenceStore::class)->inspect(app(BackupManifestVerifier::class)->verify($fixture->root()));
+        $this->assertSame('VALID', $evidence['status']);
+        $this->assertCount(2, $evidence['restore_tests']);
+        $this->assertSame(['restore-service-success', 'restore-command-success'], array_column($evidence['restore_tests'], 'evidence_id'));
+        $this->assertSame(['SUCCESS', 'SUCCESS'], array_column($evidence['restore_tests'], 'status'));
+        $rawSidecar = (string) file_get_contents($fixture->root().'/recovery-evidence.json');
+        $this->assertStringNotContainsString($documentPath, $rawSidecar);
+        $this->assertStringNotContainsString($contents, $rawSidecar);
     }
 
     public function test_preflight_classifies_missing_old_and_valid_production_backup(): void
@@ -285,11 +298,17 @@ class Phase8bBackupRecoveryTest extends TestCase
         $oldChecks = collect(app(ProductionPreflight::class)->run())->keyBy('id');
         $this->assertSame(PreflightCheck::ERROR, $oldChecks['latest_backup']->status);
 
-        $valid = $this->fixture([], [
-            'off_server' => ['confirmed' => true, 'confirmed_at_utc' => now()->utc()->format('Y-m-d\TH:i:s\Z')],
-            'restore_test' => ['status' => 'SUCCESS', 'completed_at_utc' => now()->utc()->format('Y-m-d\TH:i:s\Z')],
-        ]);
+        $valid = $this->fixture();
         config(['backups.latest_manifest' => $valid->root()]);
+        $verification = app(BackupManifestVerifier::class)->verify($valid->root());
+        app(RecoveryEvidenceStore::class)->confirmOffServer($valid->root(), 'preflight-off-server');
+        app(RecoveryEvidenceStore::class)->recordRestoreSuccess(
+            $verification,
+            hash_file('sha256', $valid->root().'/manifest.json'),
+            'preflight-restore',
+            1.0,
+            $this->evidenceMetrics($verification->manifest),
+        );
         $checks = collect(app(ProductionPreflight::class)->run())->keyBy('id');
         $this->assertSame(PreflightCheck::OK, $checks['latest_backup']->status);
         $this->assertSame(PreflightCheck::OK, $checks['recovery_evidence']->status);
@@ -330,6 +349,18 @@ class Phase8bBackupRecoveryTest extends TestCase
         ]);
 
         return $returnUser ? [$path, $contents, $user] : [$path, $contents];
+    }
+
+    private function evidenceMetrics(array $manifest): array
+    {
+        $metrics = [
+            'critical_table_counts' => $manifest['database']['critical_counts'],
+            'schema_fingerprint' => $manifest['schema']['fingerprint'],
+            'private_file_count' => 0,
+        ];
+        $metrics['counts_fingerprint'] = hash('sha256', json_encode($metrics, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+
+        return $metrics;
     }
 
     private function assertVerification(BackupFixture $fixture, string $code, ?string $component): void

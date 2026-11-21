@@ -86,13 +86,6 @@ final class BackupManifestVerifier
         if (($manifest['status'] ?? null) !== $expectedStatus) {
             $errors[] = 'Backup status is not '.$expectedStatus.'.';
         }
-        if (! (bool) data_get($manifest, 'off_server.confirmed', false)) {
-            $warnings[] = 'Off-server copy is not confirmed.';
-        }
-        if (data_get($manifest, 'restore_test.status') !== 'SUCCESS') {
-            $warnings[] = 'Successful isolated restore test is not recorded.';
-        }
-
         $errors = array_values(array_unique($errors));
         [$verificationCode, $component] = $this->classify($errors, $manifest);
 

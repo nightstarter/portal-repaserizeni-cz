@@ -11,6 +11,7 @@ final class BackupRestoreCheck extends Command
     protected $signature = 'backup:restore-check
         {path : Absolute backup directory or manifest path}
         {--target= : New empty private-storage restore target outside production storage}
+        {--evidence-id= : Non-secret incident or change identifier for append-only restore evidence}
         {--json : Emit machine-readable JSON}';
 
     protected $description = 'Validate an isolated restored database and restore private files into a safe empty target';
@@ -18,11 +19,12 @@ final class BackupRestoreCheck extends Command
     public function handle(RestoreCheckService $service): int
     {
         $target = $this->option('target');
-        if (! is_string($target) || $target === '') {
-            return $this->failure('An explicit absolute --target is required.');
+        $evidenceId = $this->option('evidence-id');
+        if (! is_string($target) || $target === '' || ! is_string($evidenceId) || $evidenceId === '') {
+            return $this->failure('An explicit absolute --target and non-secret --evidence-id are required.');
         }
         try {
-            $result = $service->run((string) $this->argument('path'), $target);
+            $result = $service->run((string) $this->argument('path'), $target, $evidenceId);
         } catch (Throwable) {
             return $this->failure('Restore check failed; no sensitive detail was emitted.');
         }

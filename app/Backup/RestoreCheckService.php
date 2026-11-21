@@ -15,10 +15,12 @@ final class RestoreCheckService
         private readonly BackupManifestVerifier $verifier,
         private readonly BackupPathGuard $paths,
         private readonly PrivateStoragePolicy $privateStoragePolicy,
+        private readonly RecoveryEvidenceStore $recoveryEvidence,
     ) {}
 
-    public function run(string $backupPath, string $target): array
+    public function run(string $backupPath, string $target, string $evidenceId): array
     {
+        $startedAt = microtime(true);
         $this->assertEnvironment();
         $this->assertDatabaseTarget();
         $this->assertInactiveIntegrations();
@@ -26,6 +28,10 @@ final class RestoreCheckService
         $verification = $this->verifier->verify($backupPath);
         if (! $verification->valid || $verification->manifest === null || $verification->root === null) {
             throw new RuntimeException('Backup manifest or checksums are invalid.');
+        }
+        $manifestSha256 = hash_file('sha256', $verification->root.DIRECTORY_SEPARATOR.'manifest.json');
+        if (! is_string($manifestSha256)) {
+            throw new RuntimeException('Backup manifest fingerprint is unavailable.');
         }
         if (hash_equals($verification->manifest['database']['source_identity_sha256'], $this->targetDatabaseFingerprint())) {
             throw new RuntimeException('Restore target matches the backup source database identity.');
@@ -38,14 +44,23 @@ final class RestoreCheckService
             $this->extractPrivateArchive($verification->manifest, $verification->root, $targetState['path'], $copied, $createdDirectories);
             $this->copyPrivateParts($verification->manifest, $verification->root, $targetState['path'], $copied, $createdDirectories);
             $this->assertExcludedArtifactsAbsent($targetState['path']);
-            $checks = $this->verifyDatabaseAndStorage($verification->manifest, $targetState['path'], $copied);
+            $verified = $this->verifyDatabaseAndStorage($verification->manifest, $targetState['path'], $copied);
+            $evidence = $this->recoveryEvidence->recordRestoreSuccess(
+                $verification,
+                $manifestSha256,
+                $evidenceId,
+                microtime(true) - $startedAt,
+                $verified['metrics'],
+            );
 
             return [
                 'status' => 'OK',
                 'backup_id' => $verification->manifest['backup_id'],
                 'target' => $targetState['path'],
                 'copied_private_files' => count($copied),
-                'checks' => $checks,
+                'checks' => $verified['checks'],
+                'evidence_id' => $evidence['evidence_id'],
+                'evidence_idempotent' => $evidence['idempotent'],
                 'target_created_by_tool' => $targetState['created'],
             ];
         } catch (Throwable $exception) {
@@ -229,15 +244,25 @@ final class RestoreCheckService
             throw new RuntimeException('Private storage contains missing or orphaned files.');
         }
 
+        $metrics = [
+            'critical_table_counts' => $counts,
+            'schema_fingerprint' => $manifest['schema']['fingerprint'],
+            'private_file_count' => count($relativeCopied),
+        ];
+        $metrics['counts_fingerprint'] = hash('sha256', json_encode($metrics, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+
         return [
-            'migrations' => 'OK',
-            'critical_table_counts' => 'OK',
-            'foreign_keys' => 'OK',
-            'unique_indexes' => 'OK',
-            'document_files' => 'OK',
-            'orphan_policy' => 'OK',
-            'integrations_disabled' => 'OK',
-            'excluded_operational_artifacts_not_restored' => 'OK',
+            'checks' => [
+                'migrations' => 'OK',
+                'critical_table_counts' => 'OK',
+                'foreign_keys' => 'OK',
+                'unique_indexes' => 'OK',
+                'document_files' => 'OK',
+                'orphan_policy' => 'OK',
+                'integrations_disabled' => 'OK',
+                'excluded_operational_artifacts_not_restored' => 'OK',
+            ],
+            'metrics' => $metrics,
         ];
     }
 

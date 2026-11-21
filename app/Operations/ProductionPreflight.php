@@ -4,6 +4,7 @@ namespace App\Operations;
 
 use App\Backup\BackupManifestVerifier;
 use App\Backup\BackupVerification;
+use App\Backup\RecoveryEvidenceStore;
 use App\Models\BridgeHeartbeat;
 use App\Models\OutboxEvent;
 use App\Models\StockSnapshotConfirmation;
@@ -21,7 +22,10 @@ class ProductionPreflight
 
     private ?string $backupVerificationPath = null;
 
-    public function __construct(private readonly BackupManifestVerifier $backupVerifier) {}
+    public function __construct(
+        private readonly BackupManifestVerifier $backupVerifier,
+        private readonly RecoveryEvidenceStore $recoveryEvidence,
+    ) {}
 
     /** @return list<PreflightCheck> */
     public function run(): array
@@ -361,12 +365,21 @@ class ProductionPreflight
         }
         $verification = $this->backupVerification($path);
         if (! $verification->valid || $verification->manifest === null) {
-            return new PreflightCheck('recovery_evidence', PreflightCheck::WARN, 'Recovery evidence nelze ověřit bez platného COMPLETE manifestu.');
+            return new PreflightCheck('recovery_evidence', PreflightCheck::ERROR, 'Recovery evidence nelze svázat s neplatným COMPLETE manifestem.');
         }
-        $manifest = $verification->manifest;
-        $offServer = (bool) data_get($manifest, 'off_server.confirmed', false);
-        $restoreSuccess = data_get($manifest, 'restore_test.status') === 'SUCCESS';
-        $completed = data_get($manifest, 'restore_test.completed_at_utc');
+        $evidence = $this->recoveryEvidence->inspect($verification);
+        if ($evidence['status'] === 'MISSING') {
+            return new PreflightCheck('recovery_evidence', PreflightCheck::WARN, 'Recovery evidence sidecar zatím neexistuje.', ['off_server_confirmed' => false, 'restore_test_success' => false]);
+        }
+        if ($evidence['status'] !== 'VALID') {
+            return new PreflightCheck('recovery_evidence', PreflightCheck::ERROR, 'Recovery evidence sidecar je neplatný nebo patří jinému backupu.', ['evidence_integrity_valid' => false]);
+        }
+        $offServer = is_array($evidence['off_server_confirmation'] ?? null)
+            && data_get($evidence, 'off_server_confirmation.operator_attested_full_copy_verified') === true;
+        $restoreTests = collect($evidence['restore_tests'] ?? [])->where('status', 'SUCCESS')->sortByDesc('completed_at_utc')->values();
+        $latestRestore = $restoreTests->first();
+        $restoreSuccess = is_array($latestRestore);
+        $completed = $restoreSuccess ? ($latestRestore['completed_at_utc'] ?? null) : null;
         $age = null;
         if ($restoreSuccess && is_string($completed)) {
             try {

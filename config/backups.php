@@ -34,4 +34,5 @@ return [
     'testing_database_configuration' => null,
     'testing_database_objects' => null,
     'testing_source_identity_sha256' => null,
+    'testing_evidence_fail_before_rename' => false,
 ];

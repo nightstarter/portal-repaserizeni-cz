@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Backup\BackupManifestVerifier;
+use App\Backup\RecoveryEvidenceStore;
 use App\Enums\OrganizationCode;
 use App\Enums\UserRole;
 use App\Models\Organization;
@@ -43,11 +45,23 @@ class Phase8aPreflightTest extends TestCase
             'integrations.pohoda_bridge.warehouses' => ['DECIN'],
             'integrations.pohoda_bridge.product_prefixes' => ['RR'],
         ]);
-        $this->backupFixture = BackupFixture::create([], [
-            'off_server' => ['confirmed' => true, 'confirmed_at_utc' => now()->utc()->format('Y-m-d\TH:i:s\Z')],
-            'restore_test' => ['status' => 'SUCCESS', 'completed_at_utc' => now()->utc()->format('Y-m-d\TH:i:s\Z')],
-        ]);
+        $this->backupFixture = BackupFixture::create();
         config(['backups.latest_manifest' => $this->backupFixture->root()]);
+        $verification = app(BackupManifestVerifier::class)->verify($this->backupFixture->root());
+        app(RecoveryEvidenceStore::class)->confirmOffServer($this->backupFixture->root(), 'phase8a-off-server');
+        $metrics = [
+            'critical_table_counts' => $verification->manifest['database']['critical_counts'],
+            'schema_fingerprint' => $verification->manifest['schema']['fingerprint'],
+            'private_file_count' => 0,
+        ];
+        $metrics['counts_fingerprint'] = hash('sha256', json_encode($metrics, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+        app(RecoveryEvidenceStore::class)->recordRestoreSuccess(
+            $verification,
+            hash_file('sha256', $this->backupFixture->root().'/manifest.json'),
+            'phase8a-restore',
+            1.0,
+            $metrics,
+        );
     }
 
     protected function tearDown(): void

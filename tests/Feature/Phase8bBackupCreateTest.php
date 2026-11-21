@@ -92,8 +92,15 @@ class Phase8bBackupCreateTest extends TestCase
         $this->assertFileExists($privateRoot.'/.gitignore');
         $this->assertFileExists($privateRoot.'/legacy-shop-phase1c-report.json');
         $this->assertSame(0, Artisan::call('backup:verify', ['path' => $target, '--json' => true]));
+        // Recovery evidence is intentionally restricted to production COMPLETE manifests.
+        // This isolated SQLite fixture simulates that manifest state without touching production.
+        $manifest['environment'] = 'production';
+        file_put_contents($target.'/manifest.json', json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+        $this->assertSame(0, Artisan::call('backup:verify', ['path' => $target, '--json' => true]));
         $restoreTarget = $this->newTarget();
-        $this->assertSame(0, Artisan::call('backup:restore-check', ['path' => $target, '--target' => $restoreTarget, '--json' => true]));
+        $this->assertSame(0, Artisan::call('backup:restore-check', [
+            'path' => $target, '--target' => $restoreTarget, '--evidence-id' => 'restore-create-e2e', '--json' => true,
+        ]));
         $this->assertFileDoesNotExist($restoreTarget.'/.gitignore');
         $this->assertFileDoesNotExist($restoreTarget.'/legacy-shop-phase1c-report.json');
         $this->assertStringNotContainsString('APP_KEY', file_get_contents($target.'/metadata.json'));
