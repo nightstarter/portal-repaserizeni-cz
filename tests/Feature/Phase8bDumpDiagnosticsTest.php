@@ -85,7 +85,7 @@ final class Phase8bDumpDiagnosticsTest extends TestCase
             $this->fail('Permission failure was expected.');
         } catch (DumpException $exception) {
             $this->assertSame('DUMP_PERMISSION_DENIED', $exception->failureCode);
-            $this->assertSame(2, $exception->dumpExitCode);
+            $this->assertSame(2, $exception->processExitCode);
             $this->assertStringNotContainsString('SUPER', json_encode($exception->safeDetails()));
         }
         $command = $process->commands[0];
@@ -175,11 +175,17 @@ final class Phase8bDumpDiagnosticsTest extends TestCase
         $this->assertSame('OK', $result['status']);
         $this->assertSame('10.11.14-MariaDB', collect($result['checks'])->firstWhere('name', 'dump_client_version')['version']);
         $this->assertSame('OK', collect($result['checks'])->firstWhere('name', 'schema_only_probe')['status']);
+        $this->assertSame('OK', collect($result['checks'])->firstWhere('name', 'data_dump_probe')['status']);
         $probeCommand = collect($process->commands)->first(fn (array $command): bool => in_array('--no-data', $command, true));
         $this->assertIsArray($probeCommand);
         $this->assertContains('--skip-triggers', $probeCommand);
         $this->assertNotContains('--routines', $probeCommand);
         $this->assertNotContains('--events', $probeCommand);
+        $dataProbeCommand = collect($process->commands)->first(fn (array $command): bool => in_array('--where=1 LIMIT 1', $command, true));
+        $this->assertIsArray($dataProbeCommand);
+        $this->assertSame('migrations', end($dataProbeCommand));
+        $this->assertContains('--no-create-info', $dataProbeCommand);
+        $this->assertNotContains('--no-data', $dataProbeCommand);
         $this->assertSame($before, glob(sys_get_temp_dir().'/portal-backup-diagnose-*'));
         $this->assertStringNotContainsString('fixture-secret', Artisan::output());
         $this->assertStringNotContainsString('db.internal.invalid', Artisan::output());
@@ -195,6 +201,8 @@ final class Phase8bDumpDiagnosticsTest extends TestCase
         $result = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
         $probe = collect($result['checks'])->firstWhere('name', 'schema_only_probe');
         $this->assertSame('DUMP_PERMISSION_DENIED', $probe['code']);
+        $dataProbe = collect($result['checks'])->firstWhere('name', 'data_dump_probe');
+        $this->assertSame('DUMP_PERMISSION_DENIED', $dataProbe['code']);
         $this->assertStringNotContainsString('fixture-secret', Artisan::output());
 
         foreach (['DUMP_PROCESS_START_FAILED', 'DUMP_TIMEOUT'] as $code) {

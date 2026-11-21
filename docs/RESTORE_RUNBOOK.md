@@ -4,9 +4,9 @@ Tento postup je výhradně pro izolovaný test nebo disaster-recovery náhradu. 
 
 ## Příprava
 
-1. Mimo maintenance okno spusťte read-only `php8.5 artisan backup:diagnose --json`. Vyžadujte exit `0` a `schema_only_probe=OK`; při chybě nic neopravujte automaticky a nepřidávejte DB granty bez schválení DBA.
+1. Mimo maintenance okno spusťte read-only `php8.5 artisan backup:diagnose --json`. Vyžadujte exit `0`, `schema_only_probe=OK` a `data_dump_probe=OK`. Data probe čte nejvýše jeden řádek pouze z technické tabulky `migrations`, obsah nevrací a vlastní sandbox uklidí; při chybě nic neopravujte automaticky a nepřidávejte DB granty bez schválení DBA.
 2. Vyhlaste krátké maintenance okno, ověřte nepřítomnost externích zápisových CLI procesů a spusťte právě jeden `php8.5 artisan backup:create --target=/absolute/new-backup --json`. Cíl musí být nový. Zaznamenejte začátek/konec, backup ID nebo bezpečný error code a exit code. Příkaz sám vrátí aplikaci z Laravel maintenance i při chybě.
-3. Při nenulovém exit další create neopakujte. Kód `DUMP_*`, fáze, dump exit code a doporučení jsou bezpečné pro incident evidenci; raw stderr, command line, host, username, DSN a credentials se neevidují. `DUMP_PERMISSION_DENIED` se řeší jen minimálním DBA-schváleným oprávněním a pouze pokud diagnostika prokáže existující logical objekty.
+3. Při nenulovém exit další create neopakujte. Do incidentu uložte pouze `status`, `code`, `phase`, případný `process_exit_code` a `recommendation`. Podporované fáze jsou `DATABASE_DUMP`, `PRIVATE_ARCHIVE`, `METADATA`, `MANIFEST`, `VERIFY`, `FINALIZE`, `MAINTENANCE` a `UNKNOWN`. Raw stderr, command line, host, DB name, username, DSN a credentials se neevidují. `DUMP_PERMISSION_DENIED` se řeší jen minimálním DBA-schváleným oprávněním a pouze pokud diagnostika prokáže existující logical objekty.
 4. Na webserveru spusťte `php8.5 artisan backup:verify /absolute/new-backup --json`. Nenulový exit zastavuje postup.
 5. Přeneste kompletní adresář šifrovaným kanálem na úložiště mimo webserver s oddělenými credentials.
 6. Na off-server kopii znovu spusťte kompatibilní `backup:verify`; nekopírujte jen manifest.

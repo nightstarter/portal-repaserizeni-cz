@@ -117,10 +117,88 @@ class Phase8bBackupCreateTest extends TestCase
         $this->assertSame(1, Artisan::call('backup:create', ['--target' => $target, '--json' => true]));
         $result = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
         $this->assertSame('DUMP_AUTHENTICATION_FAILED', $result['code']);
-        $this->assertSame('database_dump', $result['phase']);
-        $this->assertSame(2, $result['dump_exit_code']);
+        $this->assertSame('DATABASE_DUMP', $result['phase']);
+        $this->assertSame(2, $result['process_exit_code']);
         $this->assertSame('mariadb-dump', $result['binary']);
         $this->assertDirectoryDoesNotExist($target);
+    }
+
+    public function test_artisan_propagates_every_phase_in_json_and_text_without_internal_details(): void
+    {
+        $firstTarget = $this->preparePrivateDocumentAndTarget();
+        $phases = [
+            'DATABASE_DUMP' => 'DUMP_FAILED_UNKNOWN',
+            'PRIVATE_ARCHIVE' => 'PRIVATE_ARCHIVE_FAILED',
+            'METADATA' => 'METADATA_FAILED',
+            'MANIFEST' => 'MANIFEST_FAILED',
+            'VERIFY' => 'VERIFY_FAILED',
+            'FINALIZE' => 'FINALIZE_FAILED',
+            'MAINTENANCE' => 'MAINTENANCE_FAILED',
+            'UNKNOWN' => 'BACKUP_FAILED_UNKNOWN',
+        ];
+
+        foreach ($phases as $phase => $code) {
+            foreach ([true, false] as $json) {
+                $target = $phase === 'DATABASE_DUMP' && $json ? $firstTarget : $this->newTarget();
+                $this->bindSuccessfulDump($target);
+                config(['backups.testing_fail_phase' => $phase]);
+
+                $arguments = ['--target' => $target];
+                if ($json) {
+                    $arguments['--json'] = true;
+                }
+                $this->assertSame(1, Artisan::call('backup:create', $arguments), $phase);
+                $output = Artisan::output();
+                $this->assertStringNotContainsString('phase-failure-canary', $output);
+                $this->assertDirectoryDoesNotExist($target);
+
+                if ($json) {
+                    $result = json_decode($output, true, flags: JSON_THROW_ON_ERROR);
+                    $this->assertSame('ERROR', $result['status']);
+                    $this->assertSame($code, $result['code']);
+                    $this->assertSame($phase, $result['phase']);
+                    $this->assertIsString($result['recommendation']);
+                    $this->assertArrayNotHasKey('message', $result);
+                } else {
+                    $this->assertStringContainsString($code, $output);
+                    $this->assertStringContainsString('Phase: '.$phase, $output);
+                    $this->assertStringContainsString('Recommendation:', $output);
+                }
+            }
+        }
+        config(['backups.testing_fail_phase' => null]);
+    }
+
+    public function test_maintenance_finally_failure_does_not_replace_classified_dump_failure(): void
+    {
+        $target = $this->preparePrivateDocumentAndTarget();
+        $this->app->bind(DatabaseDumpRunner::class, fn () => new class implements DatabaseDumpRunner
+        {
+            public function dump(string $outputPath, string $credentialsDirectory): array
+            {
+                throw new DumpException('DUMP_CONNECTION_FAILED', 'dump_process', 9, 'mariadb-dump', 'Safe dump recommendation.');
+            }
+        });
+        $this->app->instance(BackupMaintenance::class, new class implements BackupMaintenance
+        {
+            public function begin(): bool
+            {
+                return true;
+            }
+
+            public function end(bool $enabledByThisInvocation): void
+            {
+                throw new RuntimeException('maintenance-secret-canary');
+            }
+        });
+
+        $this->assertSame(1, Artisan::call('backup:create', ['--target' => $target, '--json' => true]));
+        $result = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame('DUMP_CONNECTION_FAILED', $result['code']);
+        $this->assertSame('DATABASE_DUMP', $result['phase']);
+        $this->assertSame(9, $result['process_exit_code']);
+        $this->assertStringContainsString('maintenance mode', $result['recommendation']);
+        $this->assertStringNotContainsString('maintenance-secret-canary', Artisan::output());
     }
 
     public function test_archive_failure_and_checksum_mismatch_never_publish_complete_manifest(): void
@@ -181,6 +259,13 @@ class Phase8bBackupCreateTest extends TestCase
     public function test_create_rejects_existing_nonempty_protected_tmp_and_symlink_targets(): void
     {
         $this->assertSame(1, Artisan::call('backup:create', ['--json' => true]));
+        $missingTarget = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame([
+            'status' => 'ERROR',
+            'code' => 'FINALIZE_FAILED',
+            'phase' => 'FINALIZE',
+        ], collect($missingTarget)->only(['status', 'code', 'phase'])->all());
+        $this->assertIsString($missingTarget['recommendation']);
         $this->assertCreateRejected(base_path('forbidden-backup'));
         $this->assertCreateRejected(public_path('forbidden-backup'));
         $this->assertCreateRejected(storage_path('forbidden-backup'));

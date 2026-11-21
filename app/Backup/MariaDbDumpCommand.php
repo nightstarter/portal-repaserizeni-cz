@@ -50,6 +50,26 @@ final class MariaDbDumpCommand
         return $command;
     }
 
+    /** @return list<string> */
+    public function buildDataProbe(string $binary, string $credentials, string $database): array
+    {
+        return [
+            $binary,
+            '--defaults-extra-file='.$credentials,
+            '--single-transaction',
+            '--quick',
+            '--skip-lock-tables',
+            '--no-tablespaces',
+            '--hex-blob',
+            '--default-character-set=utf8mb4',
+            '--skip-triggers',
+            '--no-create-info',
+            '--where=1 LIMIT 1',
+            $database,
+            'migrations',
+        ];
+    }
+
     /** @param array{triggers:int,routines:int,events:int} $objects */
     public function safeOptionMetadata(array $objects): array
     {

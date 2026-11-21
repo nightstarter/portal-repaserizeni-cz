@@ -29,6 +29,7 @@ return [
     // Test-only failure seam; ignored unless the process environment is testing.
     'testing_fail_after_copied_parts' => null,
     'testing_tamper_after_manifest' => false,
+    'testing_fail_phase' => null,
     'testing_git_commit' => null,
     'testing_database_configuration' => null,
     'testing_database_objects' => null,

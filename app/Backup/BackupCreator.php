@@ -25,28 +25,49 @@ final class BackupCreator
 
     public function create(string $requestedTarget): array
     {
-        if (! app()->environment(['production', 'testing'])) {
-            throw new RuntimeException('Backup creation is allowed only in production or testing.');
-        }
-        $target = $this->paths->newBackupTarget($requestedTarget);
-        $staging = dirname($target).DIRECTORY_SEPARATOR.'.'.basename($target).'.staging-'.Str::uuid();
-        if (! mkdir($staging, 0700)) {
-            throw new RuntimeException('Unable to create private backup staging directory.');
-        }
-
+        $phase = 'UNKNOWN';
+        $target = null;
+        $staging = null;
         $maintenanceEnabled = false;
         $published = false;
+        $failure = null;
+        $result = null;
         try {
+            $this->failForTesting('UNKNOWN');
+            if (! app()->environment(['production', 'testing'])) {
+                throw new RuntimeException('Backup creation is allowed only in production or testing.');
+            }
+
+            $phase = 'FINALIZE';
+            $target = $this->paths->newBackupTarget($requestedTarget);
+            $staging = dirname($target).DIRECTORY_SEPARATOR.'.'.basename($target).'.staging-'.Str::uuid();
+            if (! mkdir($staging, 0700)) {
+                throw new RuntimeException('Unable to create private backup staging directory.');
+            }
+
+            $phase = 'MAINTENANCE';
+            $this->failForTesting($phase);
             $maintenanceEnabled = $this->maintenance->begin();
+
+            $phase = 'METADATA';
             $before = $this->databaseState();
             $privateRoot = (string) config('filesystems.disks.local.root');
+
+            $phase = 'PRIVATE_ARCHIVE';
             $privateBefore = $this->archiver->inventory($privateRoot);
 
+            $phase = 'DATABASE_DUMP';
+            $this->failForTesting($phase);
             $dumpPath = $staging.DIRECTORY_SEPARATOR.'database.sql';
             $dumpMetadata = $this->dumpRunner->dump($dumpPath, $staging);
+
+            $phase = 'PRIVATE_ARCHIVE';
+            $this->failForTesting($phase);
             $archivePath = $staging.DIRECTORY_SEPARATOR.'private-storage.tar';
             $archiveEntries = $this->archiver->archive($privateRoot, $archivePath);
 
+            $phase = 'VERIFY';
+            $this->failForTesting($phase);
             $after = $this->databaseState();
             $privateAfter = $this->archiver->inventory($privateRoot);
             if ($before !== $after || $privateBefore !== $archiveEntries || $archiveEntries !== $privateAfter) {
@@ -54,6 +75,8 @@ final class BackupCreator
             }
             $this->verifyDocumentLinks($archiveEntries);
 
+            $phase = 'METADATA';
+            $this->failForTesting($phase);
             $createdAt = now()->utc()->format('Y-m-d\TH:i:s\Z');
             $gitCommit = $this->gitCommit();
             $databaseVersion = $this->databaseVersion();
@@ -75,6 +98,8 @@ final class BackupCreator
             $metadataPath = $staging.DIRECTORY_SEPARATOR.'metadata.json';
             $this->writeJson($metadataPath, $metadata);
 
+            $phase = 'MANIFEST';
+            $this->failForTesting($phase);
             $manifest = $this->manifest($metadata, $databaseVersion, $archiveEntries, $staging);
             $this->verifyBeforeComplete($manifest, $staging);
             $manifest['status'] = 'COMPLETE';
@@ -83,10 +108,15 @@ final class BackupCreator
             if ($this->isTestingProcess() && config('backups.testing_tamper_after_manifest')) {
                 file_put_contents($dumpPath, 'tampered', FILE_APPEND);
             }
+
+            $phase = 'VERIFY';
             $stagingVerification = $this->verifier->verify($staging);
             if (! $stagingVerification->valid) {
                 throw new RuntimeException('Created backup failed internal manifest verification.');
             }
+
+            $phase = 'FINALIZE';
+            $this->failForTesting($phase);
             if (file_exists($target) || is_link($target)) {
                 throw new RuntimeException('Backup target appeared before atomic publication.');
             }
@@ -94,12 +124,14 @@ final class BackupCreator
                 throw new RuntimeException('Unable to publish backup atomically.');
             }
             $published = true;
+
+            $phase = 'VERIFY';
             $finalVerification = $this->verifier->verify($target);
             if (! $finalVerification->valid) {
                 throw new RuntimeException('Published backup failed final verification.');
             }
 
-            return [
+            $result = [
                 'status' => 'COMPLETE',
                 'backup_id' => $manifest['backup_id'],
                 'target' => $target,
@@ -108,15 +140,80 @@ final class BackupCreator
                 'private_files' => count($archiveEntries),
             ];
         } catch (Throwable $exception) {
-            if ($published && is_dir($target)) {
-                File::deleteDirectory($target);
+            $failure = $this->classifyFailure($exception, $phase);
+            try {
+                if ($published && is_string($target) && is_dir($target)) {
+                    File::deleteDirectory($target);
+                }
+                if (is_string($staging) && is_dir($staging)) {
+                    File::deleteDirectory($staging);
+                }
+            } catch (Throwable) {
+                $failure = $failure->withRecommendation(
+                    $failure->recommendation.' Automatic cleanup of the tool-owned path also failed; inspect that path without deleting foreign files.',
+                );
             }
-            if (is_dir($staging)) {
-                File::deleteDirectory($staging);
-            }
-            throw $exception;
-        } finally {
+        }
+
+        try {
             $this->maintenance->end($maintenanceEnabled);
+        } catch (Throwable) {
+            if ($failure === null) {
+                $failure = $this->phaseFailure('MAINTENANCE');
+            } else {
+                $failure = $failure->withRecommendation(
+                    $failure->recommendation.' Maintenance cleanup also failed; manually verify that the application is not left in maintenance mode.',
+                );
+            }
+        }
+
+        if ($failure !== null) {
+            throw $failure;
+        }
+
+        return $result;
+    }
+
+    private function classifyFailure(Throwable $exception, string $phase): BackupFailure
+    {
+        if ($exception instanceof DumpException) {
+            $details = $exception->safeDetails();
+
+            return new BackupFailure(
+                $exception->failureCode,
+                'DATABASE_DUMP',
+                $exception->processExitCode,
+                $exception->recommendation,
+                isset($details['binary']) ? ['binary' => (string) $details['binary']] : [],
+            );
+        }
+        if ($exception instanceof BackupFailure) {
+            return $exception;
+        }
+
+        return $this->phaseFailure($phase);
+    }
+
+    private function phaseFailure(string $phase): BackupFailure
+    {
+        [$code, $recommendation] = match ($phase) {
+            'DATABASE_DUMP' => ['DUMP_FAILED_UNKNOWN', 'Run backup:diagnose --json and review its sanitized schema and data probe results.'],
+            'PRIVATE_ARCHIVE' => ['PRIVATE_ARCHIVE_FAILED', 'Verify private storage readability and backup filesystem capacity without changing source files.'],
+            'METADATA' => ['METADATA_FAILED', 'Verify read-only schema metadata access and staging filesystem availability.'],
+            'MANIFEST' => ['MANIFEST_FAILED', 'Verify staging filesystem integrity and rerun only after the failed target and staging are absent.'],
+            'VERIFY' => ['VERIFY_FAILED', 'Inspect the sanitized verifier result and do not use or publish the incomplete backup.'],
+            'FINALIZE' => ['FINALIZE_FAILED', 'Use a new empty target on the same private filesystem and verify atomic rename support.'],
+            'MAINTENANCE' => ['MAINTENANCE_FAILED', 'Manually verify application maintenance state before any further backup attempt.'],
+            default => ['BACKUP_FAILED_UNKNOWN', 'Stop further attempts and inspect application logs through the restricted operator channel.'],
+        };
+
+        return new BackupFailure($code, $phase, null, $recommendation);
+    }
+
+    private function failForTesting(string $phase): void
+    {
+        if ($this->isTestingProcess() && config('backups.testing_fail_phase') === $phase) {
+            throw new RuntimeException('phase-failure-canary-must-not-be-rendered');
         }
     }
 

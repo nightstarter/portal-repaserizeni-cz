@@ -2,30 +2,15 @@
 
 namespace App\Backup;
 
-use RuntimeException;
-
-final class DumpException extends RuntimeException
+final class DumpException extends BackupFailure
 {
     public function __construct(
-        public readonly string $failureCode,
-        public readonly string $phase,
-        public readonly ?int $dumpExitCode,
-        public readonly string $binary,
-        public readonly string $recommendation,
+        string $failureCode,
+        string $phase,
+        ?int $dumpExitCode,
+        string $binary,
+        string $recommendation,
     ) {
-        parent::__construct($failureCode);
-    }
-
-    /** @return array<string, mixed> */
-    public function safeDetails(): array
-    {
-        return array_filter([
-            'status' => 'ERROR',
-            'code' => $this->failureCode,
-            'phase' => $this->phase,
-            'dump_exit_code' => $this->dumpExitCode,
-            'binary' => $this->binary,
-            'recommendation' => $this->recommendation,
-        ], static fn (mixed $value): bool => $value !== null);
+        parent::__construct($failureCode, $phase, $dumpExitCode, $recommendation, ['binary' => $binary]);
     }
 }

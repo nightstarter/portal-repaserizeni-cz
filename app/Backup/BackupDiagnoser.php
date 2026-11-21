@@ -124,8 +124,28 @@ final class BackupDiagnoser
                 } catch (DumpException $exception) {
                     $checks[] = $this->errorCheck('schema_only_probe', $exception);
                 }
+
+                try {
+                    $probe = $sandbox.DIRECTORY_SEPARATOR.'data-probe.sql';
+                    $command = $this->commands->buildDataProbe($binary, $credentials, (string) $database['database']);
+                    $result = $this->processes->run($command, $probe, min(120, max(10, (int) config('backups.diagnose_timeout_seconds', 60))));
+                    if ($result->exitCode !== 0) {
+                        throw $this->failures->fromResult($result, $binary, $objects);
+                    }
+                    if (! is_file($probe) || filesize($probe) < 1) {
+                        throw new DumpException('DUMP_OUTPUT_WRITE_FAILED', 'data_probe', $result->exitCode, basename($binary), 'Verify diagnostic staging filesystem availability.');
+                    }
+                    $checks[] = $this->check('data_dump_probe', 'OK', [
+                        'table' => 'migrations',
+                        'maximum_rows' => 1,
+                        'data_returned_in_response' => false,
+                    ]);
+                } catch (DumpException $exception) {
+                    $checks[] = $this->errorCheck('data_dump_probe', $exception);
+                }
             } else {
                 $checks[] = $this->check('schema_only_probe', 'ERROR', ['code' => 'DUMP_PROCESS_START_FAILED', 'recommendation' => 'Resolve preceding diagnostic errors before running the schema-only probe.']);
+                $checks[] = $this->check('data_dump_probe', 'ERROR', ['code' => 'DUMP_PROCESS_START_FAILED', 'recommendation' => 'Resolve preceding diagnostic errors before running the limited data probe.']);
             }
         } finally {
             if (is_string($credentials)) {

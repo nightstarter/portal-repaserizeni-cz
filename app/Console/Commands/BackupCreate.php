@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Backup\BackupCreator;
-use App\Backup\DumpException;
+use App\Backup\BackupFailure;
 use Illuminate\Console\Command;
 use Throwable;
 
@@ -17,14 +17,24 @@ final class BackupCreate extends Command
     {
         $target = $this->option('target');
         if (! is_string($target) || $target === '') {
-            return $this->failure('An explicit absolute --target is required.');
+            return $this->failureDetails((new BackupFailure(
+                'FINALIZE_FAILED',
+                'FINALIZE',
+                null,
+                'Provide a new absolute --target outside the repository, public and application storage.',
+            ))->safeDetails());
         }
         try {
             $result = $creator->create($target);
-        } catch (DumpException $exception) {
+        } catch (BackupFailure $exception) {
             return $this->failureDetails($exception->safeDetails());
         } catch (Throwable) {
-            return $this->failure('Backup creation failed; database-tool and secret details were suppressed.');
+            return $this->failureDetails((new BackupFailure(
+                'BACKUP_FAILED_UNKNOWN',
+                'UNKNOWN',
+                null,
+                'Stop further attempts and inspect application logs through the restricted operator channel.',
+            ))->safeDetails());
         }
         if ($this->option('json')) {
             $this->line((string) json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
@@ -37,17 +47,6 @@ final class BackupCreate extends Command
         return self::SUCCESS;
     }
 
-    private function failure(string $message): int
-    {
-        if ($this->option('json')) {
-            $this->line((string) json_encode(['status' => 'ERROR', 'message' => $message], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-        } else {
-            $this->error($message);
-        }
-
-        return self::FAILURE;
-    }
-
     /** @param array<string, mixed> $details */
     private function failureDetails(array $details): int
     {
@@ -56,9 +55,8 @@ final class BackupCreate extends Command
         } else {
             $this->error('Backup creation failed: '.$details['code']);
             $this->line('Phase: '.$details['phase']);
-            $this->line('Binary: '.$details['binary']);
-            if (isset($details['dump_exit_code'])) {
-                $this->line('Dump exit code: '.$details['dump_exit_code']);
+            if (isset($details['process_exit_code'])) {
+                $this->line('Process exit code: '.$details['process_exit_code']);
             }
             $this->line('Recommendation: '.$details['recommendation']);
         }

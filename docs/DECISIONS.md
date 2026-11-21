@@ -377,3 +377,10 @@
 - Stav: přijato pro opravu Fáze 8B
 - Rozhodnutí: `backup:create` nezveřejňuje raw stderr, přihlašovací údaje, host ani DSN, ale vrací stabilní bezpečný kód, fázi a exit code dump klienta. `backup:diagnose` provádí pouze schema-only probe ve vlastním dočasném sandboxu. Přepínače pro triggery, routines a events se použijí jen tehdy, pokud odpovídající objekty v portálové DB existují; existující objekt se nikdy potichu nevynechá.
 - Dopad: `--defaults-extra-file` je první volba klienta, heslo zůstává v dočasném souboru s mode 0600 a stdout se streamuje do chráněného `database.sql`. Základní dump používá `--single-transaction`, `--quick`, `--skip-lock-tables` a MariaDB-kompatibilní `--no-tablespaces`. Nedostatečné oprávnění pro skutečně existující logical objects je bezpečný `ERROR`, nikoli důvod automaticky rozšířit práva aplikačního účtu.
+
+## D-055: Bezpečná chyba backup:create se zachovává přes všechny fáze
+
+- Datum: 2026-11-21
+- Stav: přijato pro opravu Fáze 8B
+- Rozhodnutí: Creator převádí každou chybu na jednotný bezpečný objekt s `status`, `code`, `phase`, volitelným `process_exit_code` a `recommendation`; Artisan renderer už nerozpoznává pouze dump výjimky. Selhání maintenance cleanupu nesmí přepsat dřívější klasifikaci. Diagnostika doplňuje izolovaný data-path probe omezený na nejvýše jeden řádek technické tabulky `migrations`.
+- Dopad: Provozovatel bezpečně rozliší dump, private archiv, metadata, manifest, verify, finalize a maintenance bez zveřejnění raw stderr, argv nebo DB identity. Fáze 8B zůstává nedokončená a nový produkční create se smí provést až po nasazení a úspěšném diagnose.
