@@ -7,6 +7,7 @@ use App\Backup\Contracts\DatabaseDumpRunner;
 use App\Backup\Contracts\PrivateStorageArchiver;
 use App\Backup\DumpException;
 use App\Backup\MariaDbDumpRunner;
+use App\Backup\PrivateStoragePolicy;
 use App\Enums\DocumentStatus;
 use App\Enums\DocumentType;
 use App\Models\Document;
@@ -34,6 +35,13 @@ class Phase8bBackupCreateTest extends TestCase
         config([
             'backups.testing_git_commit' => str_repeat('c', 40),
             'backups.testing_tamper_after_manifest' => false,
+            'backups.testing_source_identity_sha256' => hash('sha256', 'different-isolated-source'),
+            'integrations.legacy_shop.enabled' => false,
+            'discussion_notifications.enabled' => false,
+            'buyback.customer_email_enabled' => false,
+            'integrations.pohoda_bridge.enabled' => false,
+            'integrations.pohoda_bridge.allowed_command_types' => [],
+            'operations.product_repricing' => 'DEFERRED_EXTERNAL_SYSTEM',
         ]);
     }
 
@@ -68,8 +76,26 @@ class Phase8bBackupCreateTest extends TestCase
         $manifest = json_decode((string) file_get_contents($target.'/manifest.json'), true, flags: JSON_THROW_ON_ERROR);
         $this->assertSame(['database-dump', 'private-archive', 'metadata'], array_column($manifest['parts'], 'kind'));
         $privatePart = collect($manifest['parts'])->firstWhere('kind', 'private-archive');
-        $this->assertNotContains('.gitignore', array_column($privatePart['entries'], 'path'));
+        $excludedPaths = array_column(app(PrivateStoragePolicy::class)->excludedOperationalArtifacts(), 'path');
+        $this->assertSame([], array_intersect($excludedPaths, array_column($privatePart['entries'], 'path')));
+        $this->assertSame(app(PrivateStoragePolicy::class)->excludedOperationalArtifacts(), $manifest['private_storage']['excluded_operational_artifacts']);
+        $metadata = json_decode((string) file_get_contents($target.'/metadata.json'), true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame($manifest['private_storage'], $metadata['private_storage']);
+        $archivePaths = [];
+        foreach (new \RecursiveIteratorIterator(new \PharData($target.'/private-storage.tar')) as $key => $file) {
+            if ($file->isFile()) {
+                $archivePaths[] = basename((string) $key);
+            }
+        }
+        $this->assertSame([], array_intersect($excludedPaths, $archivePaths));
+        $privateRoot = (string) config('filesystems.disks.local.root');
+        $this->assertFileExists($privateRoot.'/.gitignore');
+        $this->assertFileExists($privateRoot.'/legacy-shop-phase1c-report.json');
         $this->assertSame(0, Artisan::call('backup:verify', ['path' => $target, '--json' => true]));
+        $restoreTarget = $this->newTarget();
+        $this->assertSame(0, Artisan::call('backup:restore-check', ['path' => $target, '--target' => $restoreTarget, '--json' => true]));
+        $this->assertFileDoesNotExist($restoreTarget.'/.gitignore');
+        $this->assertFileDoesNotExist($restoreTarget.'/legacy-shop-phase1c-report.json');
         $this->assertStringNotContainsString('APP_KEY', file_get_contents($target.'/metadata.json'));
         $this->assertStringNotContainsString('password', strtolower($output));
     }
@@ -284,6 +310,34 @@ class Phase8bBackupCreateTest extends TestCase
         $this->assertSame([], glob(dirname($target).'/.'.basename($target).'.staging-*'));
     }
 
+    public function test_similar_and_nested_operational_artifact_names_remain_blocked(): void
+    {
+        $firstTarget = $this->preparePrivateDocumentAndTarget();
+        $privateRoot = (string) config('filesystems.disks.local.root');
+        $paths = [
+            'legacy-shop-phase1c-report-copy.json',
+            'nested/legacy-shop-phase1c-report.json',
+            'customer-report.json',
+            '.gitignore.bak',
+            'nested/orphan.bin',
+        ];
+
+        foreach ($paths as $index => $path) {
+            $target = $index === 0 ? $firstTarget : $this->newTarget();
+            if (! is_dir(dirname($privateRoot.'/'.$path))) {
+                mkdir(dirname($privateRoot.'/'.$path), 0700, true);
+            }
+            file_put_contents($privateRoot.'/'.$path, 'must remain subject to orphan policy');
+            $this->bindSuccessfulDump($target);
+
+            $this->assertSame(1, Artisan::call('backup:create', ['--target' => $target, '--json' => true]), $path);
+            $result = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+            $this->assertSame('PRIVATE_INVENTORY_MISMATCH', $result['verification_code'], $path);
+            $this->assertDirectoryDoesNotExist($target);
+            unlink($privateRoot.'/'.$path);
+        }
+    }
+
     public function test_create_rejects_existing_nonempty_protected_tmp_and_symlink_targets(): void
     {
         $this->assertSame(1, Artisan::call('backup:create', ['--json' => true]));
@@ -365,6 +419,7 @@ class Phase8bBackupCreateTest extends TestCase
         $this->cleanup[] = $private;
         config(['filesystems.disks.local.root' => $private]);
         file_put_contents($private.'/.gitignore', "*\n!.gitignore\n");
+        file_put_contents($private.'/legacy-shop-phase1c-report.json', '{"status":"anonymized-fixture"}');
 
         $organization = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $organization->id]);

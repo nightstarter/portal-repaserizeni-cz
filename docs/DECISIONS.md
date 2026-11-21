@@ -389,5 +389,12 @@
 
 - Datum: 2026-11-21
 - Stav: přijato pro opravu Fáze 8B
-- Rozhodnutí: Neveřejný candidate má stav `INCOMPLETE` a ověřuje se pouze přes typed `BackupCandidateManifest`; veřejný verifier vždy vyžaduje `COMPLETE`. Přesný kořenový private `.gitignore` je deployment control file, proto se nearchivuje ani neporovnává s DB referencemi.
+- Rozhodnutí: Neveřejný candidate má stav `INCOMPLETE` a ověřuje se pouze přes typed `BackupCandidateManifest`; veřejný verifier vždy vyžaduje `COMPLETE`. Přesné kořenové private cesty `.gitignore` a `legacy-shop-phase1c-report.json` jsou provozní artefakty, proto se nearchivují ani neporovnávají s DB referencemi.
 - Dopad: Produkční příčina předchozího `VERIFY_FAILED` je odstraněna bez oslabení kontroly dokumentů. Bezpečné verifier podkódy rozlišují manifest, status, chybějící komponentu, velikost, checksum, private inventář, DB metadata, unsafe cestu a interní chybu bez zveřejnění citlivých dat.
+
+## D-057: Private storage exclusions jsou uzavřená verzovaná politika
+
+- Datum: 2026-11-21
+- Stav: přijato pro opravu Fáze 8B
+- Rozhodnutí: Aplikace vylučuje pouze exact relative paths `.gitignore` (`DEPLOYMENT_CONTROL_FILE`) a `legacy-shop-phase1c-report.json` (`GENERATED_DIAGNOSTIC_ARTIFACT`). Seznam není dostupný přes `.env`, wildcard ani provozní konfiguraci a musí být shodný v plan/create/verify/restore-check.
+- Dopad: Oba zdrojové soubory zůstávají fyzicky beze změny a jsou evidovány jen jako sanitizované exclusions. Nejsou v TAR ani restore. Kopie, nested varianta, jiné JSON/report soubory a každý neznámý orphan nadále způsobí `PRIVATE_INVENTORY_MISMATCH`.

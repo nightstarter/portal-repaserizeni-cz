@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Backup\BackupManifestVerifier;
+use App\Backup\PrivateStoragePolicy;
 use App\Backup\RestoreCheckService;
 use App\Enums\DocumentStatus;
 use App\Enums\DocumentType;
@@ -69,7 +70,9 @@ class Phase8bBackupRecoveryTest extends TestCase
 
         $this->assertSame(0, Artisan::call('backup:plan', ['--json' => true]));
         $plan = Artisan::output();
-        $this->assertSame('PLAN_ONLY', json_decode($plan, true, flags: JSON_THROW_ON_ERROR)['status']);
+        $planResult = json_decode($plan, true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame('PLAN_ONLY', $planResult['status']);
+        $this->assertSame(app(PrivateStoragePolicy::class)->excludedOperationalArtifacts(), $planResult['private_storage_excluded_operational_artifacts']);
         $this->assertStringNotContainsString('never-print', $plan);
 
         $this->assertSame(0, Artisan::call('backup:verify', ['path' => $fixture->root(), '--json' => true]));
@@ -117,6 +120,12 @@ class Phase8bBackupRecoveryTest extends TestCase
         $this->assertSame(1, Artisan::call('backup:verify', ['path' => $status->root(), '--json' => true]));
         $publicResult = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
         $this->assertSame('MANIFEST_STATUS_INVALID', $publicResult['verification_code']);
+
+        $policy = $this->fixture();
+        $manifest = $policy->manifest();
+        array_pop($manifest['private_storage']['excluded_operational_artifacts']);
+        $policy->rewrite($manifest);
+        $this->assertVerification($policy, 'PRIVATE_INVENTORY_MISMATCH', 'manifest.json');
 
         $missing = $this->fixture();
         unlink($missing->root().'/database.sql');

@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Backup\PrivateStoragePolicy;
 use Illuminate\Console\Command;
 
 final class BackupPlan extends Command
@@ -10,8 +11,9 @@ final class BackupPlan extends Command
 
     protected $description = 'Print the Phase 8B backup plan without creating or changing data';
 
-    public function handle(): int
+    public function handle(PrivateStoragePolicy $privateStoragePolicy): int
     {
+        $privateExclusions = $privateStoragePolicy->excludedOperationalArtifacts();
         $plan = [
             'status' => 'PLAN_ONLY',
             'writes_data' => false,
@@ -25,11 +27,16 @@ final class BackupPlan extends Command
                 'windows_task_scheduler_export', 'connector_protected_config_and_state',
             ],
             'excluded' => ['vendor', 'cache', 'sessions', 'temporary_files', 'test_artifacts', 'routine_logs', 'connector_spool'],
+            'private_storage_excluded_operational_artifacts' => $privateExclusions,
             'rules' => [
                 'Backup target must be absolute and outside the repository, webroot and private storage.',
                 'The .env, APP_KEY and encryption keys stay in separate protected escrow, never in the ordinary archive.',
                 'Database credentials must come from the environment or a mode-0600 client file, never process arguments.',
                 'Only a fully verified manifest may have status COMPLETE.',
+                ...array_map(
+                    fn (array $artifact): string => 'Private storage excludes exact operational artifact '.$artifact['path'].' ('.$artifact['classification'].').',
+                    $privateExclusions,
+                ),
             ],
         ];
 

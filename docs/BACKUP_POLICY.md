@@ -5,7 +5,7 @@
 Jedna obnovitelná sada zahrnuje:
 
 1. konzistentní dump MariaDB databáze portálu;
-2. celý `storage/app/private` ve stejném konzistenčním bodu;
+2. doménová data `storage/app/private` ve stejném konzistenčním bodu, kromě dvou níže uvedených verzovaných provozních artefaktů;
 3. produkční `.env` a `APP_KEY` v **samostatném chráněném secret escrow**, nikdy v běžném archivu ani Gitu;
 4. Apache/PHP konfiguraci nutnou k obnově;
 5. export cron definice webserveru;
@@ -18,9 +18,11 @@ Apache/PHP, cron, Task Scheduler a connector konfigurace mohou obsahovat citliv�
 
 Nezálohují se `vendor`, cache, sessions, temporary soubory, testovací artefakty, běžné aplikační logy podle retenční politiky ani běžný connector spool. Závislosti se obnovují z lock souboru a nasazené Git revize.
 
+Private storage má uzavřenou aplikační politiku přesně dvou vyloučených relativních cest: `.gitignore` (`DEPLOYMENT_CONTROL_FILE`) a `legacy-shop-phase1c-report.json` (`GENERATED_DIAGNOSTIC_ARTIFACT`). Oba soubory zůstávají ve zdrojovém private storage beze změny, nevstupují do TAR, nevyžadují DB referenci a běžný restore je neobnovuje. Seznam je konstantou v kódu, není konfigurovatelný přes `.env`. Wildcard ani podobný název neplatí; nested varianta, kopie, `.gitignore.bak`, jiný report nebo jakýkoli neznámý orphan zůstává chybou `PRIVATE_INVENTORY_MISMATCH`.
+
 ## Manifest formátu 1
 
-`manifest.json` obsahuje pouze provozní metadata: `format_version`, unikátní `backup_id`, `created_at_utc`, `environment`, `status`, `git_commit`, seznam migrací a fingerprint, DB engine/verzi, jednosměrný SHA-256 fingerprint zdrojové DB identity bez credentials, potvrzení povinných komponent, runtime verze, kritické počty a seznam částí (`kind`, relativní `path`, `size`, `sha256`, u private souboru bezpečnou relativní `source_path` a mode).
+`manifest.json` obsahuje pouze provozní metadata: `format_version`, unikátní `backup_id`, `created_at_utc`, `environment`, `status`, `git_commit`, seznam migrací a fingerprint, DB engine/verzi, jednosměrný SHA-256 fingerprint zdrojové DB identity bez credentials, potvrzení povinných komponent, runtime verze, kritické počty, explicitní seznam vyloučených provozních artefaktů s klasifikací a seznam částí (`kind`, relativní `path`, `size`, `sha256`, u private souboru bezpečnou relativní `source_path` a mode).
 
 Kritické počty pokrývají minimálně `organizations`, `users`, `orders`, `items`, `process_threads`, `shipments`, `documents`, `messages` a `message_attachments`. Manifest neobsahuje názvy/obsah zákazníků, e-maily, hesla, APP_KEY, HMAC/SMTP secret ani DSN. `operations-config` musí být označen jako externě šifrovaný.
 
@@ -46,7 +48,7 @@ portal-backup-…/
 └── manifest.json
 ```
 
-`database.sql` vzniká přes `mariadb-dump --single-transaction --quick --skip-lock-tables --no-tablespaces` s hex-blob a s logical objekty pouze podle ověřeného inventáře. Heslo je pouze v náhodném klientském option file režimu `0600`; nikdy není argumentem procesu a soubor se maže ve `finally`. `private-storage.tar` obsahuje soubory private storage bez symlinků a manifest eviduje velikost, SHA-256 a mode každého archive entry. `metadata.json` obsahuje jen backup ID, UTC, Git commit, PHP/MariaDB/connector verze, migrace, kritické počty, dump volby a počet private souborů.
+`database.sql` vzniká přes `mariadb-dump --single-transaction --quick --skip-lock-tables --no-tablespaces` s hex-blob a s logical objekty pouze podle ověřeného inventáře. Heslo je pouze v náhodném klientském option file režimu `0600`; nikdy není argumentem procesu a soubor se maže ve `finally`. `private-storage.tar` obsahuje doménové soubory private storage bez symlinků a bez dvou přesných provozních exclusions; manifest eviduje velikost, SHA-256 a mode každého archive entry. `metadata.json` obsahuje jen backup ID, UTC, Git commit, PHP/MariaDB/connector verze, migrace, kritické počty, dump volby, verzovanou exclusion policy a počet archivovaných private souborů.
 
 Runner přidává `--no-tablespaces`, aby běžný logický backup nepotřeboval globální tablespace metadata. `--routines`, `--events` a `--triggers` se přidají pouze tehdy, když read-only inventář `information_schema` najde příslušné objekty; nulové počty a použité bezpečné volby jsou součástí manifestových metadat. Pokud objekty existují, schema-only diagnostika musí projít s jejich volbami. Chybějící oprávnění je `DUMP_PERMISSION_DENIED`; nástroj práva nepřidává a objekty potichu nevynechá. Minimální konkrétní granty musí schválit DBA podle nalezených objektů; typicky jde vedle tabulkového `SELECT`/`SHOW VIEW` o `TRIGGER`, `EVENT` a oprávnění ke čtení definic routines.
 

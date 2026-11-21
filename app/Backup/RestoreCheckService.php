@@ -14,6 +14,7 @@ final class RestoreCheckService
     public function __construct(
         private readonly BackupManifestVerifier $verifier,
         private readonly BackupPathGuard $paths,
+        private readonly PrivateStoragePolicy $privateStoragePolicy,
     ) {}
 
     public function run(string $backupPath, string $target): array
@@ -36,6 +37,7 @@ final class RestoreCheckService
         try {
             $this->extractPrivateArchive($verification->manifest, $verification->root, $targetState['path'], $copied, $createdDirectories);
             $this->copyPrivateParts($verification->manifest, $verification->root, $targetState['path'], $copied, $createdDirectories);
+            $this->assertExcludedArtifactsAbsent($targetState['path']);
             $checks = $this->verifyDatabaseAndStorage($verification->manifest, $targetState['path'], $copied);
 
             return [
@@ -235,7 +237,18 @@ final class RestoreCheckService
             'document_files' => 'OK',
             'orphan_policy' => 'OK',
             'integrations_disabled' => 'OK',
+            'excluded_operational_artifacts_not_restored' => 'OK',
         ];
+    }
+
+    private function assertExcludedArtifactsAbsent(string $target): void
+    {
+        foreach ($this->privateStoragePolicy->excludedOperationalArtifacts() as $artifact) {
+            $path = $target.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $artifact['path']);
+            if (file_exists($path) || is_link($path)) {
+                throw new RuntimeException('An excluded operational artifact was restored unexpectedly.');
+            }
+        }
     }
 
     private function verifyForeignKeys(): void

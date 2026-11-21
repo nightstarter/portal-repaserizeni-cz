@@ -33,4 +33,5 @@ return [
     'testing_git_commit' => null,
     'testing_database_configuration' => null,
     'testing_database_objects' => null,
+    'testing_source_identity_sha256' => null,
 ];

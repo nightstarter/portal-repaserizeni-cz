@@ -11,6 +11,8 @@ use RuntimeException;
 
 final class PharPrivateStorageArchiver implements PrivateStorageArchiver
 {
+    public function __construct(private readonly PrivateStoragePolicy $policy) {}
+
     public function inventory(string $source): array
     {
         $root = realpath($source);
@@ -30,7 +32,7 @@ final class PharPrivateStorageArchiver implements PrivateStorageArchiver
                 continue;
             }
             $path = str_replace(DIRECTORY_SEPARATOR, '/', substr($file->getPathname(), strlen($root) + 1));
-            if ($path === '.gitignore') {
+            if ($this->policy->isExcludedOperationalArtifact($path)) {
                 continue;
             }
             $entries[] = [

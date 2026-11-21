@@ -9,7 +9,10 @@ use Throwable;
 
 final class BackupManifestVerifier
 {
-    public function __construct(private readonly BackupPathGuard $paths) {}
+    public function __construct(
+        private readonly BackupPathGuard $paths,
+        private readonly PrivateStoragePolicy $privateStoragePolicy,
+    ) {}
 
     public function verify(string $path): BackupVerification
     {
@@ -153,14 +156,18 @@ final class BackupManifestVerifier
                 break;
             }
         }
+        if (data_get($manifest, 'private_storage.excluded_operational_artifacts') !== $this->privateStoragePolicy->excludedOperationalArtifacts()) {
+            $errors[] = 'Private storage exclusion policy does not match this application version.';
+        }
     }
 
     private function validateShape(array $manifest, array &$errors): void
     {
         $allowed = [
-            '' => ['format_version', 'backup_id', 'created_at_utc', 'environment', 'status', 'git_commit', 'schema', 'database', 'components', 'runtime', 'parts', 'off_server', 'restore_test'],
+            '' => ['format_version', 'backup_id', 'created_at_utc', 'environment', 'status', 'git_commit', 'schema', 'database', 'private_storage', 'components', 'runtime', 'parts', 'off_server', 'restore_test'],
             'schema' => ['migrations', 'fingerprint'],
             'database' => ['engine', 'version', 'source_identity_sha256', 'critical_counts', 'logical_objects', 'dump_options'],
+            'private_storage' => ['excluded_operational_artifacts'],
             'components' => ['database', 'private_storage', 'schema_metadata', 'apache_php_configuration', 'webserver_cron_export', 'windows_task_scheduler_export', 'connector_config_state', 'deployed_revision', 'runtime_versions', 'protected_secret_escrow'],
             'runtime' => ['portal_php', 'connector_php', 'connector_os', 'mariadb'],
             'off_server' => ['confirmed', 'confirmed_at_utc', 'evidence_id'],
@@ -281,7 +288,8 @@ final class BackupManifestVerifier
                     || ($metadata['schema'] ?? null) !== ($manifest['schema'] ?? null)
                     || ($metadata['critical_counts'] ?? null) !== data_get($manifest, 'database.critical_counts')
                     || data_get($metadata, 'database_dump.logical_objects') !== data_get($manifest, 'database.logical_objects')
-                    || data_get($metadata, 'database_dump.options') !== data_get($manifest, 'database.dump_options')) {
+                    || data_get($metadata, 'database_dump.options') !== data_get($manifest, 'database.dump_options')
+                    || data_get($metadata, 'private_storage.excluded_operational_artifacts') !== data_get($manifest, 'private_storage.excluded_operational_artifacts')) {
                     $errors[] = 'Sanitized metadata content is invalid or inconsistent.';
                 }
             } catch (Throwable) {
@@ -312,6 +320,11 @@ final class BackupManifestVerifier
                 || ! is_string($entry['sha256'] ?? null) || preg_match('/\A[0-9a-f]{64}\z/', $entry['sha256']) !== 1
                 || ! is_string($entry['mode'] ?? null) || preg_match('/\A0[0-7]{3}\z/', $entry['mode']) !== 1) {
                 $errors[] = 'Private archive entry metadata is invalid.';
+
+                return;
+            }
+            if ($this->privateStoragePolicy->isExcludedOperationalArtifact($path)) {
+                $errors[] = 'Private archive declares an excluded operational artifact.';
 
                 return;
             }
@@ -391,7 +404,8 @@ final class BackupManifestVerifier
                 str_contains($error, 'Manifest is missing') => 'COMPONENT_MISSING',
                 str_contains($error, 'unsafe path'), str_contains($error, 'must not be a symlink'),
                 str_contains($error, 'escapes the backup root'), str_contains($error, 'restore path is invalid') => 'UNSAFE_COMPONENT_PATH',
-                str_contains($error, 'Private archive'), str_contains($error, 'Private storage archive') => 'PRIVATE_INVENTORY_MISMATCH',
+                str_contains($error, 'Private archive'), str_contains($error, 'Private storage archive'),
+                str_contains($error, 'Private storage exclusion') => 'PRIVATE_INVENTORY_MISMATCH',
                 str_contains($error, 'size does not match') => 'COMPONENT_SIZE_MISMATCH',
                 str_contains($error, 'checksum does not match') && ! str_contains($error, 'archive entry') => 'COMPONENT_CHECKSUM_MISMATCH',
                 str_contains($error, 'metadata content'), str_contains($error, 'metadata file'),

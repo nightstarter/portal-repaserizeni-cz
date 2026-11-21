@@ -3,6 +3,7 @@
 namespace Tests\Support;
 
 use App\Backup\Contracts\PrivateStorageArchiver;
+use App\Backup\PrivateStoragePolicy;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
@@ -52,10 +53,14 @@ final class BackupFixture
                 'no_tablespaces' => true, 'triggers' => false, 'routines' => false, 'events' => false,
             ],
         ];
+        $privateStorage = [
+            'excluded_operational_artifacts' => app(PrivateStoragePolicy::class)->excludedOperationalArtifacts(),
+        ];
         $metadata = [
             'backup_id' => $backupId, 'created_at_utc' => $createdAt, 'git_commit' => $gitCommit,
             'runtime' => ['portal_php' => '8.5', 'mariadb' => 'fixture', 'connector_php' => '7.4.33', 'connector_os' => 'Windows Server 2012 R2'],
             'schema' => $schema, 'critical_counts' => $counts, 'database_dump' => $dumpMetadata,
+            'private_storage' => $privateStorage,
             'private_file_count' => count($entries),
         ];
         file_put_contents($root.'/metadata.json', json_encode($metadata, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
@@ -80,6 +85,7 @@ final class BackupFixture
                 'logical_objects' => $dumpMetadata['logical_objects'],
                 'dump_options' => $dumpMetadata['options'],
             ],
+            'private_storage' => $privateStorage,
             'components' => [
                 'database' => true, 'private_storage' => true, 'schema_metadata' => true,
                 'deployed_revision' => true, 'runtime_versions' => true,

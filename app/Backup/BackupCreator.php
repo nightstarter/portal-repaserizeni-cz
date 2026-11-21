@@ -21,6 +21,7 @@ final class BackupCreator
         private readonly DatabaseDumpRunner $dumpRunner,
         private readonly PrivateStorageArchiver $archiver,
         private readonly BackupMaintenance $maintenance,
+        private readonly PrivateStoragePolicy $privateStoragePolicy,
     ) {}
 
     public function create(string $requestedTarget): array
@@ -93,6 +94,9 @@ final class BackupCreator
                 'schema' => $after['schema'],
                 'critical_counts' => $after['critical_counts'],
                 'database_dump' => $dumpMetadata,
+                'private_storage' => [
+                    'excluded_operational_artifacts' => $this->privateStoragePolicy->excludedOperationalArtifacts(),
+                ],
                 'private_file_count' => count($archiveEntries),
             ];
             $metadataPath = $staging.DIRECTORY_SEPARATOR.'metadata.json';
@@ -276,14 +280,12 @@ final class BackupCreator
             'database' => [
                 'engine' => $connection === 'sqlite' ? 'sqlite' : 'mariadb',
                 'version' => $databaseVersion,
-                'source_identity_sha256' => hash('sha256', implode('|', [
-                    strtolower($connection), strtolower((string) ($database['host'] ?? '')),
-                    (string) ($database['port'] ?? ''), (string) ($database['database'] ?? ''),
-                ])),
+                'source_identity_sha256' => $this->sourceIdentity($connection, $database),
                 'critical_counts' => $metadata['critical_counts'],
                 'logical_objects' => $metadata['database_dump']['logical_objects'],
                 'dump_options' => $metadata['database_dump']['options'],
             ],
+            'private_storage' => $metadata['private_storage'],
             'components' => [
                 'database' => true, 'private_storage' => true, 'schema_metadata' => true,
                 'deployed_revision' => true, 'runtime_versions' => true,
@@ -314,6 +316,19 @@ final class BackupCreator
         }
 
         return (string) DB::selectOne('select version() version')->version;
+    }
+
+    private function sourceIdentity(string $connection, array $database): string
+    {
+        $override = $this->isTestingProcess() ? config('backups.testing_source_identity_sha256') : null;
+        if (is_string($override) && preg_match('/\A[0-9a-f]{64}\z/', $override) === 1) {
+            return $override;
+        }
+
+        return hash('sha256', implode('|', [
+            strtolower($connection), strtolower((string) ($database['host'] ?? '')),
+            (string) ($database['port'] ?? ''), (string) ($database['database'] ?? ''),
+        ]));
     }
 
     private function gitCommit(): string
