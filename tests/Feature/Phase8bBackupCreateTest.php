@@ -67,6 +67,8 @@ class Phase8bBackupCreateTest extends TestCase
         $this->assertFileExists($target.'/manifest.json');
         $manifest = json_decode((string) file_get_contents($target.'/manifest.json'), true, flags: JSON_THROW_ON_ERROR);
         $this->assertSame(['database-dump', 'private-archive', 'metadata'], array_column($manifest['parts'], 'kind'));
+        $privatePart = collect($manifest['parts'])->firstWhere('kind', 'private-archive');
+        $this->assertNotContains('.gitignore', array_column($privatePart['entries'], 'path'));
         $this->assertSame(0, Artisan::call('backup:verify', ['path' => $target, '--json' => true]));
         $this->assertStringNotContainsString('APP_KEY', file_get_contents($target.'/metadata.json'));
         $this->assertStringNotContainsString('password', strtolower($output));
@@ -225,11 +227,21 @@ class Phase8bBackupCreateTest extends TestCase
         $this->assertStringNotContainsString('archive-canary-must-not-print', Artisan::output());
 
         $target = $this->newTarget();
+        $foreign = dirname($target).'/foreign-verify-'.Str::uuid().'.keep';
+        file_put_contents($foreign, 'preserve');
+        $this->cleanup[] = $foreign;
         $this->bindSuccessfulDump($target);
         $this->app->forgetInstance(PrivateStorageArchiver::class);
         config(['backups.testing_tamper_after_manifest' => true]);
         $this->assertSame(1, Artisan::call('backup:create', ['--target' => $target, '--json' => true]));
+        $verificationFailure = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame('VERIFY_FAILED', $verificationFailure['code']);
+        $this->assertSame('VERIFY', $verificationFailure['phase']);
+        $this->assertSame('COMPONENT_SIZE_MISMATCH', $verificationFailure['verification_code']);
+        $this->assertSame('database.sql', $verificationFailure['component']);
         $this->assertDirectoryDoesNotExist($target);
+        $this->assertSame('preserve', file_get_contents($foreign));
+        $this->assertSame([], glob(dirname($target).'/.'.basename($target).'.staging-*'));
     }
 
     public function test_target_created_during_staging_is_never_overwritten_or_cleaned(): void
@@ -253,6 +265,22 @@ class Phase8bBackupCreateTest extends TestCase
         $this->assertFileExists($target.'/foreign.keep');
         $this->assertSame('preserve', file_get_contents($target.'/foreign.keep'));
         $this->assertFileDoesNotExist($target.'/manifest.json');
+        $this->assertSame([], glob(dirname($target).'/.'.basename($target).'.staging-*'));
+    }
+
+    public function test_non_control_orphan_is_classified_and_never_published(): void
+    {
+        $target = $this->preparePrivateDocumentAndTarget();
+        $privateRoot = (string) config('filesystems.disks.local.root');
+        file_put_contents($privateRoot.'/orphan.bin', 'not referenced by the database');
+        $this->bindSuccessfulDump($target);
+
+        $this->assertSame(1, Artisan::call('backup:create', ['--target' => $target, '--json' => true]));
+        $result = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame('VERIFY_FAILED', $result['code']);
+        $this->assertSame('PRIVATE_INVENTORY_MISMATCH', $result['verification_code']);
+        $this->assertSame('private-storage.tar', $result['component']);
+        $this->assertDirectoryDoesNotExist($target);
         $this->assertSame([], glob(dirname($target).'/.'.basename($target).'.staging-*'));
     }
 
@@ -336,6 +364,7 @@ class Phase8bBackupCreateTest extends TestCase
         mkdir($private, 0700);
         $this->cleanup[] = $private;
         config(['filesystems.disks.local.root' => $private]);
+        file_put_contents($private.'/.gitignore', "*\n!.gitignore\n");
 
         $organization = Organization::factory()->create();
         $user = User::factory()->create(['organization_id' => $organization->id]);

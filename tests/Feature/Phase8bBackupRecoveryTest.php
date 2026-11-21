@@ -103,6 +103,64 @@ class Phase8bBackupRecoveryTest extends TestCase
         $this->assertStringNotContainsString('must-not-appear', json_encode($result->toArray()));
     }
 
+    public function test_verifier_returns_every_safe_classification_without_sensitive_details(): void
+    {
+        $invalid = $this->fixture();
+        file_put_contents($invalid->root().'/manifest.json', '{invalid');
+        $this->assertVerification($invalid, 'MANIFEST_INVALID', 'manifest.json');
+
+        $status = $this->fixture();
+        $manifest = $status->manifest();
+        $manifest['status'] = 'INCOMPLETE';
+        $status->rewrite($manifest);
+        $this->assertVerification($status, 'MANIFEST_STATUS_INVALID', 'manifest.json');
+        $this->assertSame(1, Artisan::call('backup:verify', ['path' => $status->root(), '--json' => true]));
+        $publicResult = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame('MANIFEST_STATUS_INVALID', $publicResult['verification_code']);
+
+        $missing = $this->fixture();
+        unlink($missing->root().'/database.sql');
+        $this->assertVerification($missing, 'COMPONENT_MISSING', 'database.sql');
+
+        $size = $this->fixture();
+        $manifest = $size->manifest();
+        $manifest['parts'][0]['size']++;
+        $size->rewrite($manifest);
+        $this->assertVerification($size, 'COMPONENT_SIZE_MISMATCH', 'database.sql');
+
+        $checksum = $this->fixture();
+        $manifest = $checksum->manifest();
+        $manifest['parts'][0]['sha256'] = str_repeat('0', 64);
+        $checksum->rewrite($manifest);
+        $this->assertVerification($checksum, 'COMPONENT_CHECKSUM_MISMATCH', 'database.sql');
+
+        $private = $this->fixture(['documents/fixture.pdf' => 'safe fixture']);
+        $manifest = $private->manifest();
+        $privatePart = array_search('private-archive', array_column($manifest['parts'], 'kind'), true);
+        $manifest['parts'][$privatePart]['entries'][0]['sha256'] = str_repeat('0', 64);
+        $private->rewrite($manifest);
+        $this->assertVerification($private, 'PRIVATE_INVENTORY_MISMATCH', 'private-storage.tar');
+
+        $metadata = $this->fixture();
+        $manifest = $metadata->manifest();
+        $firstTable = array_key_first($manifest['database']['critical_counts']);
+        $manifest['database']['critical_counts'][$firstTable]++;
+        $metadata->rewrite($manifest);
+        $this->assertVerification($metadata, 'DATABASE_METADATA_MISMATCH', 'metadata.json');
+
+        $unsafe = $this->fixture();
+        $manifest = $unsafe->manifest();
+        $manifest['parts'][0]['path'] = '../database.sql';
+        $unsafe->rewrite($manifest);
+        $this->assertVerification($unsafe, 'UNSAFE_COMPONENT_PATH', 'database.sql');
+
+        $internal = $this->fixture();
+        $manifest = $internal->manifest();
+        $manifest['parts'][0]['kind'] = 'unexpected-kind';
+        $internal->rewrite($manifest);
+        $this->assertVerification($internal, 'VERIFY_INTERNAL_ERROR', 'database.sql');
+    }
+
     public function test_manifest_rejects_path_traversal_and_symlink_escape(): void
     {
         $traversal = $this->fixture();
@@ -263,5 +321,16 @@ class Phase8bBackupRecoveryTest extends TestCase
         ]);
 
         return $returnUser ? [$path, $contents, $user] : [$path, $contents];
+    }
+
+    private function assertVerification(BackupFixture $fixture, string $code, ?string $component): void
+    {
+        $result = app(BackupManifestVerifier::class)->verify($fixture->root());
+        $this->assertFalse($result->valid);
+        $this->assertSame($code, $result->verificationCode);
+        $this->assertSame($component, $result->component);
+        $encoded = json_encode($result->toArray(), JSON_THROW_ON_ERROR);
+        $this->assertStringNotContainsString($fixture->root(), $encoded);
+        $this->assertStringNotContainsString('safe fixture', $encoded);
     }
 }

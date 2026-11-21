@@ -30,6 +30,9 @@ final class PharPrivateStorageArchiver implements PrivateStorageArchiver
                 continue;
             }
             $path = str_replace(DIRECTORY_SEPARATOR, '/', substr($file->getPathname(), strlen($root) + 1));
+            if ($path === '.gitignore') {
+                continue;
+            }
             $entries[] = [
                 'path' => $path,
                 'size' => $file->getSize(),

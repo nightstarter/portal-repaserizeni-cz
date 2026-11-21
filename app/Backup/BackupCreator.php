@@ -71,7 +71,7 @@ final class BackupCreator
             $after = $this->databaseState();
             $privateAfter = $this->archiver->inventory($privateRoot);
             if ($before !== $after || $privateBefore !== $archiveEntries || $archiveEntries !== $privateAfter) {
-                throw new RuntimeException('Database or private storage changed during backup creation.');
+                throw $this->verificationFailure('VERIFY_INTERNAL_ERROR', null, 'Database or private storage changed during backup creation; keep all external writers stopped for the complete maintenance window.');
             }
             $this->verifyDocumentLinks($archiveEntries);
 
@@ -112,7 +112,7 @@ final class BackupCreator
             $phase = 'VERIFY';
             $stagingVerification = $this->verifier->verify($staging);
             if (! $stagingVerification->valid) {
-                throw new RuntimeException('Created backup failed internal manifest verification.');
+                throw $this->verificationFailureFromResult($stagingVerification);
             }
 
             $phase = 'FINALIZE';
@@ -128,7 +128,7 @@ final class BackupCreator
             $phase = 'VERIFY';
             $finalVerification = $this->verifier->verify($target);
             if (! $finalVerification->valid) {
-                throw new RuntimeException('Published backup failed final verification.');
+                throw $this->verificationFailureFromResult($finalVerification);
             }
 
             $result = [
@@ -207,7 +207,9 @@ final class BackupCreator
             default => ['BACKUP_FAILED_UNKNOWN', 'Stop further attempts and inspect application logs through the restricted operator channel.'],
         };
 
-        return new BackupFailure($code, $phase, null, $recommendation);
+        $context = $phase === 'VERIFY' ? ['verification_code' => 'VERIFY_INTERNAL_ERROR'] : [];
+
+        return new BackupFailure($code, $phase, null, $recommendation, $context);
     }
 
     private function failForTesting(string $phase): void
@@ -246,7 +248,7 @@ final class BackupCreator
                 $path = (string) $row->{$column};
                 $entry = $available->get($path);
                 if (! is_array($entry) || ! hash_equals((string) $row->checksum_sha256, $entry['sha256'])) {
-                    throw new RuntimeException('A database document is missing from private storage or has an invalid checksum.');
+                    throw $this->verificationFailure('PRIVATE_INVENTORY_MISMATCH', 'private-storage.tar', 'A database-referenced private file is missing or has a different checksum.');
                 }
                 $referenced[] = $path;
             });
@@ -254,7 +256,7 @@ final class BackupCreator
         $all = $available->keys()->sort()->values()->all();
         sort($referenced);
         if ($all !== $referenced) {
-            throw new RuntimeException('Private storage contains orphaned files under the strict backup policy.');
+            throw $this->verificationFailure('PRIVATE_INVENTORY_MISMATCH', 'private-storage.tar', 'Private storage contains a file outside the documented backup inventory policy.');
         }
     }
 
@@ -268,7 +270,7 @@ final class BackupCreator
             'backup_id' => $metadata['backup_id'],
             'created_at_utc' => $metadata['created_at_utc'],
             'environment' => app()->environment(),
-            'status' => 'FAILED',
+            'status' => 'INCOMPLETE',
             'git_commit' => $metadata['git_commit'],
             'schema' => $metadata['schema'],
             'database' => [
@@ -357,13 +359,36 @@ final class BackupCreator
         $candidate = $staging.DIRECTORY_SEPARATOR.'.manifest-incomplete-'.bin2hex(random_bytes(12)).'.json';
         try {
             $this->writeJson($candidate, $manifest);
-            $verification = $this->verifier->verify($candidate);
-            if ($verification->valid || $verification->errors !== ['Backup status is not COMPLETE.']) {
-                throw new RuntimeException('Backup parts failed verification before COMPLETE publication.');
+            $verification = $this->verifier->verifyCandidate(new BackupCandidateManifest($candidate, $staging));
+            if (! $verification->valid) {
+                throw $this->verificationFailureFromResult($verification);
             }
         } finally {
             @unlink($candidate);
         }
+    }
+
+    private function verificationFailureFromResult(BackupVerification $verification): BackupFailure
+    {
+        return $this->verificationFailure(
+            $verification->verificationCode ?? 'VERIFY_INTERNAL_ERROR',
+            $verification->component,
+            'The incomplete backup failed internal verification; do not publish or reuse its staging directory.',
+        );
+    }
+
+    private function verificationFailure(string $verificationCode, ?string $component, string $recommendation): BackupFailure
+    {
+        return new BackupFailure(
+            'VERIFY_FAILED',
+            'VERIFY',
+            null,
+            $recommendation,
+            array_filter([
+                'verification_code' => $verificationCode,
+                'component' => $component,
+            ], static fn (mixed $value): bool => $value !== null),
+        );
     }
 
     private function isTestingProcess(): bool

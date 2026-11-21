@@ -384,3 +384,10 @@
 - Stav: přijato pro opravu Fáze 8B
 - Rozhodnutí: Creator převádí každou chybu na jednotný bezpečný objekt s `status`, `code`, `phase`, volitelným `process_exit_code` a `recommendation`; Artisan renderer už nerozpoznává pouze dump výjimky. Selhání maintenance cleanupu nesmí přepsat dřívější klasifikaci. Diagnostika doplňuje izolovaný data-path probe omezený na nejvýše jeden řádek technické tabulky `migrations`.
 - Dopad: Provozovatel bezpečně rozliší dump, private archiv, metadata, manifest, verify, finalize a maintenance bez zveřejnění raw stderr, argv nebo DB identity. Fáze 8B zůstává nedokončená a nový produkční create se smí provést až po nasazení a úspěšném diagnose.
+
+## D-056: Candidate manifest používá interní typed ověření a control file není doménový orphan
+
+- Datum: 2026-11-21
+- Stav: přijato pro opravu Fáze 8B
+- Rozhodnutí: Neveřejný candidate má stav `INCOMPLETE` a ověřuje se pouze přes typed `BackupCandidateManifest`; veřejný verifier vždy vyžaduje `COMPLETE`. Přesný kořenový private `.gitignore` je deployment control file, proto se nearchivuje ani neporovnává s DB referencemi.
+- Dopad: Produkční příčina předchozího `VERIFY_FAILED` je odstraněna bez oslabení kontroly dokumentů. Bezpečné verifier podkódy rozlišují manifest, status, chybějící komponentu, velikost, checksum, private inventář, DB metadata, unsafe cestu a interní chybu bez zveřejnění citlivých dat.

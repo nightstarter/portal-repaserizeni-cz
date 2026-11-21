@@ -34,6 +34,10 @@ Bezpečné chyby dumpu jsou `DUMP_BINARY_NOT_EXECUTABLE`, `DUMP_PROCESS_START_FA
 
 `backup:diagnose` kromě schema-only kontroly provádí omezený data-path probe nad technickou tabulkou `migrations`: exportuje nejvýše jeden řádek přes `--no-create-info --where="1 LIMIT 1"` do vlastního mode-0600 souboru. Obsah nevypisuje ani nevrací a celý sandbox vždy odstraní. Probe nemění data a nepoužívá zákaznické tabulky.
 
+Produkční `VERIFY_FAILED` z 21. 11. 2026 vznikl před candidate manifestem: tracked technický soubor `storage/app/private/.gitignore` byl zahrnut do private inventáře, ale nemá databázovou referenci, takže strict DB↔storage kontrola jej považovala za orphan. Archiver nyní ignoruje pouze tento přesný kořenový control file; dokumenty ani přílohy se z inventáře nevylučují. Candidate manifest má explicitní interní stav `INCOMPLETE` a ověřuje se typed API `verifyCandidate`; veřejný `backup:verify` nadále vyžaduje `COMPLETE` a nemá CLI bypass. Manifest není vlastní součástí `parts`, takže jeho atomický přepis nemění checksum deklarovaných komponent.
+
+Verifier vrací bezpečný `verification_code`: `MANIFEST_INVALID`, `MANIFEST_STATUS_INVALID`, `COMPONENT_MISSING`, `COMPONENT_SIZE_MISMATCH`, `COMPONENT_CHECKSUM_MISMATCH`, `PRIVATE_INVENTORY_MISMATCH`, `DATABASE_METADATA_MISMATCH`, `UNSAFE_COMPONENT_PATH` nebo `VERIFY_INTERNAL_ERROR`. Volitelný `component` je pouze bezpečný relativní název ze schváleného balíčku. Absolutní cesta, hash, obsah, SQL a exception detail se do `backup:create` výstupu nepřenášejí.
+
 ## Stav akceptace
 
 Automatizovaně lze ověřit formát manifestu, checksumy, guardy, migrace, počty, FK/indexy, DB↔storage konzistenci, orphan policy a bezpečně vypnuté integrace. V tomto běhu vznikly pouze testovací fixture archivy v dočasném adresáři; žádný není produkční důkaz.

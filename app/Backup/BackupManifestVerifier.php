@@ -13,6 +13,23 @@ final class BackupManifestVerifier
 
     public function verify(string $path): BackupVerification
     {
+        return $this->verifyPath($path, 'COMPLETE');
+    }
+
+    public function verifyCandidate(BackupCandidateManifest $candidate): BackupVerification
+    {
+        $root = realpath($candidate->stagingRoot);
+        $manifest = realpath($candidate->manifestPath);
+        if ($root === false || $manifest === false || dirname($manifest) !== $root
+            || preg_match('/\A\.manifest-incomplete-[0-9a-f]{24}\.json\z/', basename($manifest)) !== 1) {
+            return $this->invalid('Candidate manifest path is unsafe.', 'UNSAFE_COMPONENT_PATH', 'manifest.json');
+        }
+
+        return $this->verifyPath($manifest, 'INCOMPLETE', $root);
+    }
+
+    private function verifyPath(string $path, string $expectedStatus, ?string $expectedRoot = null): BackupVerification
+    {
         try {
             $resolved = $this->paths->existingBackup($path);
             $manifestPath = is_dir($resolved) ? $resolved.DIRECTORY_SEPARATOR.'manifest.json' : $resolved;
@@ -20,6 +37,9 @@ final class BackupManifestVerifier
                 return $this->invalid('Manifest is missing or is not a regular file.');
             }
             $root = dirname($manifestPath);
+            if ($expectedRoot !== null && $root !== $expectedRoot) {
+                return $this->invalid('Candidate manifest root is invalid.', 'UNSAFE_COMPONENT_PATH', 'manifest.json');
+            }
             $raw = file_get_contents($manifestPath);
             $manifest = is_string($raw) ? json_decode($raw, true, flags: JSON_THROW_ON_ERROR) : null;
             if (! is_array($manifest)) {
@@ -60,8 +80,8 @@ final class BackupManifestVerifier
             $this->validatePackageContents($root, $parts, $manifest, $errors);
         }
 
-        if (($manifest['status'] ?? null) !== 'COMPLETE') {
-            $errors[] = 'Backup status is not COMPLETE.';
+        if (($manifest['status'] ?? null) !== $expectedStatus) {
+            $errors[] = 'Backup status is not '.$expectedStatus.'.';
         }
         if (! (bool) data_get($manifest, 'off_server.confirmed', false)) {
             $warnings[] = 'Off-server copy is not confirmed.';
@@ -70,7 +90,10 @@ final class BackupManifestVerifier
             $warnings[] = 'Successful isolated restore test is not recorded.';
         }
 
-        return new BackupVerification($errors === [], array_values(array_unique($errors)), $warnings, $manifest, $root);
+        $errors = array_values(array_unique($errors));
+        [$verificationCode, $component] = $this->classify($errors, $manifest);
+
+        return new BackupVerification($errors === [], $errors, $warnings, $manifest, $root, $verificationCode, $component);
     }
 
     private function validateMetadata(array $manifest, array &$errors): void
@@ -353,8 +376,61 @@ final class BackupManifestVerifier
         }
     }
 
-    private function invalid(string $message): BackupVerification
+    /** @return array{0:?string,1:?string} */
+    private function classify(array $errors, array $manifest): array
     {
-        return new BackupVerification(false, [$message], []);
+        if ($errors === []) {
+            return [null, null];
+        }
+
+        foreach ($errors as $error) {
+            $component = $this->componentForError($error, $manifest);
+            $code = match (true) {
+                str_contains($error, 'status is not') => 'MANIFEST_STATUS_INVALID',
+                str_contains($error, 'missing or escapes'), str_contains($error, 'Required backup package parts are missing'),
+                str_contains($error, 'Manifest is missing') => 'COMPONENT_MISSING',
+                str_contains($error, 'unsafe path'), str_contains($error, 'must not be a symlink'),
+                str_contains($error, 'escapes the backup root'), str_contains($error, 'restore path is invalid') => 'UNSAFE_COMPONENT_PATH',
+                str_contains($error, 'Private archive'), str_contains($error, 'Private storage archive') => 'PRIVATE_INVENTORY_MISMATCH',
+                str_contains($error, 'size does not match') => 'COMPONENT_SIZE_MISMATCH',
+                str_contains($error, 'checksum does not match') && ! str_contains($error, 'archive entry') => 'COMPONENT_CHECKSUM_MISMATCH',
+                str_contains($error, 'metadata content'), str_contains($error, 'metadata file'),
+                str_contains($error, 'Critical table counts'), str_contains($error, 'Schema migration'),
+                str_contains($error, 'Database engine metadata'), str_contains($error, 'Database source identity'),
+                str_contains($error, 'logical object'), str_contains($error, 'dump option') => 'DATABASE_METADATA_MISMATCH',
+                str_contains($error, 'Manifest'), str_contains($error, 'manifest'),
+                str_contains($error, 'Unsupported manifest'), str_contains($error, 'Backup ID'),
+                str_contains($error, 'Backup timestamp'), str_contains($error, 'Backup environment'),
+                str_contains($error, 'Git commit'), str_contains($error, 'Required backup component') => 'MANIFEST_INVALID',
+                default => 'VERIFY_INTERNAL_ERROR',
+            };
+
+            return [$code, $component];
+        }
+
+        return ['VERIFY_INTERNAL_ERROR', null];
+    }
+
+    private function componentForError(string $error, array $manifest): ?string
+    {
+        if (preg_match('/\APart (\d+) /', $error, $match) === 1) {
+            $part = $manifest['parts'][(int) $match[1]] ?? null;
+            $name = is_array($part) ? ($part['name'] ?? null) : null;
+
+            return is_string($name) && preg_match('/\A[A-Za-z0-9._-]{1,128}\z/', $name) === 1 ? $name : null;
+        }
+        if (str_contains($error, 'Private archive') || str_contains($error, 'Private storage archive')) {
+            return 'private-storage.tar';
+        }
+        if (str_contains($error, 'metadata')) {
+            return 'metadata.json';
+        }
+
+        return 'manifest.json';
+    }
+
+    private function invalid(string $message, string $code = 'MANIFEST_INVALID', ?string $component = 'manifest.json'): BackupVerification
+    {
+        return new BackupVerification(false, [$message], [], null, null, $code, $component);
     }
 }
