@@ -14,6 +14,7 @@ use App\Operations\MonitorCheck;
 use App\Operations\MonitoringSuite;
 use App\Operations\OperationalAlertManager;
 use App\Operations\OperationalAlertRouter;
+use App\Operations\ProductionPreflight;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
@@ -179,6 +180,25 @@ class Phase8cMonitoringTest extends TestCase
         $this->assertSame(1, $check->metadata['orphan_count']);
         $this->assertStringNotContainsString('customer-secret-document', $encoded);
         Storage::disk('local')->delete('customer-secret-document.pdf');
+    }
+
+    public function test_preflight_failure_does_not_prevent_independent_checks(): void
+    {
+        $this->app->instance(ProductionPreflight::class, new class extends ProductionPreflight
+        {
+            public function __construct() {}
+
+            public function run(): array
+            {
+                throw new LogicException('sensitive internal detail');
+            }
+        });
+        $checks = collect($this->app->make(MonitoringSuite::class)->run())->keyBy('key');
+
+        $this->assertSame(MonitorCheck::ERROR, $checks['preflight_internal']->severity);
+        $this->assertTrue($checks->has('monitor_overlap'));
+        $this->assertTrue($checks->has('tls_certificate'));
+        $this->assertStringNotContainsString('sensitive internal detail', json_encode($checks->toArray(), JSON_THROW_ON_ERROR));
     }
 
     public function test_tls_check_handles_ok_expiry_and_verified_connection_failure_via_fake(): void

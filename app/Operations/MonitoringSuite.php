@@ -27,8 +27,17 @@ final class MonitoringSuite
     /** @return list<MonitorCheck> */
     public function run(?string $only = null, ?int $currentRunId = null): array
     {
-        $checks = collect($this->preflight->run())
-            ->map(fn (PreflightCheck $check): MonitorCheck => $this->fromPreflight($check));
+        try {
+            $checks = collect($this->preflight->run())
+                ->map(fn (PreflightCheck $check): MonitorCheck => $this->fromPreflight($check));
+        } catch (Throwable) {
+            $checks = collect([new MonitorCheck(
+                'preflight_internal',
+                MonitorCheck::ERROR,
+                'Preflight kontrolní sadu nelze bezpečně dokončit; ostatní monitorovací kontroly pokračují.',
+                ['failure_code' => 'PREFLIGHT_INTERNAL_FAILURE'],
+            )]);
+        }
         $checks->push($this->protect('scheduler_heartbeat', fn (): MonitorCheck => $this->schedulerHeartbeat()));
         $checks->push($this->protect('monitor_last_success', fn (): MonitorCheck => $this->monitorFreshness($currentRunId)));
         $checks->push($this->protect('monitor_overlap', fn (): MonitorCheck => $this->monitorOverlap($currentRunId)));
