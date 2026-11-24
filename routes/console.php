@@ -11,3 +11,12 @@ Artisan::command('about:phase', function (): void {
 Schedule::command('notifications:dispatch')
     ->everyMinute()
     ->withoutOverlapping(10);
+
+Schedule::command('ops:scheduler-heartbeat')
+    ->everyMinute()
+    ->withoutOverlapping(5);
+
+Schedule::command('ops:monitor --no-interaction')
+    ->everyFiveMinutes()
+    ->withoutOverlapping(10)
+    ->when(fn (): bool => (bool) config('operations.monitoring.enabled'));

@@ -5,14 +5,22 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use LogicException;
 
 class OperationalAlert extends Model
 {
     public const OPEN = 'OPEN';
+
     public const ACKNOWLEDGED = 'ACKNOWLEDGED';
+
     public const RESOLVED = 'RESOLVED';
 
     protected $guarded = ['id'];
+
+    protected static function booted(): void
+    {
+        static::deleting(fn (): never => throw new LogicException('Operational alerts cannot be deleted.'));
+    }
 
     protected function casts(): array
     {

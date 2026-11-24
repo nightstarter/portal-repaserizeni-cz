@@ -26,6 +26,8 @@ use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Models\Order;
 use App\Models\User;
+use App\Operations\Contracts\TlsCertificateInspector;
+use App\Operations\NativeTlsCertificateInspector;
 use App\Policies\DocumentPolicy;
 use App\Policies\MessageAttachmentPolicy;
 use App\Policies\MessagePolicy;
@@ -49,6 +51,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(DumpProcessRunner::class, SymfonyDumpProcessRunner::class);
         $this->app->bind(PrivateStorageArchiver::class, PharPrivateStorageArchiver::class);
         $this->app->bind(BackupMaintenance::class, LaravelBackupMaintenance::class);
+        $this->app->bind(TlsCertificateInspector::class, NativeTlsCertificateInspector::class);
         $this->app->bind(CreatesInitialProcessThreads::class, InitialProcessThreadFactory::class);
         $this->app->bind(ResolvesStockAvailability::class, PendingStockAvailabilityResolver::class);
         $this->app->bind(LegacyShopMapping::class, fn (): LegacyShopMapping => LegacyShopMapping::fromConfig());
@@ -87,6 +90,7 @@ class AppServiceProvider extends ServiceProvider
         });
 
         RateLimiter::for('login', fn (Request $request) => Limit::perMinute(5)->by(strtolower((string) $request->input('email')).'|'.$request->ip()));
+        RateLimiter::for('health', fn (Request $request) => Limit::perMinute(30)->by((string) $request->ip()));
         RateLimiter::for('pohoda-bridge', fn (Request $request) => Limit::perMinute(
             max(1, (int) config('integrations.pohoda_bridge.rate_limit_per_minute', 60)),
         )->by((string) $request->ip()));

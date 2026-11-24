@@ -4,12 +4,19 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use LogicException;
 
 class OperationalAlertEvent extends Model
 {
     public const UPDATED_AT = null;
 
     protected $guarded = ['id'];
+
+    protected static function booted(): void
+    {
+        static::updating(fn (): never => throw new LogicException('Operational alert history is append-only.'));
+        static::deleting(fn (): never => throw new LogicException('Operational alert history is append-only.'));
+    }
 
     protected function casts(): array
     {
