@@ -1,6 +1,6 @@
 # Fáze 8B – zálohy, ověření a bezpečný test obnovy
 
-Datum implementace: 20. 11. 2026. Implementace je připravená, ale Fáze 8B **není dokončená ani produkčně akceptovaná**. Fáze 8C–8E nebyly zahájeny.
+Datum implementace: 20. 11. 2026. Implementace je připravená, ale Fáze 8B **není dokončená ani produkčně akceptovaná**. Implementace 8C byla zahájena odděleně a tento stav 8B nemění.
 
 ## Dodané části
 
@@ -49,15 +49,16 @@ Verifier vrací bezpečný `verification_code`: `MANIFEST_INVALID`, `MANIFEST_ST
 
 ## Stav akceptace
 
-Automatizovaně lze ověřit formát manifestu, checksumy, guardy, migrace, počty, FK/indexy, DB↔storage konzistenci, orphan policy a bezpečně vypnuté integrace. V tomto běhu vznikly pouze testovací fixture archivy v dočasném adresáři; žádný není produkční důkaz.
+Read-only kontrola 24. 11. 2026 ověřila evidovaný produkční backup ID `backup-20261121T004618Z-f95b68ae-8294-421d-b291-e8d409db3452`: manifest má stav `COMPLETE`, tři povinné komponenty a `backup:verify` skončil `valid=true` bez chyby a warningu. Autentizovaný sidecar je `VALID`, odpovídá backup ID i SHA-256 manifestu a obsahuje potvrzení úplné off-server kopie. Absolutní cesta, checksumy a provozní identity nejsou v dokumentaci uvedeny.
+
+Sidecar však neobsahuje žádný `restore_test` se stavem `SUCCESS`. `ops:preflight` proto vrací `recovery_evidence=WARN`; zároveň vrací `latest_backup=ERROR`, protože stáří této COMPLETE zálohy bylo při kontrole 86 hodin proti limitu 26 hodin. Ústní potvrzení restore procedury není náhradou za autentizovaný záznam. Fázi 8B proto nelze formálně uzavřít.
 
 Před dokončením 8B musí provozovatel doložit (existující produkční COMPLETE backup a jeho úspěšný verify samy o sobě ještě 8B nedokončují):
 
-1. skutečnou produkční COMPLETE zálohu;
-2. kopii mimo webserver;
-3. úspěšné ověření všech checksumů;
-4. úspěšnou obnovu do izolované neprodukční DB a storage;
-5. naměřenou dobu zálohy a obnovy;
-6. vlastníkem potvrzené RPO a RTO (`OWNER_CONFIRMATION_REQUIRED`).
+1. novou nebo stále čerstvou produkční COMPLETE zálohu tak, aby `latest_backup` nebyl `ERROR`;
+2. autentizovaný `restore_test=SUCCESS` z úspěšné obnovy do izolované neprodukční DB a storage;
+3. stav `OK` kontrol `latest_backup` a `recovery_evidence`;
+4. naměřenou dobu zálohy a obnovy;
+5. vlastníkem potvrzené RPO a RTO (`OWNER_CONFIRMATION_REQUIRED`).
 
-Do té doby musí `latest_backup` bez skutečného manifestu zůstat `ERROR`. PHP 7.4.33 a Windows Server 2012 R2 se nemění.
+RPO/RTO vlastník dosud nepotvrdil; stav zůstává `OWNER_CONFIRMATION_REQUIRED`. PHP 7.4.33 a Windows Server 2012 R2 se nemění.
