@@ -2,15 +2,11 @@
 
 namespace App\Operations;
 
-use App\Backup\BackupManifestVerifier;
-use App\Backup\BackupVerification;
-use App\Backup\RecoveryEvidenceStore;
 use App\Models\BridgeHeartbeat;
 use App\Models\OutboxEvent;
 use App\Models\StockSnapshotConfirmation;
 use App\Models\StockSnapshotItem;
 use App\Models\StockSnapshotRun;
-use Carbon\CarbonImmutable;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -18,13 +14,8 @@ use Throwable;
 
 class ProductionPreflight
 {
-    private ?BackupVerification $backupVerification = null;
-
-    private ?string $backupVerificationPath = null;
-
     public function __construct(
-        private readonly BackupManifestVerifier $backupVerifier,
-        private readonly RecoveryEvidenceStore $recoveryEvidence,
+        private readonly BackupEvidenceHealth $backupEvidenceHealth,
     ) {}
 
     /** @return list<PreflightCheck> */
@@ -52,8 +43,8 @@ class ProductionPreflight
         $checks[] = $this->serverAllowlistCheck();
         $checks[] = $this->smtpCheck();
         $checks[] = $this->diskCheck();
-        $checks[] = $this->protect('latest_backup', fn (): PreflightCheck => $this->latestBackupCheck());
-        $checks[] = $this->protect('recovery_evidence', fn (): PreflightCheck => $this->recoveryEvidenceCheck());
+        $checks[] = $this->protect('latest_backup', fn (): PreflightCheck => $this->backupEvidenceCheck('latest_backup', $this->backupEvidenceHealth->latest()));
+        $checks[] = $this->protect('recovery_evidence', fn (): PreflightCheck => $this->backupEvidenceCheck('recovery_evidence', $this->backupEvidenceHealth->restoreTest()));
         $checks[] = new PreflightCheck(
             'connector_runtime_debt', PreflightCheck::WARN,
             'Konektor zůstává kompatibilní s přijatým technickým dluhem PHP 7.4.33 / Windows Server 2012 R2; upgrade není součástí Fáze 8A.',
@@ -330,83 +321,23 @@ class ProductionPreflight
         return new PreflightCheck('disk_space', $ok ? PreflightCheck::OK : PreflightCheck::ERROR, $ok ? 'Volné místo splňuje nastavený limit.' : 'Volné místo nelze zjistit nebo je pod nastaveným limitem.', ['free_megabytes' => is_numeric($free) ? (int) floor($free / 1024 / 1024) : null, 'minimum_megabytes' => (int) floor($minimum / 1024 / 1024)]);
     }
 
-    private function latestBackupCheck(): PreflightCheck
+    /** @param array<string,mixed> $health */
+    private function backupEvidenceCheck(string $id, array $health): PreflightCheck
     {
-        $path = config('backups.latest_manifest');
-        if (! is_string($path) || $path === '') {
-            return new PreflightCheck('latest_backup', PreflightCheck::ERROR, 'Skutečná produkční COMPLETE záloha není evidována.', ['configured' => false]);
-        }
-        $verification = $this->backupVerification($path);
-        if (! $verification->valid || $verification->manifest === null) {
-            return new PreflightCheck('latest_backup', PreflightCheck::ERROR, 'Manifest poslední zálohy nebo checksum některé části není platný.', ['configured' => true]);
-        }
-        $manifest = $verification->manifest;
-        if (($manifest['environment'] ?? null) !== 'production') {
-            return new PreflightCheck('latest_backup', PreflightCheck::ERROR, 'Evidovaný manifest není skutečná produkční záloha.', ['production_backup' => false]);
-        }
-        $created = CarbonImmutable::parse($manifest['created_at_utc']);
-        $age = max(0, (int) $created->diffInHours(now()));
-        $limit = max(1, (int) config('backups.maximum_age_hours', 26));
-        $fresh = $age <= $limit;
+        $status = match ($health['status'] ?? 'ERROR') {
+            'OK' => PreflightCheck::OK,
+            'WARN' => PreflightCheck::WARN,
+            default => PreflightCheck::ERROR,
+        };
+        $message = match ([$id, $status]) {
+            ['latest_backup', PreflightCheck::OK] => 'Poslední produkční COMPLETE záloha je čerstvá, ověřená a off-server potvrzená.',
+            ['latest_backup', PreflightCheck::WARN] => 'Poslední záloha je platná, ale chybí její off-server potvrzení.',
+            ['latest_backup', PreflightCheck::ERROR] => 'Poslední COMPLETE záloha chybí, je neplatná nebo zastaralá.',
+            ['recovery_evidence', PreflightCheck::OK] => 'Samostatná autentizovaná evidence obsahuje čerstvý úspěšný restore test.',
+            ['recovery_evidence', PreflightCheck::WARN] => 'Samostatný úspěšný restore test chybí nebo je zastaralý.',
+            default => 'Restore evidence nebo její vazba na produkční zálohu je neplatná.',
+        };
 
-        return new PreflightCheck(
-            'latest_backup',
-            $fresh ? PreflightCheck::OK : PreflightCheck::ERROR,
-            $fresh ? 'Poslední produkční COMPLETE záloha má platný manifest a checksumy.' : 'Poslední produkční COMPLETE záloha je starší než povolený limit.',
-            ['backup_id' => $manifest['backup_id'], 'created_at_utc' => $created->toIso8601String(), 'age_hours' => $age, 'limit_hours' => $limit],
-        );
-    }
-
-    private function recoveryEvidenceCheck(): PreflightCheck
-    {
-        $path = config('backups.latest_manifest');
-        if (! is_string($path) || $path === '') {
-            return new PreflightCheck('recovery_evidence', PreflightCheck::WARN, 'Off-server kopie a úspěšný izolovaný restore test nejsou evidovány.', ['off_server_confirmed' => false, 'restore_test_success' => false]);
-        }
-        $verification = $this->backupVerification($path);
-        if (! $verification->valid || $verification->manifest === null) {
-            return new PreflightCheck('recovery_evidence', PreflightCheck::ERROR, 'Recovery evidence nelze svázat s neplatným COMPLETE manifestem.');
-        }
-        $evidence = $this->recoveryEvidence->inspect($verification);
-        if ($evidence['status'] === 'MISSING') {
-            return new PreflightCheck('recovery_evidence', PreflightCheck::WARN, 'Recovery evidence sidecar zatím neexistuje.', ['off_server_confirmed' => false, 'restore_test_success' => false]);
-        }
-        if ($evidence['status'] !== 'VALID') {
-            return new PreflightCheck('recovery_evidence', PreflightCheck::ERROR, 'Recovery evidence sidecar je neplatný nebo patří jinému backupu.', ['evidence_integrity_valid' => false]);
-        }
-        $offServer = is_array($evidence['off_server_confirmation'] ?? null)
-            && data_get($evidence, 'off_server_confirmation.operator_attested_full_copy_verified') === true;
-        $restoreTests = collect($evidence['restore_tests'] ?? [])->where('status', 'SUCCESS')->sortByDesc('completed_at_utc')->values();
-        $latestRestore = $restoreTests->first();
-        $restoreSuccess = is_array($latestRestore);
-        $completed = $restoreSuccess ? ($latestRestore['completed_at_utc'] ?? null) : null;
-        $age = null;
-        if ($restoreSuccess && is_string($completed)) {
-            try {
-                $age = max(0, (int) CarbonImmutable::parse($completed)->diffInDays(now()));
-            } catch (Throwable) {
-                $restoreSuccess = false;
-            }
-        }
-        $limit = max(1, (int) config('backups.restore_test_maximum_age_days', 100));
-        $freshRestore = $restoreSuccess && $age !== null && $age <= $limit;
-        $ok = $offServer && $freshRestore;
-
-        return new PreflightCheck(
-            'recovery_evidence',
-            $ok ? PreflightCheck::OK : PreflightCheck::WARN,
-            $ok ? 'Off-server kopie a čerstvý úspěšný restore test jsou evidovány.' : 'Chybí potvrzení off-server kopie nebo čerstvého úspěšného restore testu.',
-            ['off_server_confirmed' => $offServer, 'restore_test_success' => $restoreSuccess, 'restore_test_age_days' => $age, 'restore_test_limit_days' => $limit],
-        );
-    }
-
-    private function backupVerification(string $path): BackupVerification
-    {
-        if ($this->backupVerification === null || $this->backupVerificationPath !== $path) {
-            $this->backupVerification = $this->backupVerifier->verify($path);
-            $this->backupVerificationPath = $path;
-        }
-
-        return $this->backupVerification;
+        return new PreflightCheck($id, $status, $message, $health);
     }
 }

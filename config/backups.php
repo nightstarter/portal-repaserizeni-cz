@@ -8,6 +8,7 @@ return [
     'diagnose_parent' => env('BACKUP_DIAGNOSE_PARENT', sys_get_temp_dir()),
     'request_drain_seconds' => (int) env('BACKUP_REQUEST_DRAIN_SECONDS', 10),
     'latest_manifest' => env('BACKUP_LATEST_MANIFEST'),
+    'restore_evidence_manifest' => env('BACKUP_RESTORE_EVIDENCE_MANIFEST'),
     'maximum_age_hours' => (int) env('BACKUP_MAX_AGE_HOURS', 26),
     'restore_test_maximum_age_days' => (int) env('BACKUP_RESTORE_TEST_MAX_AGE_DAYS', 100),
     'production_database' => [
