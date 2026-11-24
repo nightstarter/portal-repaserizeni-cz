@@ -12,8 +12,10 @@ use App\Http\Controllers\DiscussionController;
 use App\Http\Controllers\DiscussionQueueController;
 use App\Http\Controllers\DocumentDownloadController;
 use App\Http\Controllers\FinanceController;
+use App\Http\Controllers\HealthController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\MessageAttachmentDownloadController;
+use App\Http\Controllers\OperationsMonitoringController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PasswordController;
 use App\Http\Controllers\PohodaIntegrationController;
@@ -30,6 +32,8 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\WarrantyController;
 use App\Http\Controllers\WarrantyQueueController;
 use Illuminate\Support\Facades\Route;
+
+Route::get('/health', HealthController::class)->middleware('throttle:health')->name('health');
 
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
@@ -84,4 +88,7 @@ Route::middleware(['auth', 'active', 'password.changed'])->group(function (): vo
     Route::post('/admin/notifications/{event}/retry', [AdminNotificationController::class, 'retry'])->name('admin.notifications.retry');
     Route::get('/admin/integrations/pohoda', PohodaIntegrationController::class)->name('admin.integrations.pohoda');
     Route::get('/admin/operations/preflight', ProductionReadinessController::class)->name('admin.operations.preflight');
+    Route::get('/admin/operations/monitoring', [OperationsMonitoringController::class, 'index'])->name('admin.operations.monitoring.index');
+    Route::get('/admin/operations/monitoring/{alert}', [OperationsMonitoringController::class, 'show'])->name('admin.operations.monitoring.show');
+    Route::post('/admin/operations/monitoring/{alert}/acknowledge', [OperationsMonitoringController::class, 'acknowledge'])->name('admin.operations.monitoring.acknowledge');
 });
