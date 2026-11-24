@@ -28,6 +28,8 @@ Kritické počty pokrývají minimálně `organizations`, `users`, `orders`, `it
 
 `FAILED` sada není obnovitelná. `COMPLETE` lze použít až po `backup:verify`, který ověří každou část podle obsahu, nikoli přípony. Existing manifest se nesmí tiše přepisovat a backup cíl musí být explicitní absolutní canonical cesta mimo `/`, repozitář, `public` a celou aplikační storage.
 
+Pole `off_server` a `restore_test` v původním manifestu zachycují pouze neměnný stav při vytvoření (`false` / `NOT_RUN`) a ručně se neupravují. Aktuální provozní důkaz je samostatný volitelný `recovery-evidence.json`, kryptograficky svázaný s `backup_id`, SHA-256 manifestu a `environment=production`. Laravel `Crypt` poskytuje autentizované šifrování; APP_KEY není součástí sidecaru ani balíčku. Sidecar není částí `parts`, jeho ztráta tedy nezneplatní checksumy zálohy. Neplatná/cizí evidence je však provozní `ERROR`.
+
 ## Vytvoření balíčku
 
 Podporovaná syntaxe je:
@@ -45,7 +47,8 @@ portal-backup-…/
 ├── database.sql
 ├── private-storage.tar
 ├── metadata.json
-└── manifest.json
+├── manifest.json
+└── recovery-evidence.json   # volitelný následný provozní sidecar
 ```
 
 `database.sql` vzniká přes `mariadb-dump --single-transaction --quick --skip-lock-tables --no-tablespaces` s hex-blob a s logical objekty pouze podle ověřeného inventáře. Heslo je pouze v náhodném klientském option file režimu `0600`; nikdy není argumentem procesu a soubor se maže ve `finally`. `private-storage.tar` obsahuje doménové soubory private storage bez symlinků a bez dvou přesných provozních exclusions; manifest eviduje velikost, SHA-256 a mode každého archive entry. `metadata.json` obsahuje jen backup ID, UTC, Git commit, PHP/MariaDB/connector verze, migrace, kritické počty, dump volby, verzovanou exclusion policy a počet archivovaných private souborů.

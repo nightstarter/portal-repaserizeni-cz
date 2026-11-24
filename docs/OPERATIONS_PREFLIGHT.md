@@ -37,7 +37,7 @@ Příkaz nic neopravuje, nespouští migrace/import/snapshot/SMTP/bridge command
 | `smtp` | funkce off nebo úplná konfigurace | — | funkce on + neúplná konfigurace |
 | `disk_space` | nad `OPS_MIN_FREE_DISK_MB` | — | pod limitem/nezjistitelné |
 | `latest_backup` | čerstvý produkční COMPLETE manifest a všechny checksumy | — | chybí, není produkční, je starý/neplatný |
-| `recovery_evidence` | off-server kopie a čerstvý úspěšný restore test | některý důkaz chybí/je starý | — |
+| `recovery_evidence` | platný sidecar: ručně potvrzená off-server kopie + čerstvý úspěšný restore test | sidecar nebo některý důkaz chybí / restore je starý | sidecar má neplatnou integritu nebo patří jinému backupu/manifestu |
 | `connector_runtime_debt` | — | PHP 7.4.33 + Windows 2012 R2 | — |
 
 `UNMAPPED` RR reference není chyba. Čerstvý `PARTIAL` run s 2482 accepted a dvěma `DUPLICATE_PRODUCT_REFERENCE` je známý použitelný stav. Čerstvost heartbeat/snapshotu nastavují `OPS_HEARTBEAT_STALE_MINUTES` a `OPS_SNAPSHOT_STALE_MINUTES`.
@@ -65,8 +65,10 @@ Portál nevidí Windows Task Scheduler API. Provozovatel musí na HPSERVERU zkon
 
 ## Zálohy a recovery evidence (8B)
 
-`BACKUP_LATEST_MANIFEST` smí ukazovat pouze na absolutní cestu ke skutečné produkční záloze mimo repozitář, webroot a private storage. Testovací fixture se jako produkční důkaz odmítne. Chybějící, nekompletní, starý nebo checksumově neplatný produkční manifest je `ERROR`. Chybějící off-server potvrzení nebo chybějící/starý restore test je samostatný `WARN`, protože samotný archiv ještě nedokládá obnovitelnost.
+`BACKUP_LATEST_MANIFEST` smí ukazovat pouze na absolutní cestu ke skutečné produkční záloze mimo repozitář, webroot a private storage. Testovací fixture se jako produkční důkaz odmítne. Chybějící, nekompletní, starý nebo checksumově neplatný produkční manifest je `ERROR`. Recovery evidence se načítá odděleně z autentizovaného `recovery-evidence.json`; chybějící sidecar/off-server potvrzení nebo chybějící/starý restore test je `WARN`, zatímco porušená integrita nebo vazba na jiný backup/manifest je `ERROR`.
 
 Produkční manifest vytváří pouze `backup:create --target=<nová-absolutní-cesta>`. Příkaz interně použije stejný verifier, ale provozovatel musí následně provést samostatné `backup:verify` na webserveru i po přenosu celé kopie mimo webserver. Teprve skutečný produkční balíček lze nastavit jako `BACKUP_LATEST_MANIFEST`; fixture ani staging cesta se neeviduje.
+
+Původní manifest ani tři komponenty se při evidenci nemění. Off-server skutečnost zaznamená až provozovatel explicitním `backup:evidence:off-server ... --evidence-id=... --confirmed`; příkaz vzdálenou kopii sám neověřuje. Úspěšný `backup:restore-check ... --evidence-id=...` append-only doplní bezpečnou restore historii až po všech kontrolách. `backup:verify` stále rozhoduje exit code pouze podle zálohy a evidence zobrazuje informativně jako `WARN`/`OK`.
 
 Výchozí limity jsou 26 hodin pro poslední COMPLETE zálohu a 100 dní pro restore test. Provozovatel je může změnit řízenou produkční konfigurací; tato implementace `.env` nemění. Preflight nevytváří zálohu, nic neobnovuje a nečte obsah dokumentů. Produkční výsledek 8A výše historicky předchází přidání těchto dvou kontrol.

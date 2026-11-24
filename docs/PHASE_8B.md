@@ -10,7 +10,8 @@ Datum implementace: 20. 11. 2026. Implementace je připravená, ale Fáze 8B **n
 - `php artisan backup:create --target=<nová-absolutní-cesta> [--json]`, který přes chráněný staging vytvoří a interně ověří balíček;
 - `php artisan backup:diagnose [--json]`, který bez exportu řádků ověří dump klienta, protected client config, PDO, logical DB objekty a minimální schema-only probe;
 - `php artisan backup:verify <absolutní-cesta> [--json]`, který ověří metadata, canonical cesty, všechny soubory, velikosti a checksumy;
-- `php artisan backup:restore-check <absolutní-cesta> --target=<nový-prázdný-adresář> [--json]` pro kontrolu již obnovené izolované DB a obnovu/ověření private souborů;
+- `php artisan backup:evidence:off-server <absolutní-cesta> --evidence-id=<change-id> --confirmed [--json]` pro auditované potvrzení provozovatele po nezávislém ověření celé off-server kopie;
+- `php artisan backup:restore-check <absolutní-cesta> --target=<nový-prázdný-adresář> --evidence-id=<change-id> [--json]` pro kontrolu již obnovené izolované DB, obnovu/ověření private souborů a zápis úspěšné restore evidence;
 - preflight kontroly `latest_backup` a `recovery_evidence`;
 - restore a disaster-recovery postupy v [RESTORE_RUNBOOK.md](RESTORE_RUNBOOK.md) a [DISASTER_RECOVERY.md](DISASTER_RECOVERY.md).
 
@@ -23,6 +24,14 @@ Nástroj neprovádí DB import. Provozovatel obnoví dump standardním MariaDB k
 `backup:create` je jediná podporovaná cesta pro vytvoření manifestu kompatibilního s verifierem. V produkci automaticky aktivuje Laravel maintenance mode, vyčká `BACKUP_REQUEST_DRAIN_SECONDS`, vytvoří InnoDB konzistentní dump, TAR private storage a sanitizovaná metadata, zkontroluje DB↔storage vazby a stav před/po a předověří všechny části proti neveřejnému nekompletnímu manifestu. Teprve potom atomicky zapíše finální COMPLETE manifest, ověří celý staging stejným verifierem a atomicky zveřejní finální adresář. `finally` vrací aplikaci z maintenance, pokud jej příkaz sám zapnul.
 
 Maintenance mode neřídí cizí CLI procesy. Provozovatel musí v krátkém okně zajistit, že žádný scheduler/worker/import/ruční command nepíše do portálové DB ani private storage. Příkaz sám cron ani Task Scheduler nemění. Zjištěná změna počtů, migrací či private inventáře vytvoření zastaví.
+
+## Recovery evidence bez změny zálohy
+
+Původní `manifest.json`, `database.sql`, `private-storage.tar` a `metadata.json` jsou po vytvoření neměnné. Následná provozní evidence se ukládá pouze do atomicky publikovaného `recovery-evidence.json`. Sidecar formátu 1 obsahuje otevřeně jen backup ID, SHA-256 přesného manifestu, prostředí `production` a šifrovaný autentizovaný payload vytvořený Laravel `Crypt`; APP_KEY zůstává mimo zálohu. Payload obsahuje potvrzení off-server kontroly a append-only historii úspěšných restore testů s UTC, dobou a bezpečnými počty/fingerprinty bez PII.
+
+`backup:evidence:off-server` nejprve provede plný verifier, vyžaduje produkční COMPLETE balíček, explicitní `--confirmed` a netajný evidence ID. Nepřipojuje se na vzdálené úložiště a nikdy netvrdí, že je samo ověřilo. Stejné ID je idempotentní; konflikt se odmítne. Restore zapisuje `SUCCESS` až po všech DB/storage kontrolách; neúspěch sidecar nemění a nové evidence ID přidává historii.
+
+Chybějící sidecar nezneplatní zálohu: `backup:verify` skončí podle manifestu a komponent a evidence pouze zobrazí jako `WARN`/`OK`. Preflight klasifikuje chybějící evidence jako `WARN`, porušenou integritu nebo vazbu na jiný backup jako `ERROR` a platné off-server potvrzení s čerstvým restore testem jako `OK`.
 
 ## Diagnostická oprava dump runneru
 
@@ -42,7 +51,7 @@ Verifier vrací bezpečný `verification_code`: `MANIFEST_INVALID`, `MANIFEST_ST
 
 Automatizovaně lze ověřit formát manifestu, checksumy, guardy, migrace, počty, FK/indexy, DB↔storage konzistenci, orphan policy a bezpečně vypnuté integrace. V tomto běhu vznikly pouze testovací fixture archivy v dočasném adresáři; žádný není produkční důkaz.
 
-Před dokončením 8B musí provozovatel doložit:
+Před dokončením 8B musí provozovatel doložit (existující produkční COMPLETE backup a jeho úspěšný verify samy o sobě ještě 8B nedokončují):
 
 1. skutečnou produkční COMPLETE zálohu;
 2. kopii mimo webserver;

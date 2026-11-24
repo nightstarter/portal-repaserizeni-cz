@@ -398,3 +398,10 @@
 - Stav: přijato pro opravu Fáze 8B
 - Rozhodnutí: Aplikace vylučuje pouze exact relative paths `.gitignore` (`DEPLOYMENT_CONTROL_FILE`) a `legacy-shop-phase1c-report.json` (`GENERATED_DIAGNOSTIC_ARTIFACT`). Seznam není dostupný přes `.env`, wildcard ani provozní konfiguraci a musí být shodný v plan/create/verify/restore-check.
 - Dopad: Oba zdrojové soubory zůstávají fyzicky beze změny a jsou evidovány jen jako sanitizované exclusions. Nejsou v TAR ani restore. Kopie, nested varianta, jiné JSON/report soubory a každý neznámý orphan nadále způsobí `PRIVATE_INVENTORY_MISMATCH`.
+
+## D-058: Recovery evidence je autentizovaný sidecar, nikoli změna COMPLETE manifestu
+
+- Datum: 2026-11-21
+- Stav: přijato pro opravu Fáze 8B
+- Rozhodnutí: Původní COMPLETE manifest a jeho tři komponenty jsou neměnné. Off-server potvrzení a append-only historie úspěšných restore testů se ukládají atomicky do `recovery-evidence.json`, svázaného s backup ID, SHA-256 manifestu a produkčním prostředím a chráněného Laravel `Crypt`. Tajný APP_KEY zůstává v odděleném escrow. Off-server příkaz eviduje výslovnou atestaci provozovatele po nezávislé kontrole; vzdálenou kopii sám nekontroluje.
+- Dopad: Chybějící sidecar je `WARN` a nemění validitu zálohy. Neplatná integrita nebo cizí vazba je preflight `ERROR`. Restore zapisuje `SUCCESS` pouze po úplné izolované kontrole, nové testy zachovávají historii a neúspěch evidence nemění. Ruční editace manifestu ani sidecaru není podporovaná.
