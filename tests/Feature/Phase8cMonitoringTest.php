@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use LogicException;
 use Tests\TestCase;
@@ -164,6 +165,22 @@ class Phase8cMonitoringTest extends TestCase
         $this->assertSame(1, $check->metadata['stale_run_count']);
     }
 
+    public function test_expired_global_lock_is_recovered_and_private_orphan_output_is_aggregated(): void
+    {
+        $expired = Cache::lock('ops-monitor-global', 1);
+        $this->assertTrue($expired->get());
+        $this->travel(2)->seconds();
+        $this->assertSame(0, Artisan::call('ops:monitor', ['--json' => true, '--no-notify' => true, '--check' => 'connector_runtime_debt']));
+
+        Storage::disk('local')->put('customer-secret-document.pdf', 'test');
+        $check = collect(app(MonitoringSuite::class)->run('private_storage_inventory'))->first();
+        $encoded = json_encode($check->toArray(), JSON_THROW_ON_ERROR);
+        $this->assertSame(MonitorCheck::ERROR, $check->severity);
+        $this->assertSame(1, $check->metadata['orphan_count']);
+        $this->assertStringNotContainsString('customer-secret-document', $encoded);
+        Storage::disk('local')->delete('customer-secret-document.pdf');
+    }
+
     public function test_tls_check_handles_ok_expiry_and_verified_connection_failure_via_fake(): void
     {
         config(['operations.monitoring.tls_enabled' => true, 'operations.monitoring.tls_host' => 'portal.example.test']);
@@ -172,6 +189,7 @@ class Phase8cMonitoringTest extends TestCase
             [['ok' => true, 'code' => 'OK', 'days_remaining' => 20], MonitorCheck::WARN],
             [['ok' => true, 'code' => 'OK', 'days_remaining' => 3], MonitorCheck::ERROR],
             [['ok' => false, 'code' => 'TLS_VERIFY_FAILED', 'days_remaining' => null], MonitorCheck::ERROR],
+            [['ok' => false, 'code' => 'TLS_CONNECTION_FAILED', 'days_remaining' => null], MonitorCheck::ERROR],
         ] as [$result, $severity]) {
             $this->app->instance(TlsCertificateInspector::class, new class($result) implements TlsCertificateInspector
             {
