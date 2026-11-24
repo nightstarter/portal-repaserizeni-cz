@@ -13,7 +13,7 @@ class LocaleAndHealthTest extends TestCase
 
     public function test_health_endpoint_is_public_and_contains_no_sensitive_details(): void
     {
-        $this->get('/up')->assertOk()->assertDontSee('DB_PASSWORD');
+        $this->get('/health')->assertOk()->assertSeeText('OK')->assertDontSee('DB_PASSWORD');
     }
 
     public function test_locale_preference_is_persisted_and_audited(): void

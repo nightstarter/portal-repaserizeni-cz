@@ -8,7 +8,7 @@
 - Přihlášení, rate limit, deaktivace účtu/organizace, vynucená změna hesla a bezpečné session.
 - CZ/PL preference ukládaná uživateli.
 - Append-only auditní základ s filtrováním citlivých hodnot.
-- Veřejný minimální `/up` health check.
+- Veřejný minimální health check (původně `/up`, od Fáze 8C `/health`).
 - Interaktivní `portal:create-admin` bez hesla v migraci nebo shell historii.
 - Dokumentace instalace, Apache `public/` DocumentRootu, deploymentu a rollbacku.
 - GitHub Actions pro Composer validaci, formát, syntax kontrolu a testy.

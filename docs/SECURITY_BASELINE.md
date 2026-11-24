@@ -16,6 +16,8 @@ Baseline je statická a automatizovaná revize kódu a bezpečné konfigurace. N
 - Produkční bridge command whitelist je prázdný. Neexistuje cenový command ani endpoint; snapshot smí měnit jen append-only skladová data a nikdy workflow či cenu objednávky.
 - `PRODUCT_REPRICING=DEFERRED_EXTERNAL_SYSTEM`; legacy import a oba typy produkčních e-mailů zůstávají vypnuté.
 - Produkční log channel používá denní rotaci. Aplikační audit filtruje citlivé klíče a bridge přijímá/loguje pouze allowlist bezpečných kódů.
+- Monitoring ukládá pouze stabilní check key, severity, fingerprint, bezpečné summary a allowlist sanitizovaných metadat. Private-storage kontrola vrací jen agregované počty. Veřejný `/health` nevrací verze, DB identity ani detail checks.
+- Monitoring je chráněn globálním cache lockem, alert aktivním unikátním dedup klíčem a ACK optimistickou `row_version`. Alert events jsou v aplikační vrstvě append-only.
 
 ## Ruční provozní potvrzení
 
@@ -25,6 +27,7 @@ Baseline je statická a automatizovaná revize kódu a bezpečné konfigurace. N
 - skutečná oprávnění SQL účtu konektoru (`SELECT` only), absence inbound listeneru/firewall pravidla a stav Windows Time;
 - Task Scheduler Last Run Result, interval, nepřekrývání instancí a lokální ACL connector config/state/spool/log;
 - vizuální kontrola admin stránky bez zákaznických dat na produkčních datech.
+- ruční kontrola 8C admin UI, rate limitu `/health`, scheduler intervalů a vybraného skutečného alert kanálu po budoucí aktivaci.
 
 ## Dependency audit
 

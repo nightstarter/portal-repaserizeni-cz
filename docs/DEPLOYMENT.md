@@ -47,7 +47,7 @@ HTTP VirtualHost musí pouze přesměrovat na HTTPS. TLS certifikát, HSTS a coo
 6. Interaktivně spustit `php8.5 artisan portal:create-admin` pod důvěryhodným deployment uživatelem.
 7. Nastavit zápis pouze pro `storage/` a `bootstrap/cache/` nutnému systémovému uživateli.
 8. Spustit `php8.5 artisan config:cache`, `route:cache` a `view:cache`.
-9. Ověřit HTTPS `/up`, přihlášení, odhlášení, deaktivovaný účet, CZ/PL a zákaz přístupu POLSKO do správy uživatelů.
+9. Ověřit HTTPS `/health`, přihlášení, odhlášení, deaktivovaný účet, CZ/PL a zákaz přístupu POLSKO do správy uživatelů.
 
 ## Opakovatelný deployment
 
@@ -66,7 +66,7 @@ HTTP VirtualHost musí pouze přesměrovat na HTTPS. TLS certifikát, HSTS a coo
 * * * * * cd /var/www/portal.repaserizeni.cz/web && php8.5 artisan schedule:run >> /dev/null 2>&1
 ```
 
-Scheduler spouští outbox worker diskusních notifikací každou minutu s aplikačním `withoutOverlapping`. `onOneServer` se nepoužívá. Před aktivací cronu musí být aplikovány migrace Fáze 5A/5C, nakonfigurován SMTP a ověřen `DISCUSSION_EMAIL_ENABLED`; bezpečný výchozí stav je `false`. Scheduler neobsahuje import objednávek.
+Scheduler registruje outbox worker každou minutu, bezpečný scheduler heartbeat každou minutu a `ops:monitor` každých pět minut. Vše používá `withoutOverlapping`; `onOneServer` se nepoužívá. Monitor se nespustí, dokud není aplikována migrace 8C a řízeně nastaveno `OPS_MONITOR_ENABLED=true`. E-mailový alert kanál zůstává samostatně vypnutý přes `OPS_ALERT_EMAIL_ENABLED=false`. Scheduler neobsahuje import objednávek.
 
 Konfiguraci a provozní chování notifikačního workeru dokumentuje `PHASE_5C.md`. Cron ani SMTP se nezapínají automaticky deploymentem kódu.
 
@@ -75,4 +75,8 @@ Konfiguraci a provozní chování notifikačního workeru dokumentuje `PHASE_5C.
 - Vrátit aplikaci na předchozí ověřený tag a znovu sestavit cache.
 - Databázové migrace nevracet automaticky, pokud by došlo ke ztrátě dat. Použít předem ověřený downgrade postup konkrétní migrace nebo obnovu zálohy.
 - Při incidentu ponechat importní integrační přepínače vypnuté.
-- Ověřit `/up` a přihlášení po návratu.
+- Ověřit `/health` a přihlášení po návratu.
+
+## Aktivace Fáze 8C
+
+Přesný postup je v [MONITORING.md](MONITORING.md). Deployment kódu nejprve ponechá všechny OPS flagy vypnuté, aplikuje rozšiřující migraci, provede `ops:monitor --json --no-notify`, ručně ověří admin UI a `/health` a teprve potom samostatnou změnou aktivuje monitoring. Cron, SMTP ani příjemci se tímto commitem nemění.

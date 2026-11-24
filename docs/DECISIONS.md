@@ -405,3 +405,31 @@
 - Stav: přijato pro opravu Fáze 8B
 - Rozhodnutí: Původní COMPLETE manifest a jeho tři komponenty jsou neměnné. Off-server potvrzení a append-only historie úspěšných restore testů se ukládají atomicky do `recovery-evidence.json`, svázaného s backup ID, SHA-256 manifestu a produkčním prostředím a chráněného Laravel `Crypt`. Tajný APP_KEY zůstává v odděleném escrow. Off-server příkaz eviduje výslovnou atestaci provozovatele po nezávislé kontrole; vzdálenou kopii sám nekontroluje.
 - Dopad: Chybějící sidecar je `WARN` a nemění validitu zálohy. Neplatná integrita nebo cizí vazba je preflight `ERROR`. Restore zapisuje `SUCCESS` pouze po úplné izolované kontrole, nové testy zachovávají historii a neúspěch evidence nemění. Ruční editace manifestu ani sidecaru není podporovaná.
+
+## D-059: Opakovaný monitoring je persistentní, ale oddělený od workflow
+
+- Datum: 2026-11-24
+- Stav: přijato pro implementaci Fáze 8C
+- Rozhodnutí: Monitorovací běhy, aktivní alerty a append-only události mají vlastní tabulky a služby. Monitoring čte preflight a bezpečné agregáty, ale nemění objednávky, integrace, outbox payloady ani connector data.
+- Dopad: Stejný `check_key + fingerprint` má jeden aktivní alert; resolve uvolní dedup klíč a další výskyt založí nový cyklus.
+
+## D-060: ACK je lidské převzetí, nikoli technické uzdravení
+
+- Datum: 2026-11-24
+- Stav: přijato pro implementaci Fáze 8C
+- Rozhodnutí: ACK vyžaduje AK_ADMIN, CSRF, poznámku a aktuální `row_version`. Nemění výsledek checku, occurrence ani fingerprint a nebrání eskalaci na CRITICAL.
+- Dopad: RESOLVED vytváří pouze následující zdravý monitorovací výsledek. Audit a alert event uchovávají oddělené stopy.
+
+## D-061: Alert e-mail a samotný monitoring mají oddělené feature flagy
+
+- Datum: 2026-11-24
+- Stav: přijato pro implementaci Fáze 8C
+- Rozhodnutí: `OPS_MONITOR_ENABLED=false` a `OPS_ALERT_EMAIL_ENABLED=false` jsou nezávislé bezpečné výchozí hodnoty. Příjemci jsou pouze runtime konfigurace; testy používají fake mailer.
+- Dopad: Monitoring lze nejprve provozovat s DB/UI/log routingem bez SMTP. Doručení je at-least-once a vzácná duplicita po pádu mezi send a potvrzením je dokumentovaný limit.
+
+## D-062: Veřejný health endpoint je minimální readiness, nikoli diagnostika
+
+- Datum: 2026-11-24
+- Stav: přijato pro implementaci Fáze 8C
+- Rozhodnutí: `/health` je rate-limitovaný a vrací pouze `OK`/200 nebo `UNAVAILABLE`/503 podle aplikace, DB a runtime storage. Pohoda, SMTP, backup a TLS monitoring jeho liveness neblokují.
+- Dopad: Detail checks, historie a metadata jsou pouze v CLI a autorizovaném AK_ADMIN UI. Původní framework `/up` se nepoužívá.

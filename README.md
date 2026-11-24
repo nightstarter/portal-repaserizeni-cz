@@ -43,11 +43,11 @@ Samostatný transakční portál AUTOKLUBY ↔ POLSKO. Procesní pravidla určuj
 - [ ] Fáze 8 – rozpracovaná produkční připravenost
   - [x] Fáze 8A – bezpečnostní baseline, permission matrix a provozní preflight (dokončeno, viz [docs/PHASE_8A.md](docs/PHASE_8A.md))
   - [ ] Fáze 8B – zálohy, obnova a disaster recovery (implementováno; čeká na produkční a provozní akceptaci, viz [docs/PHASE_8B.md](docs/PHASE_8B.md))
-  - [ ] Fáze 8C – monitoring, health checks a alerty
+  - [ ] Fáze 8C – monitoring, health checks a alerty (implementováno, ale nenasazeno a neaktivováno; viz [docs/PHASE_8C.md](docs/PHASE_8C.md))
   - [ ] Fáze 8D – izolované smoke/load testy a anonymní demo prostředí
   - [ ] Fáze 8E – go-live checklist, importní startovní bod a závěrečná akceptace
 
-Aktuální stav: Fáze 0–7 a podfáze 8A jsou dokončené. Implementace 8B je připravená, ale 8B není dokončená: chybí skutečná produkční COMPLETE záloha, off-server kopie, úspěšný izolovaný restore test, naměřené časy a vlastníkem potvrzené RPO/RTO. Fáze 8 zůstává rozpracovaná a 8C–8E nebyly zahájeny. Legacy mapování bylo ověřeno proti živé databázi a přijato ve Fázi 1F. Fáze 2 implementovala zakázkovou a skladovou repasi s paralelními větvemi, Fáze 3 atomické hromadné zásilky AUTOKLUBY ↔ POLSKO, Fáze 4 vratky a finance, Fáze 5 diskusi a notifikace a Fáze 6 opakovatelné reklamace `WARRANTY` a systémové výkupy `BUYBACK`.
+Aktuální stav: Fáze 0–7 a podfáze 8A jsou dokončené. Produkční COMPLETE záloha, její verify, validní sidecar a off-server atestace 8B existují. 8B ale není dokončená: sidecar neobsahuje izolovaný restore `SUCCESS`, poslední záloha při kontrole překročila limit čerstvosti a RPO/RTO zůstává `OWNER_CONFIRMATION_REQUIRED`. Implementace 8C je připravená, ale migrace ani feature flag nebyly produkčně aktivovány. Fáze 8 zůstává rozpracovaná a 8D–8E nebyly zahájeny.
 
 Pohoda bridge z Fáze 7 je nasazený a běží každých pět minut. Použitelný základní snapshot je `PARTIAL`: 2482 platných `RR` referencí je přijato jako `UNMAPPED` a dvě duplicitní reference zůstávají bezpečně odmítnuté. Následné nezměněné běhy používají `UNCHANGED_CONFIRMATION_ONLY`. HPSERVER konektor má pouze read-only SQL přístup k Pohodě a portál nemá přímé SQL spojení do Pohody.
 
@@ -56,6 +56,8 @@ Pohoda bridge z Fáze 7 je nasazený a běží každých pět minut. Použiteln�
 Read-only produkční kontrola 8A je dostupná jako `php artisan ops:preflight` nebo `php artisan ops:preflight --json`; podrobnosti jsou v [docs/OPERATIONS_PREFLIGHT.md](docs/OPERATIONS_PREFLIGHT.md). PHP CLI 7.4.33 a Windows Server 2012 R2 konektoru jsou přijatý technický dluh (`WARN`), nikoli blokátor 8A. Produkční aktivace legacy importu, diskusních e-mailů ani zákaznických výkupních e-mailů dosud neproběhla.
 
 Fáze 8B přidává read-only `backup:diagnose`, `backup:plan`, bezpečný `backup:create --target=...`, kryptografický `backup:verify`, auditované `backup:evidence:off-server` a guardovaný `backup:restore-check`. Původní COMPLETE manifest a tři komponenty zůstávají neměnné; následná off-server/restore evidence je autentizovaný atomický sidecar. `backup:create` vytváří konzistentní DB/private balíček přes vlastní staging a automatický maintenance režim; produkční restore nikdy neprovádí. Cíl musí být nový absolutní adresář mimo webroot a storage. Přesný postup je v [backup policy](docs/BACKUP_POLICY.md) a [restore runbooku](docs/RESTORE_RUNBOOK.md). Fáze 8B zůstává nedokončená do doložení off-server kontroly, izolované obnovy, měření a potvrzení RPO/RTO.
+
+Fáze 8C přidává persistentní `ops:monitor`, deduplikované alerty, append-only historii, scheduler heartbeat, AK_ADMIN UI a minimální `/health`. Výchozí `OPS_MONITOR_ENABLED=false`, `OPS_ALERT_EMAIL_ENABLED=false` a `OPS_TLS_CHECK_ENABLED=false` znamenají, že implementace sama monitoring ani doručování neaktivuje. Viz [monitoring](docs/MONITORING.md) a [alerting](docs/ALERTING.md).
 
 ## Instalace z čistého klonu
 
@@ -92,7 +94,7 @@ Webový server musí obsluhovat výhradně adresář `public/`; příklad a prov
 - hesla používají frameworkový Argon2id hash,
 - změny uživatelů, přihlášení a preference jazyka se auditují bez hesel,
 - `.env`, logy a závislosti se necommitují,
-- health endpoint `/up` nevrací citlivé provozní údaje,
+- health endpoint `/health` vrací jen `OK` nebo `UNAVAILABLE`,
 - integrační přepínače jsou ve výchozím stavu vypnuté.
 
 ## Kontroly kvality
