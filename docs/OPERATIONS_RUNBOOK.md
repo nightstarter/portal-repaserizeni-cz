@@ -8,6 +8,8 @@ Ověřte čerstvost heartbeat a poslední confirmation. Známý čerstvý `PARTI
 
 Spusťte read-only `backup:verify` nad evidovaným COMPLETE balíčkem. Při stale záloze vytvořte nový balíček schváleným postupem. Při recovery evidence warningu proveďte a evidujte skutečný izolovaný restore; sidecar ani manifest ručně neupravujte. Cesty, checksumy a credentials nevkládejte do alert poznámky.
 
+U `scheduled_backup` rozlište `FAILED`, `SKIPPED_LOCKED` a zastaralý `SUCCESS`. Při locku ověřte právě běžící ruční/plánovaný backup a TTL; lock neuvolňujte násilně, dokud není vyloučen živý creator. Při `POINTER_UPDATE_FAILED` zachovejte předchozí pointer a samostatně ověřte dokončený balíček. Nikdy zpětně nevytvářejte automatickou off-server atestaci a nemažte staré balíčky bez schválené retenční operace. Provozní cíle jsou RPO 24 hodin a RTO 8 hodin.
+
 ## Disk/storage alert
 
 Nejdřív ověřte agregované volné místo a počty orphan/missing. Nezapisujte názvy zákaznických souborů do ticketu, logu ani ACK. Mazání souborů nebo retence vyžaduje samostatné schválení a ověřenou zálohu.

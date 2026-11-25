@@ -359,10 +359,10 @@
 
 ## D-052: RPO a RTO určuje vlastník až podle reálného měření
 
-- Datum: 2026-11-20
-- Stav: `OWNER_CONFIRMATION_REQUIRED`
-- Rozhodnutí: Doporučená frekvence a retence nejsou smluvní RPO/RTO. Hodnoty RPO a RTO nesmí být odhadnuty z testovací fixture; vlastník je potvrdí až po skutečné produkční záloze, off-server kopii a měřeném izolovaném restore testu.
-- Dopad: Fáze 8B zůstává nedokončená. Automatické mazání starých záloh není aktivováno.
+- Datum: 2026-11-20; potvrzeno vlastníkem 2026-11-25
+- Stav: přijato
+- Rozhodnutí: Doporučená frekvence a retence nejsou smluvní cíle. Vlastník výslovně potvrzuje RPO 24 hodin a RTO 8 hodin; testovací fixture se nadále nesmí vydávat za důkaz jejich dosažení.
+- Dopad: Denní backup a restore cvičení se vyhodnocují proti potvrzeným hodnotám. Fáze 8B zůstává otevřená pouze kvůli zbývající off-server kontrole a provozním měřením. Automatické mazání starých záloh není aktivováno.
 
 ## D-053: Produkční COMPLETE balíček vzniká pouze atomickým create workflow
 
@@ -433,3 +433,10 @@
 - Stav: přijato pro implementaci Fáze 8C
 - Rozhodnutí: `/health` je rate-limitovaný a vrací pouze `OK`/200 nebo `UNAVAILABLE`/503 podle aplikace, DB a runtime storage. Pohoda, SMTP, backup a TLS monitoring jeho liveness neblokují.
 - Dopad: Detail checks, historie a metadata jsou pouze v CLI a autorizovaném AK_ADMIN UI. Původní framework `/up` se nepoužívá.
+
+## D-063: Plánovaný backup sdílí creator lock a latest stav publikuje pointerem
+
+- Datum: 2026-11-25
+- Stav: přijato pro implementaci Fáze 8B/8C
+- Rozhodnutí: `backup:scheduled` je defaultně vypnutý, vytváří bezpečný UTC cíl pouze v `BACKUP_ROOT` a s ručním `backup:create` sdílí jeden cache lock. `BACKUP_LATEST_POINTER` se atomicky posune až po `COMPLETE` a úspěšném verifieru; `BACKUP_LATEST_MANIFEST` je fallback pouze pro chybějící nebo nenakonfigurovaný pointer.
+- Dopad: Selhání zachová předchozí pointer a žádná cesta automaticky nepotvrdí off-server kopii ani nemaže zálohy. Scheduler používá enabled filtr a `withoutOverlapping`; monitoring čte persistentní bezpečné stavy `SUCCESS`, `FAILED`, `SKIPPED_DISABLED`, `SKIPPED_LOCKED` přes existující monitorovací sadu.

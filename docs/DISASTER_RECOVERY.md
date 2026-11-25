@@ -14,6 +14,6 @@ Obnova potřebuje Git revizi/tag, Composer lock, podporovaný portálový PHP/Ma
 
 ## Cíle a cvičení
 
-RPO i RTO jsou `OWNER_CONFIRMATION_REQUIRED`. Musí vycházet z obchodního rozhodnutí a naměřeného produkčního backup/restore cvičení. Doporučený čtvrtletní test není sám o sobě RPO/RTO.
+Vlastník dne 25. 11. 2026 výslovně potvrdil **RPO = 24 hodin** a **RTO = 8 hodin**. Při incidentu se vůči těmto hodnotám eviduje čas posledního použitelného konzistenčního bodu a doba od vyhlášení obnovy po ověřenou provozuschopnost. Doporučený čtvrtletní test zůstává povinnou kontrolou dosažitelnosti, nikoli náhradou měření skutečného incidentu.
 
-Fáze 8B se uzavře teprve po skutečné COMPLETE záloze, off-server kopii, checksum kontrole, izolované obnově, měření a potvrzení RPO/RTO. Automatická retence/mazání, monitoring a alerty patří do dalších rozhodnutí; 8C–8E zde nezačínají.
+Fáze 8B se uzavře teprve po úplné off-server kopii aktuální zálohy, její checksum kontrole a zbývajících provozních měřeních. Automatické mazání zůstává vypnuté. Plánovaný backup ani monitoring samy off-server kopii nepotvrzují a restore neprovádějí; Fáze 8C zůstává produkčně neaktivovaná.

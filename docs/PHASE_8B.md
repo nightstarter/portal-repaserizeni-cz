@@ -8,6 +8,7 @@ Datum implementace: 20. 11. 2026. Implementace je připravená, ale Fáze 8B **n
 - manifest formátu 1 s UTC časem, backup ID, prostředím, Git revizí, migracemi, DB engine/verzí, povinnými komponentami, velikostmi, SHA-256 a počty kritických tabulek;
 - `php artisan backup:plan [--json]`, který pouze vypíše plán;
 - `php artisan backup:create --target=<nová-absolutní-cesta> [--json]`, který přes chráněný staging vytvoří a interně ověří balíček;
+- defaultně vypnutý `php artisan backup:scheduled [--json]`, který používá bezpečný UTC target, společný creator lock a atomický latest pointer;
 - `php artisan backup:diagnose [--json]`, který bez exportu řádků ověří dump klienta, protected client config, PDO, logical DB objekty a minimální schema-only probe;
 - `php artisan backup:verify <absolutní-cesta> [--json]`, který ověří metadata, canonical cesty, všechny soubory, velikosti a checksumy;
 - `php artisan backup:evidence:off-server <absolutní-cesta> --evidence-id=<change-id> --confirmed [--json]` pro auditované potvrzení provozovatele po nezávislém ověření celé off-server kopie;
@@ -33,6 +34,12 @@ Původní `manifest.json`, `database.sql`, `private-storage.tar` a `metadata.jso
 
 Chybějící sidecar nezneplatní zálohu: `backup:verify` skončí podle manifestu a komponent a evidence pouze zobrazí jako `WARN`/`OK`. Preflight klasifikuje chybějící evidence jako `WARN`, porušenou integritu nebo vazbu na jiný backup jako `ERROR` a platné off-server potvrzení s čerstvým restore testem jako `OK`.
 
+## Plánovaný backup
+
+`BACKUP_SCHEDULED_ENABLED=false` je bezpečný výchozí stav. Po samostatné aktivaci scheduler spouští `backup:scheduled` v `BACKUP_SCHEDULE_TIME=02:30`, jen při enabled flagu a s `withoutOverlapping(BACKUP_SCHEDULE_LOCK_MINUTES)`. Příkaz vytváří pouze canonical UTC cíl pod `BACKUP_ROOT`, sdílí `backup-creation-global` lock s ručním `backup:create` a ukládá stav `SUCCESS`, `FAILED`, `SKIPPED_DISABLED` nebo `SKIPPED_LOCKED` bez credentials a absolutních cest.
+
+Mode-0600 `BACKUP_LATEST_POINTER` se atomicky aktualizuje až po COMPLETE + verify. Při jakékoli chybě zůstává předchozí pointer beze změny a případný již dokončený balíček se automaticky nemaže. `BACKUP_LATEST_MANIFEST` je kompatibilní fallback, pokud pointer není nakonfigurován nebo ještě neexistuje. Latest i restore health nadále vyhodnocuje společná služba `BackupEvidenceHealth`; nevzniká druhá politika. Plánovaný běh nikdy nevytváří off-server atestaci, recovery evidence ani retenci.
+
 ## Diagnostická oprava dump runneru
 
 Původní runner bezpodmínečně přidával `--routines`, `--events` a `--triggers` a všechny chyby procesu i pozdějších fází převáděl na jednu obecnou hlášku. Raw stderr ani bezpečný exit důvod se neuchoval, takže přesnou historickou příčinu neúspěšných plných běhů nelze zpětně rekonstruovat. Produkční read-only diagnostika 21. 11. 2026 ověřila klient i server MariaDB 10.11.14, TCP/PDO spojení, mode-0600 client config a schema-only dump. Databáze viditelná aplikačnímu účtu obsahovala 0 triggerů, 0 routines a 0 events. Samostatný schema-only probe se starými speciálními volbami i `--result-file` uspěl; tyto volby proto nejsou prokázanou příčinou původního pádu.
@@ -51,13 +58,12 @@ Verifier vrací bezpečný `verification_code`: `MANIFEST_INVALID`, `MANIFEST_ST
 
 Kontrola 25. 11. 2026 vytvořila a ověřila novou produkční COMPLETE zálohu se třemi povinnými komponentami; `backup:verify` skončil `valid=true` bez chyby. Preflight ji eviduje jako čerstvou, ale `latest_backup=WARN`, protože tato nová kopie ještě nemá samostatné potvrzení úplné off-server kontroly.
 
-Restore evidence je záměrně ukotvena nezávisle na nejnovější záloze. Autentizovaný sidecar předchozí ověřené produkční zálohy je `VALID` a obsahuje čerstvý izolovaný `restore_test=SUCCESS`; `recovery_evidence=OK`. Absolutní cesty, checksumy a provozní identity nejsou v dokumentaci uvedeny. Fázi 8B přesto nelze formálně uzavřít bez off-server kontroly nové zálohy, provozních měření a potvrzení RPO/RTO.
+Restore evidence je záměrně ukotvena nezávisle na nejnovější záloze. Autentizovaný sidecar předchozí ověřené produkční zálohy je `VALID` a obsahuje čerstvý izolovaný `restore_test=SUCCESS`; `recovery_evidence=OK`. Absolutní cesty, checksumy a provozní identity nejsou v dokumentaci uvedeny. Vlastník dne 25. 11. 2026 výslovně potvrdil RPO 24 hodin a RTO 8 hodin. Fázi 8B přesto nelze formálně uzavřít bez off-server kontroly nové zálohy a závěrečných provozních měření.
 
 Před dokončením 8B musí provozovatel doložit (existující produkční COMPLETE backup a jeho úspěšný verify samy o sobě ještě 8B nedokončují):
 
 1. skutečně přenést a samostatně ověřit úplnou kopii nové zálohy mimo webserver a až potom zapsat její off-server atestaci;
 2. stav `OK` kontrol `latest_backup` a `recovery_evidence`;
-3. naměřenou dobu zálohy a obnovy;
-4. vlastníkem potvrzené RPO a RTO (`OWNER_CONFIRMATION_REQUIRED`).
+3. naměřenou dobu zálohy a obnovy vůči potvrzeným RPO 24 hodin / RTO 8 hodin.
 
-RPO/RTO vlastník dosud nepotvrdil; stav zůstává `OWNER_CONFIRMATION_REQUIRED`. PHP 7.4.33 a Windows Server 2012 R2 se nemění.
+PHP 7.4.33 a Windows Server 2012 R2 se nemění. Plánovaný backup ani Fáze 8C nebyly produkčně aktivovány.

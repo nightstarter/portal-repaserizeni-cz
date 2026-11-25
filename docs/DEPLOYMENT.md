@@ -66,7 +66,7 @@ HTTP VirtualHost musí pouze přesměrovat na HTTPS. TLS certifikát, HSTS a coo
 * * * * * cd /var/www/portal.repaserizeni.cz/web && php8.5 artisan schedule:run >> /dev/null 2>&1
 ```
 
-Scheduler registruje outbox worker každou minutu, bezpečný scheduler heartbeat každou minutu a `ops:monitor` každých pět minut. Vše používá `withoutOverlapping`; `onOneServer` se nepoužívá. Monitor se nespustí, dokud není aplikována migrace 8C a řízeně nastaveno `OPS_MONITOR_ENABLED=true`. E-mailový alert kanál zůstává samostatně vypnutý přes `OPS_ALERT_EMAIL_ENABLED=false`. Scheduler neobsahuje import objednávek.
+Scheduler registruje outbox worker každou minutu, bezpečný scheduler heartbeat každou minutu, `ops:monitor` každých pět minut a defaultně vypnutý `backup:scheduled` v `BACKUP_SCHEDULE_TIME`. Vše používá `withoutOverlapping`; `onOneServer` se nepoužívá. Monitor se nespustí, dokud není aplikována migrace 8C a řízeně nastaveno `OPS_MONITOR_ENABLED=true`. Plánovaný backup se nespustí bez samostatného `BACKUP_SCHEDULED_ENABLED=true`. E-mailový alert kanál zůstává vypnutý přes `OPS_ALERT_EMAIL_ENABLED=false`. Scheduler neobsahuje import objednávek.
 
 Konfiguraci a provozní chování notifikačního workeru dokumentuje `PHASE_5C.md`. Cron ani SMTP se nezapínají automaticky deploymentem kódu.
 
@@ -80,3 +80,17 @@ Konfiguraci a provozní chování notifikačního workeru dokumentuje `PHASE_5C.
 ## Aktivace Fáze 8C
 
 Přesný postup je v [MONITORING.md](MONITORING.md). Deployment kódu nejprve ponechá všechny OPS flagy vypnuté, aplikuje rozšiřující migraci, provede `ops:monitor --json --no-notify`, ručně ověří admin UI a `/health` a teprve potom samostatnou změnou aktivuje monitoring. Cron, SMTP ani příjemci se tímto commitem nemění.
+
+## Aktivace plánovaných záloh
+
+Implementaci lze nasadit s `BACKUP_SCHEDULED_ENABLED=false`; tím nevznikne žádná automatická záloha. Aktivace je samostatná provozní změna až po aplikaci obou pending migrací Fáze 8C/backup history:
+
+1. vytvořit existující canonical privátní adresář mimo repozitář, webroot a application storage a nastavit `BACKUP_ROOT`;
+2. nastavit `BACKUP_LATEST_POINTER` na dosud neexistující nebo validní mode-0600 JSON soubor uvnitř `BACKUP_ROOT`; ponechat ověřený `BACKUP_LATEST_MANIFEST` jako fallback během přechodu;
+3. potvrdit `BACKUP_SCHEDULE_TIME=02:30`, `BACKUP_SCHEDULE_LOCK_MINUTES=120`, dostupnou kapacitu a persistentní cache backend pro společný lock;
+4. s flagem stále `false` obnovit config cache a ověřit `schedule:list`, migrace a `backup:scheduled --json` = `SKIPPED_DISABLED`; tento krok nevytváří backup;
+5. samostatnou schválenou změnou nastavit `BACKUP_SCHEDULED_ENABLED=true`, obnovit config cache a ověřit registraci v scheduleru;
+6. po prvním reálném okně ověřit `SUCCESS`, COMPLETE manifest, checksumy, atomický pointer a `ops:monitor --check=scheduled_backup --json --no-notify`;
+7. skutečnou kopii přenést mimo webserver, tam znovu ověřit a teprve potom ručně zapsat off-server atestaci. Automatické mazání zůstává zakázané.
+
+Aktivace plánovaných záloh neaktivuje `OPS_MONITOR_ENABLED`, SMTP, TLS check ani Fázi 8C; ty mají vlastní schválení.

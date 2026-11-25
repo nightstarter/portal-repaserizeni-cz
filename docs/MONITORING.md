@@ -21,6 +21,7 @@
 | `integration_delivery` | retry, stale lock 15 min, dead-letter | WARN/ERROR |
 | `latest_backup` | COMPLETE + checksum + 26 hodin | ERROR |
 | `recovery_evidence` | validní sidecar + restore do 100 dní | WARN/ERROR |
+| `scheduled_backup` | poslední persistentní stav + stáří 26 hodin | SUCCESS=OK, FAILED/stale=ERROR, skipped=INFO/WARN |
 | `disk_space` | nejméně 1024 MB | CRITICAL |
 | `private_storage_inventory` | agregovaný orphan/missing počet 0 | ERROR |
 | `feature_flags`, `bridge_command_whitelist`, `bridge_server_allowlists` | bezpečné produkční hodnoty | ERROR |
@@ -52,7 +53,7 @@ Windows Task Scheduler konektoru se z tohoto heartbeat neodvozuje.
 ## Budoucí aktivace
 
 1. Nasadit přesný ověřený commit a provést zálohu.
-2. Spustit migraci `2026_11_24_000017_create_phase_8c_monitoring.php` v řízeném okně.
+2. Spustit migrace `2026_11_24_000017_create_phase_8c_monitoring.php` a `2026_11_25_000018_create_scheduled_backup_runs.php` v řízeném okně.
 3. Ponechat `OPS_MONITOR_ENABLED=false`; obnovit config cache.
 4. Spustit jednorázově `ops:monitor --json --no-notify` a vyhodnotit všechny check keys.
 5. Ručně ověřit `/health` a AK_ADMIN UI bez informačního úniku.
@@ -60,5 +61,7 @@ Windows Task Scheduler konektoru se z tohoto heartbeat neodvozuje.
 7. Nastavit `OPS_MONITOR_ENABLED=true`, obnovit config cache a sledovat nejméně tři pětiminutové intervaly.
 8. Bez SMTP vyvolat schválený bezpečný test alert, ověřit deduplikaci, ACK, recovery a audit.
 9. Samostatně schválit alespoň jeden alert kanál. E-mail zapínat až po příjemcích a SMTP testu.
+
+`BACKUP_SCHEDULED_ENABLED` zůstává během celé aktivace 8C nezávisle `false`, pokud nebyla zvlášť schválena aktivace podle [DEPLOYMENT.md](DEPLOYMENT.md). Monitorování scheduled-backup stavu backup nespouští.
 
 Rollback: nejprve `OPS_MONITOR_ENABLED=false` a config cache; databázové tabulky nemažte, historii zachovejte. Kód lze vrátit na předchozí tag. Migraci nevracejte automaticky.

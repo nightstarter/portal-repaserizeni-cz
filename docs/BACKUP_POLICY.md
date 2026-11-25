@@ -63,6 +63,14 @@ Laravel maintenance nezastavuje externí CLI writery. Provozovatel proto musí b
 
 Při každé chybě vrací create nenulový exit, nezveřejní COMPLETE balíček a uklidí pouze vlastní staging a credentials file. Výstup databázového nástroje se nepropaguje, aby nemohl zveřejnit DSN nebo secret.
 
+## Plánované vytvoření a latest pointer
+
+`php8.5 artisan backup:scheduled [--json]` je ve výchozím stavu vypnutý přes `BACKUP_SCHEDULED_ENABLED=false`. Po řízené aktivaci vytváří v canonical `BACKUP_ROOT` automatický UTC cíl `portal-backup-YYYYMMDDTHHMMSSZ`. Ruční `backup:create` i plánovaný příkaz používají stejný cache lock s TTL `BACKUP_SCHEDULE_LOCK_MINUTES`; překrytý plánovaný běh skončí bezpečně jako `SKIPPED_LOCKED`.
+
+`BACKUP_LATEST_POINTER` je mode-0600 JSON pointer uvnitř `BACKUP_ROOT`. Aktualizuje se atomickým rename až poté, co creator zveřejní `COMPLETE` balíček a stejný verifier jej znovu přijme. Chyba před rename zachová předchozí pointer; dokončený balíček se automaticky nemaže. Pokud pointer není nakonfigurován nebo ještě neexistuje, `BACKUP_LATEST_MANIFEST` zůstává kompatibilním fallbackem. Neplatný existující pointer je chyba, nikoli důvod tiše použít fallback.
+
+Scheduler registruje příkaz v `BACKUP_SCHEDULE_TIME` (výchozí `02:30`) pouze při enabled flagu a s `withoutOverlapping`. Persistentní stavy jsou `SUCCESS`, `FAILED`, `SKIPPED_DISABLED` a `SKIPPED_LOCKED`. Příkaz nikdy automaticky nepotvrzuje off-server kopii, nevytváří restore evidence a nemaže staré zálohy.
+
 ## Frekvence, retence a ochrana
 
 - doporučení: denní DB + private storage;
@@ -73,4 +81,4 @@ Při každé chybě vrací create nenulový exit, nezveřejní COMPLETE balíče
 - čtvrtletní izolovaný restore test;
 - automatické mazání starých záloh zatím není aktivováno.
 
-RPO: `OWNER_CONFIRMATION_REQUIRED`. RTO: `OWNER_CONFIRMATION_REQUIRED`. Doporučení ani testovací čas nejsou potvrzené cíle.
+Vlastník dne 25. 11. 2026 výslovně potvrdil **RPO = 24 hodin** a **RTO = 8 hodin**. Denní plán musí být provozně sledován tak, aby tento RPO splnil; samotná registrace scheduleru není důkazem splnění. Retence a pravidelná restore cvičení musí zachovat schopnost dosáhnout potvrzeného RTO.
