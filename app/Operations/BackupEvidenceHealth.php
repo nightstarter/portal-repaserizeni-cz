@@ -4,6 +4,7 @@ namespace App\Operations;
 
 use App\Backup\BackupManifestVerifier;
 use App\Backup\BackupVerification;
+use App\Backup\LatestBackupManifest;
 use App\Backup\RecoveryEvidenceStore;
 use Carbon\CarbonImmutable;
 use Throwable;
@@ -14,12 +15,17 @@ final class BackupEvidenceHealth
     public function __construct(
         private readonly BackupManifestVerifier $verifier,
         private readonly RecoveryEvidenceStore $evidenceStore,
+        private readonly LatestBackupManifest $latestManifest,
     ) {}
 
     /** @return array<string,mixed> */
     public function latest(): array
     {
-        $path = config('backups.latest_manifest');
+        try {
+            $path = $this->latestManifest->resolve();
+        } catch (Throwable) {
+            return ['status' => 'ERROR', 'configured' => true, 'manifest_valid' => false, 'off_server_confirmed' => false];
+        }
         if (! is_string($path) || $path === '') {
             return ['status' => 'ERROR', 'configured' => false, 'off_server_confirmed' => false];
         }

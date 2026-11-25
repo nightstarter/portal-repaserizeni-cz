@@ -20,3 +20,8 @@ Schedule::command('ops:monitor --no-interaction')
     ->everyFiveMinutes()
     ->withoutOverlapping(10)
     ->when(fn (): bool => (bool) config('operations.monitoring.enabled'));
+
+Schedule::command('backup:scheduled --no-interaction')
+    ->dailyAt((string) config('backups.schedule_time', '02:30'))
+    ->withoutOverlapping(max(1, (int) config('backups.schedule_lock_minutes', 120)))
+    ->when(fn (): bool => (bool) config('backups.scheduled_enabled'));

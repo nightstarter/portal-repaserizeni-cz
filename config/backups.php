@@ -7,6 +7,11 @@ return [
     'diagnose_timeout_seconds' => (int) env('BACKUP_DIAGNOSE_TIMEOUT_SECONDS', 60),
     'diagnose_parent' => env('BACKUP_DIAGNOSE_PARENT', sys_get_temp_dir()),
     'request_drain_seconds' => (int) env('BACKUP_REQUEST_DRAIN_SECONDS', 10),
+    'scheduled_enabled' => (bool) env('BACKUP_SCHEDULED_ENABLED', false),
+    'root' => env('BACKUP_ROOT'),
+    'schedule_time' => env('BACKUP_SCHEDULE_TIME', '02:30'),
+    'latest_pointer' => env('BACKUP_LATEST_POINTER'),
+    'schedule_lock_minutes' => (int) env('BACKUP_SCHEDULE_LOCK_MINUTES', 120),
     'latest_manifest' => env('BACKUP_LATEST_MANIFEST'),
     'restore_evidence_manifest' => env('BACKUP_RESTORE_EVIDENCE_MANIFEST'),
     'maximum_age_hours' => (int) env('BACKUP_MAX_AGE_HOURS', 26),
@@ -36,4 +41,5 @@ return [
     'testing_database_objects' => null,
     'testing_source_identity_sha256' => null,
     'testing_evidence_fail_before_rename' => false,
+    'testing_pointer_fail_before_rename' => false,
 ];

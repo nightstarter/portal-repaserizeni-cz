@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Backup\BackupCreator;
+use App\Backup\BackupCoordinator;
 use App\Backup\BackupFailure;
 use Illuminate\Console\Command;
 use Throwable;
@@ -13,7 +13,7 @@ final class BackupCreate extends Command
 
     protected $description = 'Create and verify a consistent MariaDB and private-storage backup package';
 
-    public function handle(BackupCreator $creator): int
+    public function handle(BackupCoordinator $coordinator): int
     {
         $target = $this->option('target');
         if (! is_string($target) || $target === '') {
@@ -25,7 +25,7 @@ final class BackupCreate extends Command
             ))->safeDetails());
         }
         try {
-            $result = $creator->create($target);
+            $result = $coordinator->create($target);
         } catch (BackupFailure $exception) {
             return $this->failureDetails($exception->safeDetails());
         } catch (Throwable) {

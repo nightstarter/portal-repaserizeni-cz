@@ -27,6 +27,20 @@ final class BackupPathGuard
         return $candidate;
     }
 
+    public function backupRoot(string $path): string
+    {
+        if (! $this->absolute($path) || $path === DIRECTORY_SEPARATOR || is_link($path)) {
+            throw new RuntimeException('Backup root must be an absolute non-root non-symlink directory.');
+        }
+        $resolved = realpath($path);
+        if ($resolved === false || ! is_dir($resolved) || $resolved !== rtrim($path, DIRECTORY_SEPARATOR)) {
+            throw new RuntimeException('Backup root must be an existing canonical directory.');
+        }
+        $this->rejectProtected($resolved);
+
+        return $resolved;
+    }
+
     public function existingBackup(string $path): string
     {
         if (! $this->absolute($path) || is_link($path)) {
