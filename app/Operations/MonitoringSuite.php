@@ -4,6 +4,7 @@ namespace App\Operations;
 
 use App\Models\MonitorRun;
 use App\Models\OutboxEvent;
+use App\Models\ScheduledBackupRun;
 use App\Models\SchedulerHeartbeat;
 use App\Operations\Contracts\TlsCertificateInspector;
 use Illuminate\Support\Facades\DB;
@@ -42,6 +43,7 @@ final class MonitoringSuite
         $checks->push($this->protect('monitor_last_success', fn (): MonitorCheck => $this->monitorFreshness($currentRunId)));
         $checks->push($this->protect('monitor_overlap', fn (): MonitorCheck => $this->monitorOverlap($currentRunId)));
         $checks->push($this->protect('integration_delivery', fn (): MonitorCheck => $this->integrationDelivery()));
+        $checks->push($this->protect('scheduled_backup', fn (): MonitorCheck => $this->scheduledBackup()));
         $checks->push($this->privateStorage->check());
         $checks->push($this->protect('tls_certificate', fn (): MonitorCheck => $this->tlsCertificate()));
 
@@ -171,6 +173,47 @@ final class MonitoringSuite
                 'dead_letter_count' => $deadLetters,
                 'stale_limit_minutes' => $staleMinutes,
             ]);
+    }
+
+    private function scheduledBackup(): MonitorCheck
+    {
+        if (! Schema::hasTable('scheduled_backup_runs')) {
+            return new MonitorCheck('scheduled_backup', MonitorCheck::ERROR, 'Historie plánovaných záloh není dostupná.', ['table_available' => false]);
+        }
+        $enabled = (bool) config('backups.scheduled_enabled', false);
+        $run = ScheduledBackupRun::query()->latest('completed_at')->first();
+        if (! $enabled) {
+            return new MonitorCheck('scheduled_backup', MonitorCheck::INFO, 'Plánované zálohy jsou feature flagem vypnuté.', [
+                'enabled' => false,
+                'last_status' => $run?->status,
+            ], false);
+        }
+        if ($run === null) {
+            return new MonitorCheck('scheduled_backup', MonitorCheck::WARN, 'Plánované zálohy jsou aktivní, ale dosud nemají dokončený běh.', [
+                'enabled' => true,
+                'last_status' => null,
+            ]);
+        }
+        $age = max(0, (int) $run->completed_at->diffInHours(now()));
+        $limit = max(1, (int) config('backups.maximum_age_hours', 26));
+        $severity = match ($run->status) {
+            ScheduledBackupRun::SUCCESS => $age <= $limit ? MonitorCheck::OK : MonitorCheck::ERROR,
+            ScheduledBackupRun::SKIPPED_LOCKED => MonitorCheck::WARN,
+            ScheduledBackupRun::SKIPPED_DISABLED => MonitorCheck::WARN,
+            default => MonitorCheck::ERROR,
+        };
+
+        return new MonitorCheck('scheduled_backup', $severity, match ($severity) {
+            MonitorCheck::OK => 'Poslední plánovaná záloha uspěla a je čerstvá.',
+            MonitorCheck::WARN => 'Poslední plánovaná záloha byla bezpečně přeskočena.',
+            default => 'Poslední plánovaná záloha selhala nebo je zastaralá.',
+        }, [
+            'enabled' => true,
+            'last_status' => $run->status,
+            'failure_code' => $run->failure_code,
+            'age_hours' => $age,
+            'limit_hours' => $limit,
+        ]);
     }
 
     private function tlsCertificate(): MonitorCheck
