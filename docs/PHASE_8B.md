@@ -49,16 +49,15 @@ Verifier vrací bezpečný `verification_code`: `MANIFEST_INVALID`, `MANIFEST_ST
 
 ## Stav akceptace
 
-Read-only kontrola 24. 11. 2026 ověřila evidovaný produkční backup ID `backup-20261121T004618Z-f95b68ae-8294-421d-b291-e8d409db3452`: manifest má stav `COMPLETE`, tři povinné komponenty a `backup:verify` skončil `valid=true` bez chyby a warningu. Autentizovaný sidecar je `VALID`, odpovídá backup ID i SHA-256 manifestu a obsahuje potvrzení úplné off-server kopie. Absolutní cesta, checksumy a provozní identity nejsou v dokumentaci uvedeny.
+Kontrola 25. 11. 2026 vytvořila a ověřila novou produkční COMPLETE zálohu se třemi povinnými komponentami; `backup:verify` skončil `valid=true` bez chyby. Preflight ji eviduje jako čerstvou, ale `latest_backup=WARN`, protože tato nová kopie ještě nemá samostatné potvrzení úplné off-server kontroly.
 
-Sidecar však neobsahuje žádný `restore_test` se stavem `SUCCESS`. `ops:preflight` proto vrací `recovery_evidence=WARN`; zároveň vrací `latest_backup=ERROR`, protože stáří této COMPLETE zálohy bylo při kontrole 86 hodin proti limitu 26 hodin. Ústní potvrzení restore procedury není náhradou za autentizovaný záznam. Fázi 8B proto nelze formálně uzavřít.
+Restore evidence je záměrně ukotvena nezávisle na nejnovější záloze. Autentizovaný sidecar předchozí ověřené produkční zálohy je `VALID` a obsahuje čerstvý izolovaný `restore_test=SUCCESS`; `recovery_evidence=OK`. Absolutní cesty, checksumy a provozní identity nejsou v dokumentaci uvedeny. Fázi 8B přesto nelze formálně uzavřít bez off-server kontroly nové zálohy, provozních měření a potvrzení RPO/RTO.
 
 Před dokončením 8B musí provozovatel doložit (existující produkční COMPLETE backup a jeho úspěšný verify samy o sobě ještě 8B nedokončují):
 
-1. novou nebo stále čerstvou produkční COMPLETE zálohu tak, aby `latest_backup` nebyl `ERROR`;
-2. autentizovaný `restore_test=SUCCESS` z úspěšné obnovy do izolované neprodukční DB a storage;
-3. stav `OK` kontrol `latest_backup` a `recovery_evidence`;
-4. naměřenou dobu zálohy a obnovy;
-5. vlastníkem potvrzené RPO a RTO (`OWNER_CONFIRMATION_REQUIRED`).
+1. skutečně přenést a samostatně ověřit úplnou kopii nové zálohy mimo webserver a až potom zapsat její off-server atestaci;
+2. stav `OK` kontrol `latest_backup` a `recovery_evidence`;
+3. naměřenou dobu zálohy a obnovy;
+4. vlastníkem potvrzené RPO a RTO (`OWNER_CONFIRMATION_REQUIRED`).
 
 RPO/RTO vlastník dosud nepotvrdil; stav zůstává `OWNER_CONFIRMATION_REQUIRED`. PHP 7.4.33 a Windows Server 2012 R2 se nemění.

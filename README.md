@@ -47,7 +47,7 @@ Samostatný transakční portál AUTOKLUBY ↔ POLSKO. Procesní pravidla určuj
   - [ ] Fáze 8D – izolované smoke/load testy a anonymní demo prostředí
   - [ ] Fáze 8E – go-live checklist, importní startovní bod a závěrečná akceptace
 
-Aktuální stav: Fáze 0–7 a podfáze 8A jsou dokončené. Produkční COMPLETE záloha, její verify, validní sidecar a off-server atestace 8B existují. 8B ale není dokončená: sidecar neobsahuje izolovaný restore `SUCCESS`, poslední záloha při kontrole překročila limit čerstvosti a RPO/RTO zůstává `OWNER_CONFIRMATION_REQUIRED`. Implementace 8C je připravená, ale migrace ani feature flag nebyly produkčně aktivovány. Fáze 8 zůstává rozpracovaná a 8D–8E nebyly zahájeny.
+Aktuální stav: Fáze 0–7 a podfáze 8A jsou dokončené. Čerstvá produkční COMPLETE záloha a její verify existují; nezávisle ukotvená autentizovaná evidence obsahuje úspěšný izolovaný restore test. 8B ale není dokončená: nová záloha ještě nemá potvrzenou úplnou off-server kopii a RPO/RTO zůstává `OWNER_CONFIRMATION_REQUIRED`. Implementace 8C je připravená, ale migrace ani feature flag nebyly produkčně aktivovány. Fáze 8 zůstává rozpracovaná a 8D–8E nebyly zahájeny.
 
 Pohoda bridge z Fáze 7 je nasazený a běží každých pět minut. Použitelný základní snapshot je `PARTIAL`: 2482 platných `RR` referencí je přijato jako `UNMAPPED` a dvě duplicitní reference zůstávají bezpečně odmítnuté. Následné nezměněné běhy používají `UNCHANGED_CONFIRMATION_ONLY`. HPSERVER konektor má pouze read-only SQL přístup k Pohodě a portál nemá přímé SQL spojení do Pohody.
 
