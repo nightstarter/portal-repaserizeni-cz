@@ -276,6 +276,29 @@ class LegacyShopImportTest extends TestCase
         self::assertSame('PENDING_STOCK_CHECK', Order::first()->processThreads()->first()->state);
     }
 
+    public function test_limit_caps_merged_pending_candidates_for_safe_pilot(): void
+    {
+        $this->insertLegacyOrder(100);
+        $this->insertLegacyOrder(101);
+        IntegrationCheckpoint::query()->create([
+            'integration' => LegacyShopImportService::INTEGRATION,
+            'cursor' => '101',
+            'last_processed_id' => '101',
+            'metadata' => [
+                'source' => 'ESHOP',
+                'pending_source_order_ids' => ['100', '101'],
+            ],
+        ]);
+
+        $result = app(LegacyShopImportService::class)->run(dryRun: false, limit: 1);
+
+        self::assertSame(1, $result->scanned);
+        self::assertSame(1, $result->imported);
+        self::assertSame(1, Order::query()->count());
+        $this->assertDatabaseHas('orders', ['source_order_id' => '100']);
+        $this->assertDatabaseMissing('orders', ['source_order_id' => '101']);
+    }
+
     public function test_approval_two_defaults_to_custom_repair_subtype(): void
     {
         $this->insertLegacyOrder(100, ['order' => ['schvaleno' => 2]]);

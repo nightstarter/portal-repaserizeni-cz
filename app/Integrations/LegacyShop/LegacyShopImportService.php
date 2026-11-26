@@ -40,10 +40,10 @@ class LegacyShopImportService
         } else {
             $boundary = LegacyImportBoundary::fromConfig();
             $checkpoint = IntegrationCheckpoint::query()->where('integration', self::INTEGRATION)->first();
-            $rows = $this->mergeCandidates(
+            $rows = array_slice($this->mergeCandidates(
                 $this->reader->readPending($this->pendingSourceOrderIds($checkpoint)),
                 $this->reader->read($boundary, $checkpoint?->last_processed_id, $limit),
-            );
+            ), 0, $limit);
         }
         $result = new LegacyImportResult($dryRun);
 
