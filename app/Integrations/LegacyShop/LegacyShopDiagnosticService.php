@@ -44,7 +44,7 @@ class LegacyShopDiagnosticService
                     'present' => $this->schema->hasTable($prefix.$suffix),
                 ], $required),
                 'deposit_product_id' => PrestaShop14OrderReader::DEPOSIT_PRODUCT_ID,
-                'pohoda_order_offset' => PrestaShop14OrderReader::POHODA_ORDER_OFFSET,
+                'order_number_mapping' => 'ps_orders.id_order_exact_text',
                 'payment_authority' => 'order_history_state_2',
                 'poptavky_used' => false,
             ],

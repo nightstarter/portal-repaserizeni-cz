@@ -119,6 +119,10 @@ class LegacyShopImportService
                 return false;
             }
 
+            if (Order::query()->where('order_no', $data->orderNo)->lockForUpdate()->exists()) {
+                throw new IncompleteLegacyOrderException(['ORDER_NUMBER_COLLISION']);
+            }
+
             $order = Order::query()->create([
                 'order_no' => $data->orderNo,
                 'source' => OrderSource::ESHOP,

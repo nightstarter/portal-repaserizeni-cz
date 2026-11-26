@@ -34,6 +34,8 @@ class LegacyShopDiagnosticTest extends TestCase
             self::assertStringContainsString('ps_orders', $report);
             self::assertStringContainsString('server_version', $report);
             self::assertStringContainsString('poptavky_used', $report);
+            self::assertStringContainsString('ps_orders.id_order_exact_text', $report);
+            self::assertStringNotContainsString('pohoda_order_offset', $report);
             self::assertStringNotContainsString('generation_expression', $report);
             self::assertStringNotContainsString('Sensitive', $report);
             self::assertStringNotContainsString('secret@example.test', $report);

@@ -9,7 +9,7 @@ Zdroj objednávek je výhradně `ps_orders`. Tabulka `ps_poptavky` obsahuje pouz
 ## Identifikace
 
 - `source_order_id` je původní `ps_orders.id_order` a používá se pro idempotenci.
-- Viditelné `order_no` je externí číslo Pohody `4001 + id_order`.
+- Viditelné `order_no` je přesná textová hodnota `ps_orders.id_order`, bez offsetu.
 - Obě hodnoty zůstávají oddělené.
 
 ## Read-only dotazy

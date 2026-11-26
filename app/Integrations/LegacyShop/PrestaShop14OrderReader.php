@@ -11,8 +11,6 @@ class PrestaShop14OrderReader
 
     public const DEPOSIT_PRODUCT_ID = 91173;
 
-    public const POHODA_ORDER_OFFSET = 4001;
-
     public function __construct(
         private readonly Connection $connection,
         private readonly LegacySchemaInspector $schema,
@@ -188,7 +186,7 @@ class PrestaShop14OrderReader
 
         return new PrestaShop14OrderCandidate(
             sourceOrderId: (string) $order->id_order,
-            externalOrderNo: (string) (self::POHODA_ORDER_OFFSET + (int) $order->id_order),
+            externalOrderNo: (string) $order->id_order,
             createdAt: $this->clean($order->date_add),
             customer: [
                 'name' => $name,

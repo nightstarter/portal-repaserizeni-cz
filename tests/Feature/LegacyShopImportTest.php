@@ -43,7 +43,7 @@ class LegacyShopImportTest extends TestCase
 
         self::assertNotNull($candidate);
         self::assertSame('100', $candidate->sourceOrderId);
-        self::assertSame('4101', $candidate->externalOrderNo);
+        self::assertSame('100', $candidate->externalOrderNo);
         self::assertSame('REP-100', $candidate->productCode);
         self::assertSame(1, $candidate->steeringItemCount);
         self::assertSame('PERSONAL_PICKUP', $candidate->customerHandover);
@@ -269,11 +269,46 @@ class LegacyShopImportTest extends TestCase
         self::assertSame(1, $first->imported);
         self::assertSame(1, $second->skipped);
         self::assertSame(1, Order::query()->count());
-        self::assertSame('4101', Order::first()->order_no);
+        self::assertSame('100', Order::first()->order_no);
         self::assertSame('100', Order::first()->source_order_id);
         self::assertSame(OrderType::STOCK_REBUILD, Order::first()->order_type);
         self::assertSame(1, Order::first()->processThreads()->count());
         self::assertSame('PENDING_STOCK_CHECK', Order::first()->processThreads()->first()->state);
+    }
+
+    public function test_legacy_order_number_is_exact_source_id_without_offset(): void
+    {
+        $this->insertLegacyOrder(665);
+
+        $result = app(LegacyShopImportService::class)->run(dryRun: false);
+
+        self::assertSame(1, $result->imported);
+        $this->assertDatabaseHas('orders', [
+            'source' => 'ESHOP',
+            'source_order_id' => '665',
+            'order_no' => '665',
+        ]);
+        $this->assertDatabaseMissing('orders', ['order_no' => '4666']);
+    }
+
+    public function test_order_number_collision_stops_import_without_partial_domain_writes(): void
+    {
+        Order::factory()->buyout()->create(['order_no' => '100']);
+        $this->insertLegacyOrder(100);
+
+        $result = app(LegacyShopImportService::class)->run(dryRun: false);
+
+        self::assertSame(1, $result->errors);
+        self::assertContains('ORDER_NUMBER_COLLISION', $result->validation[0]['issues']);
+        $this->assertDatabaseMissing('orders', ['source' => 'ESHOP', 'source_order_id' => '100']);
+        $this->assertDatabaseCount('order_customers', 0);
+        $this->assertDatabaseCount('process_threads', 0);
+        $this->assertDatabaseHas('integration_events', [
+            'external_event_id' => 'order:100',
+            'status' => 'FAILED',
+            'error' => 'INCOMPLETE_ORDER:ORDER_NUMBER_COLLISION',
+        ]);
+        $this->assertDatabaseCount('integration_checkpoints', 0);
     }
 
     public function test_limit_caps_merged_pending_candidates_for_safe_pilot(): void

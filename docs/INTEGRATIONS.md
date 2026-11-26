@@ -96,7 +96,7 @@ Aktuální implementace již nepoužívá `LEGACY_SHOP_ORDERS_TABLE` ani mapu p�
 
 - Objednávky pocházejí výhradně z `ps_orders`.
 - `ps_poptavky` obsahuje jen poptávky, nemá potvrzenou objednávkovou vazbu a není součástí readeru; objednávka bez poptávky je platný vstup.
-- `source_order_id = ps_orders.id_order`; `order_no = 4001 + id_order` pro Pohodu.
+- `source_order_id = ps_orders.id_order`; `order_no` je přesná textová hodnota stejného `ps_orders.id_order`, bez offsetu.
 - `product_id=91173` je záloha a nevstupuje do výběru řízení.
 - Po vyloučení zálohy musí existovat právě jedna položka řízení.
 - Dopravci 19 a 20 mapují na `PERSONAL_PICKUP`, carrier 18 na `GLS`; ostatní ID se na GLS neodhadují.
@@ -108,6 +108,8 @@ Aktuální implementace již nepoužívá `LEGACY_SHOP_ORDERS_TABLE` ani mapu p�
 - Diagnostika používá `LegacySchemaInspector` s `SHOW TABLES`, `SHOW COLUMNS` a `SELECT VERSION()`; Laravel Schema introspekce není pro legacy MySQL použita.
 
 Živý dry-run přes `--dry-run --order-id=<id> --limit=1` sestavil kandidáta `d0b1b3ae75b2`. Po potvrzení `schvaleno=1` již rozpoznal skladovou repasi a vrátil jen zbývající anonymizované blokátory technického typu, routingu a skladového scénáře. Počty portálových objednávek, eventů a checkpointů zůstaly `0|0|0`.
+
+Jednorázová oprava dříve importovaného čísla je dostupná jako `legacy-shop:repair-order-number {source-order-id} --expected-old-order-no=<old>`; bez `--apply` je vždy pouze dry-run. Zápisový režim vyžaduje explicitní `--apply`, odmítá jiné zdroje než `ESHOP`, chybnou očekávanou hodnotu i kolizi cílového čísla a změnu zapisuje transakčně do auditu.
 
 ### Fáze 1D – uzavřená integrační smlouva
 
